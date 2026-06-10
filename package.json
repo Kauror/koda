@@ -1,0 +1,32 @@
+{
+  "name": "koda-liikmevaartus",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Eesti Kaubandus-Tööstuskoja liikmeväärtuse tööriist – mida on koda teinud sinu ettevõtte heaks?",
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "lint": "next lint",
+    "crawl": "tsx scripts/crawl.ts",
+    "seed": "tsx scripts/seed.ts",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.8.2",
+    "cheerio": "^1.0.0",
+    "next": "^15.3.3",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.21",
+    "@types/react": "^19.1.5",
+    "@types/react-dom": "^19.1.5",
+    "prisma": "^6.8.2",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
+  }
+}

@@ -1,0 +1,164 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SourceType {
+  opinion
+  archive_opinion
+  news
+  currently_handled
+  service
+  event
+  unknown
+}
+
+enum TagType {
+  sector
+  interest
+  size
+  activity
+  region
+  service
+}
+
+enum RelationType {
+  main
+  history
+  related
+}
+
+model ContentItem {
+  id           String     @id @default(cuid())
+  sourceUrl    String
+  canonicalUrl String     @unique
+  title        String
+  displayTitle String?
+  date         DateTime?
+  sourceType   SourceType @default(unknown)
+  bodyText     String?
+  excerpt      String?
+  summary      String?
+  contentHash  String?
+  scrapedAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  isHidden     Boolean    @default(false)
+  isEvergreen  Boolean    @default(false)
+  manualWeight Int        @default(0)
+  language     String     @default("et")
+
+  // AI-ready fields, unused while AI_ENABLED=false.
+  // embedding is a plain float array for now; switch to pgvector when AI search lands.
+  embedding         Float[]
+  aiSummary         String?
+  aiRelevanceReason String?
+  aiKeywords        String[]
+  aiLastGeneratedAt DateTime?
+  aiModel           String?
+  aiReviewStatus    String?
+
+  tags         ContentTag[]
+  topicGroups  ContentTopicGroup[]
+  mainOfGroups TopicGroup[]        @relation("TopicGroupMainItem")
+  clicks       SearchResultClick[]
+
+  @@index([contentHash])
+  @@index([date])
+  @@index([isHidden])
+}
+
+model TopicGroup {
+  id                String  @id @default(cuid())
+  title             String
+  slug              String  @unique
+  summary           String?
+  mainContentItemId String?
+  manualWeight      Int     @default(0)
+  isEvergreen       Boolean @default(false)
+  isHidden          Boolean @default(false)
+  whyItMattersText  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  mainContentItem ContentItem?        @relation("TopicGroupMainItem", fields: [mainContentItemId], references: [id], onDelete: SetNull)
+  tags            TopicGroupTag[]
+  contentItems    ContentTopicGroup[]
+  clicks          SearchResultClick[]
+}
+
+model Tag {
+  id   String  @id @default(cuid())
+  type TagType
+  name String
+  slug String
+
+  contentItems ContentTag[]
+  topicGroups  TopicGroupTag[]
+
+  @@unique([type, slug])
+}
+
+model ContentTag {
+  contentItemId String
+  tagId         String
+  weight        Float  @default(1)
+
+  contentItem ContentItem @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
+  tag         Tag         @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([contentItemId, tagId])
+}
+
+model TopicGroupTag {
+  topicGroupId String
+  tagId        String
+  weight       Float  @default(1)
+
+  topicGroup TopicGroup @relation(fields: [topicGroupId], references: [id], onDelete: Cascade)
+  tag        Tag        @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([topicGroupId, tagId])
+}
+
+model ContentTopicGroup {
+  contentItemId String
+  topicGroupId  String
+  relationType  RelationType @default(related)
+
+  contentItem ContentItem @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
+  topicGroup  TopicGroup  @relation(fields: [topicGroupId], references: [id], onDelete: Cascade)
+
+  @@id([contentItemId, topicGroupId])
+}
+
+model SearchSession {
+  id                 String   @id @default(cuid())
+  createdAt          DateTime @default(now())
+  selectedSector     String?
+  selectedSize       String?
+  selectedInterests  String[]
+  selectedActivities String[]
+  anonymizedIpHash   String?
+  userAgentHash      String?
+
+  clicks SearchResultClick[]
+
+  @@index([createdAt])
+}
+
+model SearchResultClick {
+  id              String   @id @default(cuid())
+  searchSessionId String
+  contentItemId   String?
+  topicGroupId    String?
+  clickedAt       DateTime @default(now())
+
+  searchSession SearchSession @relation(fields: [searchSessionId], references: [id], onDelete: Cascade)
+  contentItem   ContentItem?  @relation(fields: [contentItemId], references: [id], onDelete: SetNull)
+  topicGroup    TopicGroup?   @relation(fields: [topicGroupId], references: [id], onDelete: SetNull)
+}
