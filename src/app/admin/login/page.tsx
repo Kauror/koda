@@ -13,15 +13,9 @@ export default async function AdminLoginPage({
 
   return (
     <main className="container" style={{ maxWidth: 460 }}>
-      <div className="hero">
-        <h1>Halduri sisselogimine</h1>
-      </div>
+      <h1>Halduri sisselogimine</h1>
       <form method="post" action="/api/admin/login" className="card form-grid">
-        {viga && (
-          <p style={{ color: "#9c2b2b", fontWeight: 600, margin: 0 }}>
-            Vale e-post või parool.
-          </p>
-        )}
+        {viga && <p className="form-error" style={{ margin: 0 }}>Vale e-post või parool.</p>}
         <div>
           <label className="field-label" htmlFor="email">
             E-post

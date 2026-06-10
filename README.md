@@ -22,6 +22,30 @@ keskkonnamuutujaga, et hiljem ametlikule Koja domeenile kolida).
 - AI-otsing on **disainitud, aga välja lülitatud** (`AI_ENABLED=false`,
   skeemis on olemas `embedding`, `aiSummary` jm väljad)
 
+## Disain ja bränd
+
+UI järgib Koja CVI-d ja koda.ee visuaalset suunda. Kogu disainisüsteem on
+defineeritud CSS-muutujatena failis `src/app/globals.css`:
+
+- **Värvitokenid** – koja sinine `--color-primary: #009FDA` (aktsent ja
+  tegevusnupud), grafiit `--color-brand-dark: #3B3B38` (jalus, tume CTA),
+  valge taust, vaoshoitud hallid (`--color-bg-soft`, `--color-border`,
+  `--color-muted`).
+- **Tüpograafia** – brändikiri on **FF DIN Pro**. See on litsentseeritud font
+  ja ei ole projektiga kaasas; font-stack on
+  `"FF DIN Pro", Barlow, "Arial Narrow", Arial`. Barlow (DIN-ile lähim vaba
+  font) laetakse `next/font` kaudu (`src/app/layout.tsx`) muutujasse
+  `--font-din-fallback`. Kui FF DIN Pro litsents on olemas, lisa selle
+  `@font-face` deklaratsioon `globals.css`-i – stack võtab selle automaatselt
+  esimesena kasutusse.
+- **Komponendiklassid** – `.hero`, `.section`, `.topic-card`, `.item-grid`,
+  `.service-card`, `.cta-box`, `.stat-strip`, `.theme-link`, `.source-badge`
+  jt on kirjeldatud `globals.css`-is; värve kasuta alati tokenite kaudu.
+- **Sisu paigutus tulemustelehel** – teemakaardil on kuni kaks allikakasti
+  (peamine + järgmine asjakohaseim), „Teema ajalugu" akordion ja sildid.
+  Teenused (`sourceType=service`) ei segune teemakaartidega, vaid kuvatakse
+  lehe lõpus eraldi sektsioonis „Teenused, mis võivad sulle kasulikud olla".
+
 ## Kiirstart Dockeriga (soovitatud)
 
 ```bash

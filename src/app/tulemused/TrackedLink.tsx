@@ -9,12 +9,14 @@ export default function TrackedLink({
   sessionId,
   contentItemId,
   topicGroupId,
+  className,
   children,
 }: {
   href: string;
   sessionId: string | null;
   contentItemId?: string;
   topicGroupId?: string;
+  className?: string;
   children: React.ReactNode;
 }) {
   function logClick() {
@@ -32,7 +34,7 @@ export default function TrackedLink({
   }
 
   return (
-    <a href={href} target="_blank" rel="noopener noreferrer" onClick={logClick}>
+    <a href={href} target="_blank" rel="noopener noreferrer" onClick={logClick} className={className}>
       {children}
     </a>
   );

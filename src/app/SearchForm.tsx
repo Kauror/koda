@@ -115,13 +115,13 @@ export default function SearchForm() {
       </fieldset>
 
       {error && (
-        <p style={{ color: "#9c2b2b", fontWeight: 600, marginTop: 0 }} role="alert">
+        <p className="form-error" role="alert">
           {error}
         </p>
       )}
 
       <button type="submit" className="btn">
-        Näita tulemusi
+        Vaata tulemusi
       </button>
 
       <p className="privacy-note">

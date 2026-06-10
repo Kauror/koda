@@ -34,9 +34,11 @@ const W = {
 
 const ITEM_SCORE_THRESHOLD = 25;
 const GROUP_SCORE_THRESHOLD = 25;
+const SERVICE_SCORE_THRESHOLD = 20;
 const MAX_GROUPS = 8;
 const MAX_OTHER_ITEMS = 6;
-const MAX_HISTORY_PER_GROUP = 5;
+const MAX_HISTORY_PER_GROUP = 4;
+const MAX_SERVICES = 4;
 
 function recencyScore(date: Date | null, isEvergreen: boolean): number {
   if (!date) return isEvergreen ? 6 : 2;
@@ -126,12 +128,16 @@ export type ResultGroup = {
   whyItMatters: string | null;
   tags: { type: string; name: string; slug: string }[];
   mainItem: ResultItem | null;
+  /** Second-most relevant item, shown as a full box next to the main one. */
+  secondItem: ResultItem | null;
   history: ResultItem[];
 };
 
 export type SearchResults = {
   groups: ResultGroup[];
   otherItems: ResultItem[];
+  /** Koda services matching the profile – displayed separately at the end. */
+  services: ResultItem[];
 };
 
 function toResultItem(item: ItemWithTags): ResultItem {
@@ -169,6 +175,10 @@ export async function search(filters: SearchFilters): Promise<SearchResults> {
     itemScores.set(item.id, scoreItem(item, filters));
     itemById.set(item.id, item);
   }
+
+  // Services are never mixed into topic cards – they get their own
+  // "Teenused, mis võivad sulle kasulikud olla" section at the end.
+  const serviceIds = new Set(items.filter((i) => i.sourceType === "service").map((i) => i.id));
 
   // Deduplicate by content hash: keep only the highest-scoring (then newest) copy.
   const byHash = new Map<string, ItemWithTags>();
@@ -208,7 +218,7 @@ export async function search(filters: SearchFilters): Promise<SearchResults> {
       }
 
       const memberScores = group.contentItems
-        .filter((c) => dedupedIds.has(c.contentItemId))
+        .filter((c) => dedupedIds.has(c.contentItemId) && !serviceIds.has(c.contentItemId))
         .map((c) => itemScores.get(c.contentItemId) ?? 0)
         .sort((a, b) => b - a);
 
@@ -220,9 +230,10 @@ export async function search(filters: SearchFilters): Promise<SearchResults> {
       score += group.manualWeight * W.manualWeight;
       if (group.isEvergreen) score += W.evergreenGroup;
 
-      return { group, score };
+      return { group, score, memberCount: memberScores.length };
     })
-    .filter((g) => g.score >= GROUP_SCORE_THRESHOLD && g.group.contentItems.length > 0)
+    // Groups whose only members were services have nothing left to show.
+    .filter((g) => g.score >= GROUP_SCORE_THRESHOLD && g.memberCount > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, MAX_GROUPS);
 
@@ -232,7 +243,7 @@ export async function search(filters: SearchFilters): Promise<SearchResults> {
   for (const { group } of scoredGroups) {
     const memberIds = group.contentItems
       .map((c) => c.contentItemId)
-      .filter((id) => dedupedIds.has(id));
+      .filter((id) => dedupedIds.has(id) && !serviceIds.has(id));
     const members = memberIds
       .map((id) => itemById.get(id))
       .filter((i): i is ItemWithTags => !!i);
@@ -247,12 +258,18 @@ export async function search(filters: SearchFilters): Promise<SearchResults> {
       )[0];
     }
 
+    // Second box: the next most relevant member after the main one.
+    const second =
+      members
+        .filter((m) => m.id !== main!.id)
+        .sort((a, b) => (itemScores.get(b.id) ?? 0) - (itemScores.get(a.id) ?? 0))[0] ?? null;
+
     const history = members
-      .filter((m) => m.id !== main!.id)
+      .filter((m) => m.id !== main!.id && m.id !== second?.id)
       .sort((a, b) => (b.date?.getTime() ?? 0) - (a.date?.getTime() ?? 0))
       .slice(0, MAX_HISTORY_PER_GROUP);
 
-    for (const m of [main, ...history]) usedItemIds.add(m.id);
+    for (const m of [main, ...(second ? [second] : []), ...history]) usedItemIds.add(m.id);
 
     resultGroups.push({
       id: group.id,
@@ -262,20 +279,30 @@ export async function search(filters: SearchFilters): Promise<SearchResults> {
       whyItMatters: group.whyItMattersText,
       tags: group.tags.map((gt) => ({ type: gt.tag.type, name: gt.tag.name, slug: gt.tag.slug })),
       mainItem: toResultItem(main),
+      secondItem: second ? toResultItem(second) : null,
       history: history.map(toResultItem),
     });
   }
 
   // Standalone items that scored well but are not in any displayed group.
   const otherItems = deduped
-    .filter((i) => !usedItemIds.has(i.id))
+    .filter((i) => !usedItemIds.has(i.id) && !serviceIds.has(i.id))
     .map((i) => ({ item: i, score: itemScores.get(i.id) ?? 0 }))
     .filter((s) => s.score >= ITEM_SCORE_THRESHOLD)
     .sort((a, b) => b.score - a.score)
     .slice(0, MAX_OTHER_ITEMS)
     .map((s) => toResultItem(s.item));
 
-  return { groups: resultGroups, otherItems };
+  // Matching services, ranked the same way but shown in their own section.
+  const services = deduped
+    .filter((i) => serviceIds.has(i.id))
+    .map((i) => ({ item: i, score: itemScores.get(i.id) ?? 0 }))
+    .filter((s) => s.score >= SERVICE_SCORE_THRESHOLD)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, MAX_SERVICES)
+    .map((s) => toResultItem(s.item));
+
+  return { groups: resultGroups, otherItems, services };
 }
 
 export function parseFilters(params: {
