@@ -10,7 +10,7 @@ import { prisma } from "./db";
  */
 
 export type SearchFilters = {
-  sector: string | null;
+  sectors: string[];
   size: string | null;
   interests: string[];
   activities: string[];
@@ -35,10 +35,12 @@ const W = {
 const ITEM_SCORE_THRESHOLD = 25;
 const GROUP_SCORE_THRESHOLD = 25;
 const SERVICE_SCORE_THRESHOLD = 20;
+const ACHIEVEMENT_SCORE_THRESHOLD = 20;
 const MAX_GROUPS = 8;
 const MAX_OTHER_ITEMS = 6;
 const MAX_HISTORY_PER_GROUP = 4;
 const MAX_SERVICES = 4;
+const MAX_ACHIEVEMENTS = 6;
 
 function recencyScore(date: Date | null, isEvergreen: boolean): number {
   if (!date) return isEvergreen ? 6 : 2;
@@ -69,9 +71,9 @@ function scoreItem(item: ItemWithTags, f: SearchFilters): number {
 
   // Sector match / general business relevance.
   const sectorTags = tagsByType.get("sector") ?? [];
-  if (f.sector) {
-    const match = sectorTags.find((t) => t.slug === f.sector);
-    if (match) score += W.sectorMatch * match.weight;
+  if (f.sectors.length > 0) {
+    const matches = sectorTags.filter((t) => f.sectors.includes(t.slug));
+    if (matches.length > 0) score += W.sectorMatch * Math.max(...matches.map((m) => m.weight));
     else if (sectorTags.length === 0) score += W.generalNoSector;
     // Items tagged with very many sectors are effectively general business content.
     else if (sectorTags.length >= 6) score += W.generalNoSector;
@@ -138,6 +140,8 @@ export type SearchResults = {
   otherItems: ResultItem[];
   /** Koda services matching the profile – displayed separately at the end. */
   services: ResultItem[];
+  /** Töövõidud (concrete wins) not already shown inside a topic group. */
+  achievements: ResultItem[];
 };
 
 function toResultItem(item: ItemWithTags): ResultItem {
@@ -207,7 +211,7 @@ export async function search(filters: SearchFilters): Promise<SearchResults> {
     .map((group) => {
       let score = 0;
       for (const gt of group.tags) {
-        if (gt.tag.type === "sector" && filters.sector && gt.tag.slug === filters.sector)
+        if (gt.tag.type === "sector" && filters.sectors.includes(gt.tag.slug))
           score += W.groupTagSector * gt.weight;
         if (gt.tag.type === "interest" && filters.interests.includes(gt.tag.slug))
           score += W.groupTagInterest * gt.weight;
@@ -285,12 +289,35 @@ export async function search(filters: SearchFilters): Promise<SearchResults> {
   }
 
   // Standalone items that scored well but are not in any displayed group.
+  // Achievements (töövõidud) have their own section, like services.
   const otherItems = deduped
-    .filter((i) => !usedItemIds.has(i.id) && !serviceIds.has(i.id))
+    .filter(
+      (i) => !usedItemIds.has(i.id) && !serviceIds.has(i.id) && i.sourceType !== "achievement"
+    )
     .map((i) => ({ item: i, score: itemScores.get(i.id) ?? 0 }))
     .filter((s) => s.score >= ITEM_SCORE_THRESHOLD)
     .sort((a, b) => b.score - a.score)
     .slice(0, MAX_OTHER_ITEMS)
+    .map((s) => toResultItem(s.item));
+
+  // Töövõidud are shown first on the results page, so they must be a
+  // *specific* match: at least one tag has to match the selected sector,
+  // interest or activity. General business relevance is not enough here –
+  // e.g. a tax win must not lead the results of a labour-force search.
+  const matchesProfile = (item: ItemWithTags) =>
+    item.tags.some(
+      (ct) =>
+        (ct.tag.type === "sector" && filters.sectors.includes(ct.tag.slug)) ||
+        (ct.tag.type === "interest" && filters.interests.includes(ct.tag.slug)) ||
+        (ct.tag.type === "activity" && filters.activities.includes(ct.tag.slug))
+    );
+
+  const achievements = deduped
+    .filter((i) => i.sourceType === "achievement" && !usedItemIds.has(i.id) && matchesProfile(i))
+    .map((i) => ({ item: i, score: itemScores.get(i.id) ?? 0 }))
+    .filter((s) => s.score >= ACHIEVEMENT_SCORE_THRESHOLD)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, MAX_ACHIEVEMENTS)
     .map((s) => toResultItem(s.item));
 
   // Matching services, ranked the same way but shown in their own section.
@@ -302,7 +329,7 @@ export async function search(filters: SearchFilters): Promise<SearchResults> {
     .slice(0, MAX_SERVICES)
     .map((s) => toResultItem(s.item));
 
-  return { groups: resultGroups, otherItems, services };
+  return { groups: resultGroups, otherItems, services, achievements };
 }
 
 export function parseFilters(params: {
@@ -320,7 +347,7 @@ export function parseFilters(params: {
       .filter(Boolean);
   };
   return {
-    sector: first(params.sektor),
+    sectors: list(params.sektor),
     size: first(params.suurus),
     interests: list(params.huvid),
     activities: list(params.tegevused),

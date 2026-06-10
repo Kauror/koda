@@ -14,6 +14,7 @@ enum SourceType {
   currently_handled
   service
   event
+  achievement
   unknown
 }
 

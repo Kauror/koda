@@ -22,7 +22,6 @@ export const SIZES: Option[] = [
 ];
 
 export const ACTIVITIES: Option[] = [
-  { slug: "tooandja", name: "Oleme tööandja" },
   { slug: "eksport", name: "Ekspordime" },
   { slug: "import", name: "Impordime" },
   { slug: "e-pood", name: "Müüme e-poes" },

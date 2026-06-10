@@ -117,34 +117,24 @@ main.container-narrow {
   text-decoration: none;
 }
 
-.brand-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-primary);
-  color: #fff;
-  font-weight: 800;
-  font-size: 1.05rem;
-  letter-spacing: 0.06em;
-  padding: 7px 11px;
-  border-radius: var(--radius-sm);
+.brand-logo {
+  height: 42px;
+  width: auto;
+  display: block;
 }
 
 .brand-text {
   display: flex;
   flex-direction: column;
   line-height: 1.25;
-}
-
-.brand-text strong {
-  color: var(--color-text-strong);
-  font-size: 0.95rem;
-  font-weight: 700;
+  border-left: 1px solid var(--color-border);
+  padding-left: 12px;
 }
 
 .brand-text span {
   color: var(--color-muted);
-  font-size: 0.78rem;
+  font-size: 0.82rem;
+  font-weight: 600;
 }
 
 .site-header nav {
@@ -198,36 +188,30 @@ main.container-narrow {
   margin: 0 0 18px;
 }
 
-.hero-points {
+/* Compact "kuidas see töötab" row inside the hero. */
+.steps-row {
   list-style: none;
-  margin: 0 0 26px;
+  margin: 6px 0 0;
   padding: 0;
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  color: var(--color-text);
-  font-size: 0.97rem;
-}
-
-.hero-points li {
-  padding-left: 26px;
-  position: relative;
-}
-
-.hero-points li::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0.45em;
-  width: 14px;
-  height: 3px;
-  background: var(--color-primary);
-}
-
-.hero-actions {
-  display: flex;
   gap: 12px;
-  flex-wrap: wrap;
+}
+
+.steps-row li {
+  flex: 1;
+  border-top: 3px solid var(--color-primary);
+  background: #fff;
+  border-radius: 0 0 var(--radius) var(--radius);
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  color: var(--color-muted);
+  line-height: 1.45;
+}
+
+.steps-row li strong {
+  display: block;
+  color: var(--color-text-strong);
+  font-size: 0.9rem;
 }
 
 /* ---------- Sections ---------- */
@@ -442,45 +426,14 @@ textarea {
   font-weight: 700;
 }
 
-/* ---------- Homepage: how it works + value strip ---------- */
-
-.steps-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 18px;
-}
-
-.step-card {
-  border: 1px solid var(--color-border);
-  border-top: 3px solid var(--color-primary);
-  border-radius: var(--radius-lg);
-  background: #fff;
-  padding: 20px;
-}
-
-.step-card .step-number {
-  color: var(--color-primary-dark);
-  font-size: 0.8rem;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.step-card h3 {
-  margin: 8px 0 6px;
-  font-size: 1.05rem;
-}
-
-.step-card p {
-  margin: 0;
-  font-size: 0.9rem;
-  color: var(--color-muted);
-}
+/* ---------- Homepage: value strip ---------- */
 
 .stat-strip {
   background: var(--color-brand-dark);
   color: #fff;
   padding: 36px 0;
+  /* Sits directly above the same-colored footer – keep a subtle divider. */
+  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
 }
 
 .stat-strip .container {
@@ -632,16 +585,23 @@ textarea {
   flex-wrap: wrap;
 }
 
-.source-badge {
+/* Töövõidud stand out: a green mark + tinted border on the box. */
+.win-badge {
   display: inline-block;
-  background: var(--color-primary-soft);
-  color: var(--color-primary-dark);
+  background: #e0f2e4;
+  color: var(--color-success);
   font-size: 0.72rem;
-  font-weight: 700;
+  font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   border-radius: var(--radius-sm);
   padding: 2px 8px;
+}
+
+.main-item.win,
+.other-item.win {
+  border-left: 3px solid var(--color-success);
+  background: #f7fbf8;
 }
 
 .item-excerpt {
@@ -932,8 +892,9 @@ table.admin-table th {
 /* ---------- Responsive ---------- */
 
 @media (max-width: 900px) {
-  .steps-grid {
-    grid-template-columns: 1fr;
+  .steps-row {
+    flex-direction: column;
+    gap: 8px;
   }
   .stat-strip .container {
     grid-template-columns: 1fr 1fr;

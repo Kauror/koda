@@ -17,6 +17,7 @@ import * as cheerio from "cheerio";
 import { PrismaClient, SourceType } from "@prisma/client";
 import { loadEnv } from "./env";
 import { contentHash, normalizeTitle } from "../src/lib/hash";
+import { slugify } from "../src/lib/slug";
 
 loadEnv();
 
@@ -41,6 +42,24 @@ const SOURCES: Source[] = [
     label: "Hetkel käsil (arhiiv)",
   },
 ];
+
+/**
+ * Töövõidud live on a single page as <h2>CATEGORY</h2><ul><li><strong>Title</strong>…
+ * They are imported as individual achievement items (one per <li>), with the
+ * category mapped to an interest tag where the mapping is obvious.
+ */
+const ACHIEVEMENTS_URL = "https://www.koda.ee/et/meie-moju/meie-toovoidud";
+
+// Keys are slugified category headings from the page.
+const ACHIEVEMENT_CATEGORY_INTERESTS: Record<string, string[]> = {
+  maksud: ["maksud"],
+  tootamine: ["toooigus", "valistoojoud"],
+  "voitlus-halduskoormusega": ["burokraatia"],
+  riigihanked: ["riigihanked"],
+  arioigus: ["burokraatia"],
+  energia: ["energia"],
+  keskkond: ["keskkond-ja-kliima"],
+};
 
 // Links that are clearly navigation, not articles.
 const EXCLUDED_PATH_PREFIXES = [
@@ -226,6 +245,96 @@ function extractBody(html: string): { body: string | null; date: Date | null; ti
   return { body, date, title };
 }
 
+async function importAchievements(): Promise<{ created: number; updated: number }> {
+  log(`Source: Meie töövõidud (${ACHIEVEMENTS_URL})`);
+  const html = await fetchHtml(ACHIEVEMENTS_URL);
+  await sleep(DELAY_MS);
+  if (!html) return { created: 0, updated: 0 };
+
+  const $ = cheerio.load(html);
+  // Several .field--name-body blocks exist (e.g. language switcher);
+  // the achievements list is the one with by far the most <li> items.
+  const candidates = $(".field--name-body").toArray();
+  const bestEl = candidates
+    .map((el) => ({ el, liCount: $(el).find("ul > li").length }))
+    .sort((a, b) => b.liCount - a.liCount)[0];
+  if (!bestEl || bestEl.liCount < 5) {
+    log("  ! no achievements list found on töövõidud page – markup may have changed");
+    return { created: 0, updated: 0 };
+  }
+  const body = $(bestEl.el);
+
+  // Interest tags for category mapping.
+  const interestTags = await prisma.tag.findMany({ where: { type: "interest" } });
+  const interestIdBySlug = new Map(interestTags.map((t) => [t.slug, t.id]));
+
+  let created = 0;
+  let updated = 0;
+  let category = "";
+
+  for (const el of body.children().toArray()) {
+    const $el = $(el);
+    if (el.tagName === "h2" || el.tagName === "h3") {
+      category = $el.text().replace(/\s+/g, " ").trim();
+      continue;
+    }
+    if (el.tagName !== "ul") continue;
+
+    for (const li of $el.children("li").toArray()) {
+      const $li = $(li);
+      const title = $li.find("strong").first().text().replace(/\s+/g, " ").replace(/\.?\s*$/, "").trim();
+      if (!title || title.length < 8) continue;
+      const fullText = $li.text().replace(/\s+/g, " ").trim();
+      const bodyText = fullText.startsWith(title)
+        ? fullText.slice(title.length).replace(/^[.\s]+/, "")
+        : fullText;
+      const url = `${ACHIEVEMENTS_URL}#${slugify(title)}`;
+
+      const existing = await prisma.contentItem.findUnique({ where: { canonicalUrl: url } });
+      const item = await prisma.contentItem.upsert({
+        where: { canonicalUrl: url },
+        create: {
+          sourceUrl: ACHIEVEMENTS_URL,
+          canonicalUrl: url,
+          title,
+          sourceType: "achievement",
+          bodyText,
+          excerpt: bodyText.length > 280 ? bodyText.slice(0, 277) + "…" : bodyText,
+          contentHash: contentHash(title, bodyText),
+          isEvergreen: true, // wins stay relevant
+          language: "et",
+        },
+        update: {
+          title,
+          bodyText,
+          excerpt: bodyText.length > 280 ? bodyText.slice(0, 277) + "…" : bodyText,
+          contentHash: contentHash(title, bodyText),
+          scrapedAt: new Date(),
+        },
+      });
+      if (existing) updated++;
+      else created++;
+
+      // Tag by category – only for new items, so admin edits are never overwritten.
+      if (!existing) {
+        const interestSlugs = ACHIEVEMENT_CATEGORY_INTERESTS[slugify(category)] ?? [];
+        const tagIds = interestSlugs
+          .map((s) => interestIdBySlug.get(s))
+          .filter((id): id is string => !!id);
+        if (tagIds.length > 0) {
+          await prisma.contentTag.createMany({
+            data: tagIds.map((tagId) => ({ contentItemId: item.id, tagId })),
+            skipDuplicates: true,
+          });
+        }
+      }
+    }
+  }
+
+  log(`  töövõidud done: created=${created} updated=${updated}`);
+  return { created, updated };
+}
+
 async function main() {
   if ((process.env.CRAWLER_ENABLED || "true") !== "true") {
     log("CRAWLER_ENABLED is not 'true' – exiting.");
@@ -337,6 +446,10 @@ async function main() {
 
     log(`  done: ${allTeasers.length} teasers processed`);
   }
+
+  const achievements = await importAchievements();
+  created += achievements.created;
+  updated += achievements.updated;
 
   log(`Finished. created=${created} updated=${updated} skipped_duplicates=${skippedDup} body_fetches=${bodyFetches}`);
 }

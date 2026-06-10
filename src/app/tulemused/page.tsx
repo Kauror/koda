@@ -8,15 +8,10 @@ import TrackedLink from "./TrackedLink";
 
 export const dynamic = "force-dynamic";
 
-const SOURCE_TYPE_LABELS: Record<string, string> = {
-  opinion: "Koja arvamus",
-  archive_opinion: "Koja arvamus",
-  news: "Uudis",
-  currently_handled: "Hetkel käsil",
-  service: "Teenus",
-  event: "Sündmus",
-  unknown: "koda.ee",
-};
+/** Only töövõidud get a visible mark – other source types show just the date. */
+function WinBadge() {
+  return <span className="win-badge">✔ Töövõit</span>;
+}
 
 function formatDate(iso: string | null): string | null {
   if (!iso) return null;
@@ -37,12 +32,15 @@ function ItemBlock({
   topicGroupId?: string;
 }) {
   const date = formatDate(item.date);
+  const isWin = item.sourceType === "achievement";
   return (
-    <article className="main-item">
-      <p className="item-meta">
-        <span className="source-badge">{SOURCE_TYPE_LABELS[item.sourceType] ?? "koda.ee"}</span>
-        {date && <span>{date}</span>}
-      </p>
+    <article className={`main-item${isWin ? " win" : ""}`}>
+      {(isWin || date) && (
+        <p className="item-meta">
+          {isWin && <WinBadge />}
+          {date && <span>{date}</span>}
+        </p>
+      )}
       <h3>
         <TrackedLink
           href={item.url}
@@ -84,7 +82,7 @@ export default async function ResultsPage({
     const ip = (h.get("x-forwarded-for") || "").split(",")[0].trim() || null;
     const session = await prisma.searchSession.create({
       data: {
-        selectedSector: filters.sector,
+        selectedSector: filters.sectors.join(",") || null,
         selectedSize: filters.size,
         selectedInterests: filters.interests,
         selectedActivities: filters.activities,
@@ -99,7 +97,9 @@ export default async function ResultsPage({
 
   const results = await search(filters);
 
-  const sectorName = optionName(SECTORS, filters.sector);
+  const sectorNames = filters.sectors
+    .map((s) => optionName(SECTORS, s))
+    .filter((n): n is string => !!n);
   const sizeName = optionName(SIZES, filters.size);
   const interestNames = filters.interests
     .map((s) => optionName(INTERESTS, s))
@@ -109,7 +109,16 @@ export default async function ResultsPage({
     .filter((n): n is string => !!n);
 
   // Theme browsing from the homepage: one interest, no sector.
-  const themeOnly = !filters.sector && interestNames.length === 1 ? interestNames[0] : null;
+  const themeOnly =
+    filters.sectors.length === 0 && interestNames.length === 1 ? interestNames[0] : null;
+
+  // "Muuda filtreid" carries the current selection back to the form.
+  const editParams = new URLSearchParams();
+  if (filters.sectors.length) editParams.set("sektor", filters.sectors.join(","));
+  if (filters.size) editParams.set("suurus", filters.size);
+  if (filters.interests.length) editParams.set("huvid", filters.interests.join(","));
+  if (filters.activities.length) editParams.set("tegevused", filters.activities.join(","));
+  const editFiltersQuery = editParams.toString();
 
   const hasResults = results.groups.length > 0 || results.otherItems.length > 0;
 
@@ -128,7 +137,11 @@ export default async function ResultsPage({
             käsilolevate teemade põhjal.
           </p>
           <div className="filter-summary">
-            {sectorName && <span className="tag accent">{sectorName}</span>}
+            {sectorNames.map((n) => (
+              <span key={n} className="tag accent">
+                {n}
+              </span>
+            ))}
             {sizeName && <span className="tag">{sizeName}</span>}
             {activityNames.map((n) => (
               <span key={n} className="tag">
@@ -141,7 +154,7 @@ export default async function ResultsPage({
               </span>
             ))}
           </div>
-          <Link href="/" className="btn btn-secondary btn-small">
+          <Link href={`/?${editFiltersQuery}#vorm`} className="btn btn-secondary btn-small">
             ← Muuda filtreid
           </Link>
         </div>
@@ -156,7 +169,7 @@ export default async function ResultsPage({
               tööst.
             </p>
             <p>
-              <Link href="/" className="btn btn-secondary btn-small">
+              <Link href={`/?${editFiltersQuery}#vorm`} className="btn btn-secondary btn-small">
                 Muuda valikuid
               </Link>{" "}
               <a
@@ -169,6 +182,30 @@ export default async function ResultsPage({
               </a>
             </p>
           </div>
+        )}
+
+        {results.achievements.length > 0 && (
+          <section className="results-section">
+            <h2>Koja töövõidud sinu valikus</h2>
+            <p className="section-sub">
+              Konkreetsed tulemused, mille koda on saavutanud just sinu valitud teemadel.
+            </p>
+            {results.achievements.map((item) => (
+              <div key={item.id} className="other-item win">
+                <p className="item-meta">
+                  <WinBadge />
+                </p>
+                <h3>
+                  <TrackedLink href={item.url} sessionId={sessionId} contentItemId={item.id}>
+                    {item.title}
+                  </TrackedLink>
+                </h3>
+                {(item.summary || item.excerpt) && (
+                  <p className="item-excerpt small">{item.summary || item.excerpt}</p>
+                )}
+              </div>
+            ))}
+          </section>
         )}
 
         {results.groups.length > 0 && (
@@ -234,12 +271,11 @@ export default async function ResultsPage({
             <h2>Viimased koja tegevused sinu valikuga seoses</h2>
             {results.otherItems.map((item) => (
               <div key={item.id} className="other-item">
-                <p className="item-meta">
-                  <span className="source-badge">
-                    {SOURCE_TYPE_LABELS[item.sourceType] ?? "koda.ee"}
-                  </span>
-                  {formatDate(item.date) && <span>{formatDate(item.date)}</span>}
-                </p>
+                {formatDate(item.date) && (
+                  <p className="item-meta">
+                    <span>{formatDate(item.date)}</span>
+                  </p>
+                )}
                 <h3>
                   <TrackedLink href={item.url} sessionId={sessionId} contentItemId={item.id}>
                     {item.title}
@@ -301,7 +337,7 @@ export default async function ResultsPage({
                 töö on vaid osa sellest, mida koda sinu valdkonna ettevõtete heaks teeb.
               </p>
               <a
-                href="https://www.koda.ee/et/liikmelisus"
+                href="https://www.koda.ee/et/liikmed/miks-olla-meie-liige"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="btn btn-small"

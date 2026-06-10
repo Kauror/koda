@@ -31,9 +31,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <header className="site-header">
           <div className="container">
             <Link href="/" className="brand">
-              <span className="brand-mark">KODA</span>
+              {/* Official logo from koda.ee (themes/custom/ekt). */}
+              <img src="/koda-logo-mobile.svg" alt="Eesti Kaubandus-Tööstuskoda" className="brand-logo" />
               <span className="brand-text">
-                <strong>Eesti Kaubandus-Tööstuskoda</strong>
                 <span>Koja mõju sinu ettevõttele</span>
               </span>
             </Link>
@@ -41,7 +41,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <a href="https://www.koda.ee/et/meie-moju/hetkel-kasil" target="_blank" rel="noopener noreferrer">
                 Hetkel käsil
               </a>
-              <a href="https://www.koda.ee/et/liikmelisus" target="_blank" rel="noopener noreferrer">
+              <a href="https://www.koda.ee/et/liikmed/miks-olla-meie-liige" target="_blank" rel="noopener noreferrer">
                 Liikmelisus
               </a>
               <a href="https://www.koda.ee" target="_blank" rel="noopener noreferrer">

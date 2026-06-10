@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
     const ip = (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || null;
     const session = await prisma.searchSession.create({
       data: {
-        selectedSector: filters.sector,
+        selectedSector: filters.sectors.join(",") || null,
         selectedSize: filters.size,
         selectedInterests: filters.interests,
         selectedActivities: filters.activities,

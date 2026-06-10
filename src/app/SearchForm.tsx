@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { ACTIVITIES, INTERESTS, SECTORS, SIZES, type Option } from "@/lib/constants";
 
@@ -40,10 +40,19 @@ function PillGroup({
 
 export default function SearchForm() {
   const router = useRouter();
-  const [sector, setSector] = useState<string | null>(null);
-  const [size, setSize] = useState<string | null>(null);
-  const [activities, setActivities] = useState<string[]>([]);
-  const [interests, setInterests] = useState<string[]>([]);
+  // Prefill from URL params so "Muuda filtreid" on the results page
+  // brings the user back with their previous selections intact.
+  const params = useSearchParams();
+  const listParam = (key: string) =>
+    (params.get(key) || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+  const [sectors, setSectors] = useState<string[]>(listParam("sektor"));
+  const [size, setSize] = useState<string | null>(params.get("suurus"));
+  const [activities, setActivities] = useState<string[]>(listParam("tegevused"));
+  const [interests, setInterests] = useState<string[]>(listParam("huvid"));
   const [error, setError] = useState<string | null>(null);
 
   const toggleIn = (list: string[], set: (v: string[]) => void) => (slug: string) =>
@@ -51,12 +60,12 @@ export default function SearchForm() {
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!sector) {
-      setError("Palun vali oma ettevõtte tegevusala.");
+    if (sectors.length === 0) {
+      setError("Palun vali vähemalt üks tegevusala.");
       return;
     }
     const params = new URLSearchParams();
-    params.set("sektor", sector);
+    params.set("sektor", sectors.join(","));
     if (size) params.set("suurus", size);
     if (interests.length) params.set("huvid", interests.join(","));
     if (activities.length) params.set("tegevused", activities.join(","));
@@ -67,15 +76,19 @@ export default function SearchForm() {
     <form onSubmit={submit} className="card">
       <fieldset>
         <legend>1. Ettevõtte tegevusala</legend>
-        <p className="field-hint">Kohustuslik. Ainuüksi tegevusala valik annab juba tulemused.</p>
+        <p className="field-hint">
+          Kohustuslik. Võid valida mitu tegevusala – ainuüksi see valik annab juba tulemused.
+        </p>
         <PillGroup
           options={SECTORS}
-          selected={sector ? [sector] : []}
+          selected={sectors}
           onToggle={(slug) => {
-            setSector(slug);
+            setSectors(
+              sectors.includes(slug) ? sectors.filter((s) => s !== slug) : [...sectors, slug]
+            );
             setError(null);
           }}
-          type="radio"
+          type="checkbox"
           name="sektor"
         />
       </fieldset>
