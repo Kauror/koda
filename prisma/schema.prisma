@@ -253,6 +253,18 @@ model SearchResultClick {
   topicGroup    TopicGroup?   @relation(fields: [topicGroupId], references: [id], onDelete: SetNull)
 }
 
+model SiteText {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  valueEt     String
+  description String?
+  group       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([group])
+}
+
 /// Evidence graph linking a public result to its supporting opinions, annual
 /// context, topic history, duplicate/canonical rows and achievement enrichment.
 model ContentEvidenceLink {

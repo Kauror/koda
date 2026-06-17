@@ -162,10 +162,10 @@ function countTokens(haystack: string, tokens: string[]): number {
 function recencyBoost(date: Date | null): number {
   if (!date) return 0;
   const ageDays = (Date.now() - date.getTime()) / (1000 * 60 * 60 * 24);
-  if (ageDays <= 90) return 10;
-  if (ageDays <= 180) return 7;
-  if (ageDays <= 365) return 4;
-  if (ageDays <= 730) return 2;
+  if (ageDays <= 90) return 16;
+  if (ageDays <= 180) return 12;
+  if (ageDays <= 365) return 8;
+  if (ageDays <= 730) return 4;
   return 0;
 }
 
@@ -248,6 +248,34 @@ export function passesActiveFilters(q: SearchQuery, s: ScoreBreakdown, c: Candid
   if (q.tegevusala.length && s.tegevusalaMatches === 0) return false;
   if (q.type.length && !q.type.includes(primaryType(c))) return false;
   return true;
+}
+
+export type RankedCandidate = { c: Candidate; total: number };
+
+function dateMs(c: Candidate): number {
+  return c.date?.getTime() ?? 0;
+}
+
+/**
+ * Conservative public ordering: score still wins, but within a modest score
+ * band recent ordinary content rises above older ordinary content. Strong old
+ * achievements are intentionally protected by their larger source boost.
+ */
+export function compareRankedCandidates(a: RankedCandidate, b: RankedCandidate): number {
+  const aKind = assignKind(a.c);
+  const bKind = assignKind(b.c);
+  const sameKind = aKind === bKind;
+  const neitherAchievement = aKind !== "toovoit" && bKind !== "toovoit";
+  const threshold = sameKind && neitherAchievement ? 32 : sameKind ? 12 : 0;
+
+  if (threshold > 0 && Math.abs(a.total - b.total) <= threshold) {
+    const byDate = dateMs(b.c) - dateMs(a.c);
+    if (byDate !== 0) return byDate;
+  }
+
+  const byScore = b.total - a.total;
+  if (byScore !== 0) return byScore;
+  return dateMs(b.c) - dateMs(a.c);
 }
 
 // ---------------------------------------------------------------------------

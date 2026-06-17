@@ -83,11 +83,14 @@ npm run dev                 # http://localhost:3000
 | `npm run build`          | Prisma client + Next.js production build                 |
 | `npm run start`          | Production server                                        |
 | `npm run seed`           | Sildid (sektorid, suurused, huvid, profiilid) + näidissisu |
+| `npm run site-texts:seed`| Loob puuduvad avalehe tekstiread, olemasolevaid muudatusi üle kirjutamata |
+| `npm run freshness:audit`| Raporteerib avalike ridade värskuse ja 2025/2026 katvuse DB põhjal |
 | `npm run crawl`          | Impordib sisu koda.ee avalikelt lehtedelt                |
 | `npm run import:validate`| Valideerib merge-ready Exceli failid (ilma andmebaasita) |
 | `npm run import:merge-ready` | Impordib merge-ready Exceli failid andmebaasi (idempotentne) |
 | `npm run import:verify-db` | Kontrollib andmebaasi pärast importi (invariandid)     |
 | `npm run import:test`    | Deterministlikud kontrollid merge-ready impordile        |
+| `npm run public-ui:test` | DB-vabad avaliku UI kontrollid (CTA-d, detailivaate peitmise reeglid) |
 | `npm run db:setup:pglite`| Lokaalne PGlite andmebaas + migratsioonid (verifitseerimiseks) |
 | `npm run prisma:migrate` | `prisma migrate dev` (arendus)                           |
 | `npm run prisma:deploy`  | `prisma migrate deploy` (server)                         |
@@ -194,10 +197,15 @@ imporditakse ikkagi pealkiri/kuupäev/link/väljavõte loendilehtedelt.
 - `/admin/topics` – teemagrupid: loomine, „Miks see on sinu ettevõttele
   oluline" tekst, põhisisu valik, liikmete haldus, sildid
 - `/admin/tags` – siltide haldus
+- `/admin/site-texts` – avalehe suuremate tekstiplokkide muutmine
 
 Autentimine on teadlikult lihtne (MVP): üks parool keskkonnamuutujast
 (`ADMIN_PASSWORD`), HMAC-allkirjastatud küpsis, ei mingit välist
 autentimisteenust.
+
+Avalehe toimetatavad tekstid kasutavad `SiteText` tabelit ja koodis olevaid
+vaikeväärtusi. Pärast uue võtme lisamist või värsket juurutust käivita
+`npm run site-texts:seed`. Vt [`docs/site-texts-v1.md`](docs/site-texts-v1.md).
 
 ## Privaatsus
 

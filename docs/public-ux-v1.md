@@ -1,100 +1,69 @@
-# Public UX & content (v1)
+# Public UX & Content v1
 
-How the public journey reads and behaves: homepage → search/filter → grouped
-results → detail page → original source/evidence. This is a content/UX layer over
-the search (`docs/search-ranking-v1.md`) and detail (`docs/public-detail-evidence-v1.md`)
-work — no ranking, eligibility or import logic changed.
+The public journey is: homepage -> search/filter -> grouped results -> clean public detail page -> optional public Koda source. It remains source-based and non-AI.
 
-## Homepage concept
+## Homepage
 
-Positioned as a **source-based Koda value-discovery tool** — explicitly *not* a
-chatbot, news archive or Excel database. The hero states it is an "allikapõhine
-ülevaade sellest, mida koda on ettevõtjate huvide kaitseks teinud ja öelnud" and
-notes results come from Koda's public materials and indexed sources.
+Major homepage copy is managed through `SiteText` with code-level fallbacks. Do not hardcode those editable text blocks back into `src/app/page.tsx`.
 
-Above the fold: one prominent free-text search field (the form), a row of example
-searches (Maksud ja aruandlus, Tööjõud ja tööõigus, Pakendid, Energia,
-Välistööjõud, Ekspordiga seotud teemad, "Mida on koda saavutanud?"), then
-DB-driven topic chips ("Sirvi teemade kaupa") and links to koda.ee.
+The homepage keeps example searches, DB-driven topic chips, and links to koda.ee.
 
-## Search/filter UX
+## Search Form
 
-- **Free text is primary**: a large labelled input ("Otsi teemat või märksõna")
-  with an inline "Otsi" button; everything else is optional.
-- **No mandatory sector**: tegevusala and "Ettevõtte olukord" (tapsustus) live
-  behind a "Täpsemad valikud" disclosure and are clearly marked optional.
-- **Selected filters are visible and removable**: active topic/sector/situation
-  selections render as removable chips (`.chip-remove`) regardless of whether the
-  advanced section is open.
-- Submits on Enter (`enterKeyHint="search"`) and via two buttons.
+- `Tegevusala` is the first visible selector and remains optional.
+- Free-text search remains prominent and query-only search still works.
+- `Teema / valdkond`, `Ettevõtte olukord / täpsustus`, and result type are behind `Täpsemad valikud (teema, olukord)`.
+- Selected filters remain visible and removable.
+- Query params remain: `q`, `valdkond`, `tegevusala`, `tapsustus`, `type`.
 
-Query params are unchanged: `q`, `valdkond`, `tegevusala`, `tapsustus`, `type`.
+## Results
 
-## Result group meanings
+Results are grouped as:
 
-The results page shows the active query + filter chips, a total count, and three
-self-explaining groups (each with a one-line description and a count):
+1. `Töövõidud`
+2. `Koja seisukohad ja selgitused`
+3. `Taust ja teema ajalugu`
 
-1. **Töövõidud** — concrete outcomes/wins Koda achieved.
-2. **Koja seisukohad ja selgitused** — public positions, proposals, warnings and
-   explanatory news.
-3. **Taust ja teema ajalugu** — annual-report context and longer topic history.
+The `Töövõidud` group is compact by default: only the first two cards are shown, and the rest sit behind `Näita veel töövõite (X)`.
 
-If results are only background ("Taust" only), a notice suggests broadening. If
-there are no results, the empty state suggests broader topics (DB chips) and
-links to koda.ee.
+Cards use clean short summaries and contextual public source CTAs:
 
-## Card CTA logic
+- `Loe uudist`
+- `Loe koja arvamust`
+- `Vaata töövõitu`
+- `Loe konteksti`
+- `Ava koda.ee allikas`
 
-Each card shows: badges (type + outcome) + date, title (→ detail), short summary,
-topic tags + muted sector tags, an evidence hint, and **two distinct actions**:
+The generic `Vaata allikat` / `Vaata algallikat` wording is not used as the default public CTA.
 
-- **"Vaata kokkuvõtet"** → internal `/sisu/[id]` source-based summary (primary).
-- **"Ava algallikas →"** → original Koda source URL (only when present;
-  click-tracked).
+## Freshness
 
-The original source link is never the only CTA. Admin override fields
-(`adminDisplayTitleOverride`, `adminSummaryOverride`) are used for title/summary.
+Search still uses the core relevance score. Ordering now adds a conservative recency rule: within a modest score band, newer ordinary public content can appear above older ordinary content. Strong older achievements keep their source/outcome boost and can still outrank weak recent rows.
 
-## Detail-page sections
+## Detail Pages
 
-- **Allikapõhine kokkuvõte** — the summary (admin override first).
-- **Konkreetne töövõit** — achievements only, from `AchievementEnrichment`.
-- **Miks see ettevõtjale oluline on?** — `companyRelevance` (existing field only).
-- **Koja seisukoht ja mõju** — `kodaPosition` + source evidence.
-- **Algallikas** — source/dataset labels, section, report year, file, original
-  URL ("Ava algallikas"), canonical URL if different.
-- **Seotud allikad ja taust** — annual context, **toetavad arvamused** (styled
-  visually secondary), teema ajalugu, duplicates.
+Public detail pages are reader-facing, not database-record pages.
 
-## Source/evidence wording principles
+Achievement pages are centered on `Koja töövõit` with:
 
-Consistent Estonian, source-based, no overclaiming: "Allikapõhine kokkuvõte",
-"Koja seisukoht", "Toetav arvamus", "Aastaaruande kontekst", "Seotud allikas",
-"Algallikas", "Töövõit", "Teema ajalugu", "Allika põhjal". Avoided: AI/"guaranteed
-impact"/legal-advice phrasing.
+- `Valdkond`
+- `Tulemus`
+- `Mõju`
+- `Mida saavutati?`
 
-## Empty/error states
+Non-achievement pages show `Koja seisukoht ja mõju` and `Miks see ettevõtjale oluline on?` only when those sections add distinct content.
 
-- No results → suggested broader topics + koda.ee link.
-- Only background results → "leidsime peamiselt tausta…" notice.
-- Missing source URL → "Avalik allikalink puudub (toetav allikas)".
-- Detail not found / not public → `notFound()` (404).
-- Empty evidence section → simply not rendered.
+Public detail pages no longer show:
 
-## Mobile & accessibility
+- `Algallikas` backend metadata blocks
+- source dataset/layer/type metadata
+- CSV/XLSX/import/source file names
+- canonical/internal URL text
+- `Seotud allikad ja taust` supporting-opinion blocks
+- hidden opinion rows as public lists
 
-- Search row and card actions stack on ≤640px; the submit button goes full-width.
-- Source links get padding for larger tap targets on mobile.
-- Semantic headings (h1/h2/h3), `aria-label`s on the search input and filter
-  groups, `aria-expanded` on the disclosure, `.sr-only` text on remove chips.
-- Badges/tags wrap (`flex-wrap`); brand-token colours keep contrast.
-- Keyboard: form submits on Enter; all actions are real buttons/links.
+`Teema ajalugu` remains visible where relevant, but uses contextual CTA labels and clean excerpts only.
 
-## Deferred
+## Preserved Backend Behavior
 
-- Internal-detail click tracking (only external source clicks tracked today).
-- Richer mobile nav / sticky search.
-- Per-group "show more" pagination beyond current caps.
-- PostgreSQL full-text/trigram and AI summaries (future orders).
-- Visual design refresh / full brand pass.
+Import metadata, evidence links, supporting opinions, source fields, admin overrides, and `SiteText` remain in the database/code for admin or future workflows. This change hides backend-like material from public pages; it does not delete it.

@@ -4,6 +4,17 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import type { FilterOptions } from "@/lib/search";
 
+const RESULT_TYPES = ["toovoit", "arvamus", "uudis", "aastaaruanne", "kontekst"] as const;
+type ResultType = (typeof RESULT_TYPES)[number];
+
+const RESULT_TYPE_LABELS: Record<ResultType, string> = {
+  toovoit: "Töövõit",
+  arvamus: "Arvamus",
+  uudis: "Uudis",
+  aastaaruanne: "Aastaaruanne",
+  kontekst: "Taust",
+};
+
 function ChipGroup({
   options,
   selected,
@@ -43,11 +54,12 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
       .filter(Boolean);
 
   const [q, setQ] = useState<string>(params.get("q") || "");
-  const [valdkond, setValdkond] = useState<string[]>(listParam("valdkond"));
   const [tegevusala, setTegevusala] = useState<string[]>(listParam("tegevusala"));
+  const [valdkond, setValdkond] = useState<string[]>(listParam("valdkond"));
   const [tapsustus, setTapsustus] = useState<string[]>(listParam("tapsustus"));
-  const [showOptional, setShowOptional] = useState(
-    listParam("tegevusala").length > 0 || listParam("tapsustus").length > 0
+  const [type, setType] = useState<string[]>(listParam("type"));
+  const [showAdvanced, setShowAdvanced] = useState(
+    listParam("valdkond").length > 0 || listParam("tapsustus").length > 0 || listParam("type").length > 0
   );
 
   const toggle = (list: string[], set: (v: string[]) => void) => (slug: string) =>
@@ -56,23 +68,26 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
   const nameOf = (opts: { slug: string; name: string }[], slug: string) =>
     opts.find((o) => o.slug === slug)?.name ?? slug;
 
-  // Flattened list of active filters so the user always sees (and can remove)
-  // what is selected, even when the advanced section is collapsed.
   const activeFilters: { key: string; label: string; remove: () => void }[] = [
-    ...valdkond.map((s) => ({
-      key: `v-${s}`,
-      label: nameOf(options.valdkonnad, s),
-      remove: () => setValdkond((v) => v.filter((x) => x !== s)),
-    })),
     ...tegevusala.map((s) => ({
       key: `t-${s}`,
       label: nameOf(options.tegevusalad, s),
       remove: () => setTegevusala((v) => v.filter((x) => x !== s)),
     })),
+    ...valdkond.map((s) => ({
+      key: `v-${s}`,
+      label: nameOf(options.valdkonnad, s),
+      remove: () => setValdkond((v) => v.filter((x) => x !== s)),
+    })),
     ...tapsustus.map((s) => ({
       key: `p-${s}`,
       label: nameOf(options.tapsustused, s),
       remove: () => setTapsustus((v) => v.filter((x) => x !== s)),
+    })),
+    ...type.map((s) => ({
+      key: `r-${s}`,
+      label: RESULT_TYPE_LABELS[s as ResultType] ?? s,
+      remove: () => setType((v) => v.filter((x) => x !== s)),
     })),
   ];
 
@@ -80,15 +95,27 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
     e.preventDefault();
     const p = new URLSearchParams();
     if (q.trim()) p.set("q", q.trim());
-    if (valdkond.length) p.set("valdkond", valdkond.join(","));
     if (tegevusala.length) p.set("tegevusala", tegevusala.join(","));
+    if (valdkond.length) p.set("valdkond", valdkond.join(","));
     if (tapsustus.length) p.set("tapsustus", tapsustus.join(","));
+    if (type.length) p.set("type", type.join(","));
     router.push(`/tulemused?${p.toString()}`);
   }
 
   return (
     <form onSubmit={submit} className="card search-form">
-      {/* Free text is the primary action. */}
+      {options.tegevusalad.length > 0 && (
+        <fieldset className="search-sector">
+          <legend>Tegevusala</legend>
+          <p className="field-hint">Valikuline. Aitab esile tõsta sinu valdkonnale olulisemat.</p>
+          <ChipGroup
+            options={options.tegevusalad}
+            selected={tegevusala}
+            onToggle={toggle(tegevusala, setTegevusala)}
+          />
+        </fieldset>
+      )}
+
       <div className="search-primary">
         <label className="field-label" htmlFor="q">
           Otsi teemat või märksõna
@@ -100,7 +127,7 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
             name="q"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Nt maksud, välistööjõud, mida on koda saavutanud…"
+            placeholder="Nt maksud, välistööjõud, mida on koda saavutanud..."
             className="search-input search-input--primary"
             aria-label="Otsi teemat või märksõna"
             enterKeyHint="search"
@@ -110,7 +137,7 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
           </button>
         </div>
         <p className="field-hint">
-          Tegevusala ega filtri valimine ei ole kohustuslik – ainuüksi märksõnast või teemast piisab.
+          Tegevusala ega filtri valimine ei ole kohustuslik - ainuüksi märksõnast või teemast piisab.
         </p>
       </div>
 
@@ -119,52 +146,41 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
           {activeFilters.map((f) => (
             <button key={f.key} type="button" className="chip-remove" onClick={f.remove}>
               {f.label}
-              <span aria-hidden="true"> ✕</span>
-              <span className="sr-only"> – eemalda filter</span>
+              <span aria-hidden="true"> ×</span>
+              <span className="sr-only"> - eemalda filter</span>
             </button>
           ))}
         </div>
       )}
 
-      {options.valdkonnad.length > 0 && (
-        <fieldset>
-          <legend>Teema</legend>
-          <p className="field-hint">Vali üks või mitu teemat (valikuline).</p>
-          <ChipGroup
-            options={options.valdkonnad}
-            selected={valdkond}
-            onToggle={toggle(valdkond, setValdkond)}
-          />
-        </fieldset>
-      )}
-
       <button
         type="button"
         className="btn btn-secondary btn-small disclosure"
-        onClick={() => setShowOptional((v) => !v)}
-        aria-expanded={showOptional}
+        onClick={() => setShowAdvanced((v) => !v)}
+        aria-expanded={showAdvanced}
       >
-        {showOptional ? "Peida täpsemad valikud" : "Täpsemad valikud (tegevusala, olukord)"}
+        {showAdvanced ? "Peida täpsemad valikud" : "Täpsemad valikud (teema, olukord)"}
       </button>
 
-      {showOptional && (
+      {showAdvanced && (
         <>
-          {options.tegevusalad.length > 0 && (
+          {options.valdkonnad.length > 0 && (
             <fieldset>
-              <legend>Tegevusala (valikuline)</legend>
-              <p className="field-hint">Aitab esile tõsta sinu valdkonnale olulisemat.</p>
+              <legend>Teema / valdkond</legend>
+              <p className="field-hint">Vali üks või mitu teemat (valikuline).</p>
               <ChipGroup
-                options={options.tegevusalad}
-                selected={tegevusala}
-                onToggle={toggle(tegevusala, setTegevusala)}
+                options={options.valdkonnad}
+                selected={valdkond}
+                onToggle={toggle(valdkond, setValdkond)}
               />
             </fieldset>
           )}
+
           {options.tapsustused.length > 0 && (
             <fieldset>
-              <legend>Ettevõtte olukord (valikuline, esialgne)</legend>
+              <legend>Ettevõtte olukord / täpsustus</legend>
               <p className="field-hint">
-                Esialgne täiendav filter – kasutame seda kergelt ega piira sellega tulemusi.
+                Esialgne täiendav filter - kasutame seda kergelt ega piira sellega tulemusi.
               </p>
               <ChipGroup
                 options={options.tapsustused}
@@ -173,16 +189,22 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
               />
             </fieldset>
           )}
+
+          <fieldset>
+            <legend>Tulemuse tüüp</legend>
+            <p className="field-hint">Valikuline täpsustus, kui soovid näha ainult kindlat liiki tulemusi.</p>
+            <ChipGroup
+              options={RESULT_TYPES.map((slug) => ({ slug, name: RESULT_TYPE_LABELS[slug] }))}
+              selected={type}
+              onToggle={toggle(type, setType)}
+            />
+          </fieldset>
         </>
       )}
 
-      <button type="submit" className="btn">
-        Vaata tulemusi
-      </button>
-
       <p className="privacy-note">
-        Me ei küsi sinu ettevõtte nime ega isikuandmeid. Valitud filtreid võime kasutada
-        anonüümselt selle tööriista parandamiseks.
+        Me ei küsi sinu ettevõtte nime ega isikuandmeid. Valitud filtreid võime kasutada anonüümselt
+        selle tööriista parandamiseks.
       </p>
     </form>
   );

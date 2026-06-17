@@ -1,7 +1,8 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import SearchForm from "./SearchForm";
-import { getFilterOptions } from "@/lib/search";
+import { getFilterOptions, type FilterOptions } from "@/lib/search";
+import { getHomepageSiteTexts } from "@/lib/site-texts";
 
 export const dynamic = "force-dynamic";
 
@@ -16,24 +17,25 @@ const EXAMPLE_SEARCHES: { label: string; href: string }[] = [
   { label: "Mida on koda saavutanud?", href: "/tulemused?type=toovoit" },
 ];
 
+const EMPTY_OPTIONS: FilterOptions = { valdkonnad: [], tegevusalad: [], tapsustused: [] };
+
 export default async function HomePage() {
-  const options = await getFilterOptions();
+  const [options, texts] = await Promise.all([
+    getFilterOptions().catch(() => {
+      console.warn("Failed to load filter options; using empty filter list.");
+      return EMPTY_OPTIONS;
+    }),
+    getHomepageSiteTexts(),
+  ]);
 
   return (
     <main>
       <section className="hero">
         <div className="container">
-          <span className="eyebrow">Allikapõhine ülevaade koja tööst</span>
-          <h1>Mida on koda sinu ettevõtte jaoks teinud ja öelnud?</h1>
-          <p className="lead">
-            Allikapõhine ülevaade sellest, mida Eesti Kaubandus-Tööstuskoda on ettevõtjate huvide
-            kaitseks teinud ja öelnud. Otsi konkreetseid töövõite, koja seisukohti ja teemade
-            tausta – kõik viidetega algallikatele.
-          </p>
-          <p className="lead-note">
-            See ei ole vestlusrobot ega uudistearhiiv. Tulemused põhinevad koja avalikel
-            materjalidel ja indekseeritud allikatel.
-          </p>
+          <span className="eyebrow">{texts["homepage.hero.eyebrow"]}</span>
+          <h1>{texts["homepage.hero.title"]}</h1>
+          <p className="lead">{texts["homepage.hero.lead"]}</p>
+          <p className="lead-note">{texts["homepage.hero.note"]}</p>
         </div>
       </section>
 
@@ -44,7 +46,7 @@ export default async function HomePage() {
           </Suspense>
 
           <div className="examples">
-            <span className="examples-label">Näiteks:</span>
+            <span className="examples-label">{texts["homepage.search.examplesTitle"]}</span>
             <div className="theme-links">
               {EXAMPLE_SEARCHES.map((e) => (
                 <Link key={e.href} href={e.href} className="theme-link">
@@ -59,10 +61,8 @@ export default async function HomePage() {
       {options.valdkonnad.length > 0 && (
         <section className="section">
           <div className="container-narrow">
-            <h2 className="section-heading">Sirvi teemade kaupa</h2>
-            <p className="section-intro">
-              Ei taha otsida? Vaata koja tööd ühe teema kaupa.
-            </p>
+            <h2 className="section-heading">{texts["homepage.topics.title"]}</h2>
+            <p className="section-intro">{texts["homepage.topics.description"]}</p>
             <div className="theme-links">
               {options.valdkonnad.map((t) => (
                 <Link
@@ -80,7 +80,8 @@ export default async function HomePage() {
 
       <section className="section" aria-label="Koja kodulehe viited">
         <div className="container-narrow">
-          <h2 className="section-heading">Otse koja kodulehel</h2>
+          <h2 className="section-heading">{texts["homepage.explainer.title"]}</h2>
+          <p className="section-intro">{texts["homepage.explainer.body"]}</p>
           <div className="theme-links">
             <a
               href="https://www.koda.ee/et/meie-moju/meie-toovoidud"
@@ -115,6 +116,12 @@ export default async function HomePage() {
               Teenused
             </a>
           </div>
+        </div>
+      </section>
+
+      <section className="section" aria-label="Koja kokkuvõte">
+        <div className="container-narrow">
+          <p className="section-intro">{texts["homepage.footerNote"]}</p>
         </div>
       </section>
 

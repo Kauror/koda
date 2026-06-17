@@ -15,6 +15,7 @@ import {
   type Candidate,
   type SearchQuery,
   assignKind,
+  compareRankedCandidates,
   parseSearchParams,
   passesActiveFilters,
   primaryType,
@@ -178,6 +179,48 @@ check("older strong achievement outranks newer weak news", () => {
     date: new Date(),
   });
   assert.ok(total(oldAch) > total(newWeak));
+});
+
+check("newer ordinary result wins within a close score band", () => {
+  const oldNews = cand({
+    id: "old",
+    sourceTypeDetail: "meie_uudis",
+    sourceLayer: "koda_news",
+    date: new Date("2022-01-01"),
+  });
+  const newNews = cand({
+    id: "new",
+    sourceTypeDetail: "meie_uudis",
+    sourceLayer: "koda_news",
+    date: new Date("2026-01-15"),
+  });
+  const sorted = [
+    { c: oldNews, total: 92 },
+    { c: newNews, total: 84 },
+  ].sort(compareRankedCandidates);
+  assert.equal(sorted[0].c.id, "new");
+});
+
+check("strong old achievement is protected from weak newer ordinary row", () => {
+  const oldAch = cand({
+    id: "old-ach",
+    sourceTypeDetail: "toovoit",
+    sourceLayer: "koda_achievement",
+    outcomeStatus: "achieved",
+    date: new Date("2016-01-01"),
+  });
+  const newNews = cand({
+    id: "new-news",
+    sourceTypeDetail: "meie_uudis",
+    sourceLayer: "koda_news",
+    publicDisplayStatus: "topic_history",
+    date: new Date("2026-01-01"),
+  });
+  const sorted = [
+    { c: newNews, total: total(newNews) },
+    { c: oldAch, total: total(oldAch) },
+  ].sort(compareRankedCandidates);
+  assert.equal(sorted[0].c.id, "old-ach");
 });
 
 // ---- Classification / filters (Task 3/6) ----

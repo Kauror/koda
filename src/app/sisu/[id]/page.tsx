@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getContentDetail, type EvidenceRow } from "@/lib/content-detail";
+import { getContentDetail, type ContentDetail, type EvidenceRow } from "@/lib/content-detail";
+import { compactText, uniquePublicTexts } from "@/lib/content-display";
 
 export const dynamic = "force-dynamic";
 
@@ -9,42 +10,129 @@ function formatDate(iso: string | null): string | null {
   return new Date(iso).toLocaleDateString("et-EE", { day: "numeric", month: "long", year: "numeric" });
 }
 
-function EvidenceList({
-  title,
-  note,
-  rows,
-  secondary,
-}: {
-  title: string;
-  note?: string;
-  rows: EvidenceRow[];
-  secondary?: boolean;
-}) {
+function SourceButton({ item }: { item: Pick<ContentDetail, "sourceUrl" | "sourceCtaLabel"> }) {
+  if (!item.sourceUrl) return null;
+  return (
+    <a href={item.sourceUrl} target="_blank" rel="noopener noreferrer" className="btn btn-small">
+      {item.sourceCtaLabel}
+    </a>
+  );
+}
+
+function TopicHistory({ rows }: { rows: EvidenceRow[] }) {
   if (rows.length === 0) return null;
   return (
-    <section className={`card evidence-block${secondary ? " evidence-secondary" : ""}`}>
-      <h2>{title}</h2>
-      {note && <p className="section-sub">{note}</p>}
+    <section className="card">
+      <h2>Teema ajalugu</h2>
       <ul className="evidence-list">
-        {rows.map((r) => (
-          <li key={r.id}>
-            <span className="badge">{r.sourceLabel}</span>{" "}
-            {r.isPublic ? (
-              <Link href={`/sisu/${encodeURIComponent(r.detailId)}`}>{r.title}</Link>
+        {rows.map((row) => (
+          <li key={row.id}>
+            <span className="badge">{row.sourceLabel}</span>{" "}
+            {row.isPublic ? (
+              <Link href={`/sisu/${encodeURIComponent(row.detailId)}`}>{row.title}</Link>
             ) : (
-              <span className="evidence-title">{r.title}</span>
+              <span className="evidence-title">{row.title}</span>
             )}
-            {formatDate(r.date) && <span className="badge-date"> · {formatDate(r.date)}</span>}
-            {r.summary && <p className="item-excerpt small">{r.summary}</p>}
-            {r.sourceUrl && (
-              <a href={r.sourceUrl} target="_blank" rel="noopener noreferrer" className="item-source-link">
-                Vaata allikat →
+            {formatDate(row.date) && <span className="badge-date"> · {formatDate(row.date)}</span>}
+            {row.summary && <p className="item-excerpt small">{compactText(row.summary, 220)}</p>}
+            {row.sourceUrl && (
+              <a href={row.sourceUrl} target="_blank" rel="noopener noreferrer" className="item-source-link">
+                {row.sourceCtaLabel} →
               </a>
             )}
           </li>
         ))}
       </ul>
     </section>
+  );
+}
+
+function AchievementDetail({ item }: { item: ContentDetail }) {
+  const explanation = uniquePublicTexts([
+    item.enrichment?.sourceEvidence,
+    item.kodaPosition,
+    item.summary,
+    item.companyRelevance,
+    item.sourceEvidence,
+    item.excerpt,
+    item.bodySnippet,
+  ]);
+  const field = item.enrichment?.regulatoryArea || item.valdkonnad[0]?.name || null;
+  const impact = item.enrichment?.numericImpactStatement || null;
+
+  return (
+    <>
+      <section className="card achievement-block">
+        <h2>Koja töövõit</h2>
+        <dl className="detail-dl">
+          {field && (
+            <>
+              <dt>Valdkond</dt>
+              <dd>{field}</dd>
+            </>
+          )}
+          {(item.enrichment?.outcome || item.outcomeLabel) && (
+            <>
+              <dt>Tulemus</dt>
+              <dd>{item.enrichment?.outcome || item.outcomeLabel}</dd>
+            </>
+          )}
+          {impact && (
+            <>
+              <dt>Mõju</dt>
+              <dd>{impact}</dd>
+            </>
+          )}
+          {explanation.length > 0 && (
+            <>
+              <dt>Mida saavutati?</dt>
+              <dd>{explanation.map((text) => compactText(text, 420)).join(" ")}</dd>
+            </>
+          )}
+        </dl>
+        <SourceButton item={item} />
+      </section>
+      <TopicHistory rows={item.evidence.topicHistory} />
+    </>
+  );
+}
+
+function StandardDetail({ item }: { item: ContentDetail }) {
+  const mainTexts = uniquePublicTexts([item.kodaPosition, item.sourceEvidence, item.summary, item.bodySnippet]);
+  const relevanceTexts = uniquePublicTexts([item.companyRelevance]).filter(
+    (text) => !mainTexts.some((main) => main === text)
+  );
+
+  return (
+    <>
+      {mainTexts.length > 0 && (
+        <section className="card">
+          <h2>Koja seisukoht ja mõju</h2>
+          {mainTexts.map((text) => (
+            <p key={text}>{text}</p>
+          ))}
+          <SourceButton item={item} />
+        </section>
+      )}
+
+      {relevanceTexts.length > 0 && (
+        <section className="card">
+          <h2>Miks see ettevõtjale oluline on?</h2>
+          {relevanceTexts.map((text) => (
+            <p key={text}>{text}</p>
+          ))}
+        </section>
+      )}
+
+      {mainTexts.length === 0 && relevanceTexts.length === 0 && item.sourceUrl && (
+        <section className="card">
+          <h2>Koda.ee materjal</h2>
+          <SourceButton item={item} />
+        </section>
+      )}
+
+      <TopicHistory rows={item.evidence.topicHistory} />
+    </>
   );
 }
 
@@ -61,12 +149,6 @@ export default async function ContentDetailPage({
   if (!item) notFound();
 
   const backHref = from ? `/tulemused?${from}` : "/";
-  const hasEvidence =
-    item.evidence.annualContext.length +
-      item.evidence.relatedOpinions.length +
-      item.evidence.topicHistory.length +
-      item.evidence.duplicates.length >
-    0;
 
   return (
     <main>
@@ -77,7 +159,7 @@ export default async function ContentDetailPage({
           </Link>
           <p className="item-meta" style={{ marginTop: 16 }}>
             {item.isAchievement ? (
-              <span className="badge win-badge">✔ Töövõit</span>
+              <span className="badge win-badge">✓ Töövõit</span>
             ) : (
               <span className="badge">{item.sourceLabel}</span>
             )}
@@ -104,142 +186,7 @@ export default async function ContentDetailPage({
       </div>
 
       <div className="container results-body detail-body">
-        {item.summary && (
-          <section className="card">
-            <h2>Allikapõhine kokkuvõte</h2>
-            <p className="detail-lead">{item.summary}</p>
-          </section>
-        )}
-
-        {item.enrichment && (
-          <section className="card achievement-block">
-            <h2>✔ Konkreetne töövõit</h2>
-            <dl className="detail-dl">
-              {item.enrichment.outcome && (
-                <>
-                  <dt>Tulemus</dt>
-                  <dd>{item.enrichment.outcome}</dd>
-                </>
-              )}
-              {item.enrichment.regulatoryArea && (
-                <>
-                  <dt>Valdkond / regulatsioon</dt>
-                  <dd>{item.enrichment.regulatoryArea}</dd>
-                </>
-              )}
-              {item.enrichment.valueType && (
-                <>
-                  <dt>Väärtuse tüüp</dt>
-                  <dd>{item.enrichment.valueType}</dd>
-                </>
-              )}
-              {item.enrichment.kodaRole && (
-                <>
-                  <dt>Koja roll</dt>
-                  <dd>{item.enrichment.kodaRole}</dd>
-                </>
-              )}
-              {item.enrichment.numericImpactStatement && (
-                <>
-                  <dt>Mõju</dt>
-                  <dd>{item.enrichment.numericImpactStatement}</dd>
-                </>
-              )}
-            </dl>
-            {item.enrichment.sourceEvidence && (
-              <p className="item-excerpt small">
-                <strong>Allika põhjal:</strong> {item.enrichment.sourceEvidence}
-              </p>
-            )}
-          </section>
-        )}
-
-        {item.companyRelevance && (
-          <section className="card">
-            <h2>Miks see ettevõtjale oluline on?</h2>
-            <p>{item.companyRelevance}</p>
-          </section>
-        )}
-
-        {(item.kodaPosition || item.sourceEvidence || item.excerpt || item.bodySnippet) && (
-          <section className="card">
-            <h2>Koja seisukoht ja mõju</h2>
-            {item.kodaPosition && <p>{item.kodaPosition}</p>}
-            {item.sourceEvidence && (
-              <p className="item-excerpt small">
-                <strong>Allika põhjal:</strong> {item.sourceEvidence}
-              </p>
-            )}
-            {!item.kodaPosition && (item.excerpt || item.bodySnippet) && (
-              <p className="item-excerpt small muted">{item.excerpt || item.bodySnippet}</p>
-            )}
-          </section>
-        )}
-
-        <section className="card">
-          <h2>Algallikas</h2>
-          <dl className="detail-dl">
-            <dt>Allika tüüp</dt>
-            <dd>
-              {item.sourceLabel} · {item.datasetLabel}
-            </dd>
-            {item.sourceSection && (
-              <>
-                <dt>Sektsioon</dt>
-                <dd>{item.sourceSection}</dd>
-              </>
-            )}
-            {item.reportYear && (
-              <>
-                <dt>Aruande aasta</dt>
-                <dd>{item.reportYear}</dd>
-              </>
-            )}
-            {item.sourceFileName && (
-              <>
-                <dt>Allikafail</dt>
-                <dd>{item.sourceFileName}</dd>
-              </>
-            )}
-          </dl>
-          {item.sourceUrl ? (
-            <a href={item.sourceUrl} target="_blank" rel="noopener noreferrer" className="btn btn-small">
-              Vaata allikat koda.ee-l →
-            </a>
-          ) : (
-            <p className="muted small">Avalik allikalink puudub (toetav allikas).</p>
-          )}
-          {item.canonicalUrl && item.canonicalUrl !== item.sourceUrl && (
-            <p className="muted small">
-              Püsilink:{" "}
-              <a href={item.canonicalUrl} target="_blank" rel="noopener noreferrer">
-                {item.canonicalUrl}
-              </a>
-            </p>
-          )}
-        </section>
-
-        {hasEvidence && <h2 className="evidence-heading">Seotud allikad ja taust</h2>}
-        <EvidenceList
-          title="Aastaaruande kontekst"
-          note="Koja aastaaruannetest pärinev taust samal teemal."
-          rows={item.evidence.annualContext}
-        />
-        <EvidenceList
-          title="Toetavad arvamused"
-          note="Koja arvamuskirjad samal teemal – toetav taustamaterjal, mitte eraldi avalik tulemus."
-          rows={item.evidence.relatedOpinions}
-          secondary
-        />
-        <EvidenceList
-          title="Teema ajalugu"
-          note="Varasem koja töö samal teemal."
-          rows={item.evidence.topicHistory}
-        />
-        <EvidenceList
-          title="Seotud / duplikaatkirjed"
-          rows={item.evidence.duplicates}
-        />
+        {item.isAchievement ? <AchievementDetail item={item} /> : <StandardDetail item={item} />}
 
         <p style={{ marginTop: 24 }}>
           <Link href={backHref} className="btn btn-secondary btn-small">

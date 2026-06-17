@@ -1,13 +1,18 @@
 /**
- * Public detail page data: loads one ContentItem, enforces public eligibility,
- * and gathers source-based evidence/context. Hidden/supporting rows are only
- * ever returned as evidence under an eligible public parent — never as a
- * standalone public detail. See docs/public-detail-evidence-v1.md.
+ * Public detail page data. Public pages render a clean reader-facing summary;
+ * backend evidence/source metadata remains available in this layer for future
+ * admin use, but is not exposed by the public route.
  */
 import { TagType } from "@prisma/client";
 import { prisma } from "./db";
-import { isPublicSearchEligible, isEvidenceEligible } from "./eligibility";
-import { publicTitle, publicSummary, publicUrl } from "./content-display";
+import { isEvidenceEligible, isPublicSearchEligible } from "./eligibility";
+import {
+  getCleanPublicExcerpt,
+  publicSourceUrl,
+  publicSummary,
+  publicTitle,
+  sourceCtaLabel,
+} from "./content-display";
 import { datasetLabel, outcomeLabel, sourceLabel } from "./labels";
 import {
   type Candidate,
@@ -30,7 +35,8 @@ export type EvidenceRow = {
   year: number | null;
   sourceLabel: string;
   sourceUrl: string | null;
-  isPublic: boolean; // whether this evidence row has its own public detail page
+  sourceCtaLabel: string;
+  isPublic: boolean;
 };
 
 export type AchievementEnrichmentView = {
@@ -61,6 +67,7 @@ export type ContentDetail = {
   datasetLabel: string;
   outcomeLabel: string | null;
   sourceUrl: string | null;
+  sourceCtaLabel: string;
   canonicalUrl: string | null;
   sourceFileName: string | null;
   sourceSection: string | null;
@@ -85,31 +92,26 @@ function toEvidenceRow(c: Candidate, isPublic: boolean): EvidenceRow {
     id: c.id,
     detailId: detailIdOf(c),
     title: publicTitle(c),
-    summary: publicSummary(c),
+    summary: getCleanPublicExcerpt(c),
     date: c.date ? c.date.toISOString() : null,
     year: null,
     sourceLabel: sourceLabel(c.sourceLayer, c.sourceTypeDetail),
-    sourceUrl: publicUrl(c),
+    sourceUrl: publicSourceUrl(c),
+    sourceCtaLabel: sourceCtaLabel(c),
     isPublic,
   };
 }
 
-/**
- * Load a public detail by externalId (preferred) or DB id. Returns null when
- * the row does not exist or is not public-eligible (→ the route renders 404).
- */
 export async function getContentDetail(id: string): Promise<ContentDetail | null> {
   const item = await prisma.contentItem.findFirst({
     where: { OR: [{ externalId: id }, { id }] },
     include: { ...candidateInclude, achievementEnrichment: true },
   });
   if (!item) return null;
-  // Direct access is gated: hidden/supporting/opinion/review rows 404.
   if (!isPublicSearchEligible(item)) return null;
 
   const c = toCandidate(item);
   const enr = item.achievementEnrichment;
-
   const evidence = await getEvidenceForContent(c);
 
   return {
@@ -130,7 +132,8 @@ export async function getContentDetail(id: string): Promise<ContentDetail | null
     sourceLabel: sourceLabel(c.sourceLayer, c.sourceTypeDetail),
     datasetLabel: datasetLabel(c.sourceDataset),
     outcomeLabel: outcomeLabel(c.outcomeStatus),
-    sourceUrl: c.sourceUrl,
+    sourceUrl: publicSourceUrl(c),
+    sourceCtaLabel: sourceCtaLabel(c),
     canonicalUrl: c.canonicalUrl,
     sourceFileName: item.sourceFileName,
     sourceSection: item.sourceSection,
@@ -151,48 +154,37 @@ export async function getContentDetail(id: string): Promise<ContentDetail | null
   };
 }
 
-/** Only show a body snippet when there is no better summary-like field. */
 function pickBodySnippet(c: Candidate): string | null {
   if (publicSummary(c) || c.kodaPosition || c.companyRelevance) return null;
-  if (!c.bodyText) return null;
-  const t = c.bodyText.trim();
-  return t.length > 600 ? t.slice(0, 600) + "…" : t;
+  return getCleanPublicExcerpt({ bodyText: c.bodyText });
 }
 
-/**
- * Source-based evidence for a public parent. Four batched queries (no N+1):
- *  1. linked rows via ContentEvidenceLink (annual_context, duplicate_canonical);
- *  2. supporting opinion rows by shared valdkond (hidden, review-safe);
- *  3. topic-history web rows by shared valdkond.
- */
 export async function getEvidenceForContent(parent: Candidate): Promise<ContentDetail["evidence"]> {
   const empty = { annualContext: [], duplicates: [], relatedOpinions: [], topicHistory: [] };
 
-  // 1) Explicit links.
   const links = await prisma.contentEvidenceLink.findMany({
     where: { OR: [{ fromContentId: parent.id }, { toContentId: parent.id }] },
     select: { fromContentId: true, toContentId: true, linkType: true },
   });
   const annualIds = new Set<string>();
   const duplicateIds = new Set<string>();
-  for (const l of links) {
-    const other = l.fromContentId === parent.id ? l.toContentId : l.fromContentId;
+  for (const link of links) {
+    const other = link.fromContentId === parent.id ? link.toContentId : link.fromContentId;
     if (other === parent.id) continue;
-    if (l.linkType === "annual_context") annualIds.add(other);
-    else if (l.linkType === "duplicate_canonical") duplicateIds.add(other);
+    if (link.linkType === "annual_context") annualIds.add(other);
+    else if (link.linkType === "duplicate_canonical") duplicateIds.add(other);
   }
 
   const linkedIds = [...new Set([...annualIds, ...duplicateIds])];
-  // candidate + whether it has its own public detail page (full eligibility).
   const linkedById = new Map<string, { c: Candidate; eligible: boolean }>();
   if (linkedIds.length) {
     const rows = await prisma.contentItem.findMany({
       where: { id: { in: linkedIds } },
       include: candidateInclude,
     });
-    for (const r of rows) {
-      if (!isEvidenceEligible(r)) continue;
-      linkedById.set(r.id, { c: toCandidate(r), eligible: isPublicSearchEligible(r) });
+    for (const row of rows) {
+      if (!isEvidenceEligible(row)) continue;
+      linkedById.set(row.id, { c: toCandidate(row), eligible: isPublicSearchEligible(row) });
     }
   }
 
@@ -206,9 +198,8 @@ export async function getEvidenceForContent(parent: Candidate): Promise<ContentD
     .slice(0, DUPLICATE_CAP)
     .map((x) => toEvidenceRow(x.c, x.eligible));
 
-  const valdkondSlugs = parent.valdkonnad.map((t) => t.slug);
+  const valdkondSlugs = parent.valdkonnad.map((tag) => tag.slug);
 
-  // 2) Supporting opinions (hidden, review-safe), ranked + capped.
   let relatedOpinions: EvidenceRow[] = [];
   if (valdkondSlugs.length) {
     const opinionRows = await prisma.contentItem.findMany({
@@ -222,13 +213,12 @@ export async function getEvidenceForContent(parent: Candidate): Promise<ContentD
       include: candidateInclude,
       take: 40,
     });
-    const opinions = opinionRows.filter((r) => isEvidenceEligible(r)).map(toCandidate);
-    relatedOpinions = rankRelatedOpinions(parent, opinions, RELATED_OPINION_CAP).map((c) =>
-      toEvidenceRow(c, false)
+    const opinions = opinionRows.filter((row) => isEvidenceEligible(row)).map(toCandidate);
+    relatedOpinions = rankRelatedOpinions(parent, opinions, RELATED_OPINION_CAP).map((candidate) =>
+      toEvidenceRow(candidate, false)
     );
   }
 
-  // 3) Topic-history: other eligible non-achievement rows on the same topic.
   let topicHistory: EvidenceRow[] = [];
   if (valdkondSlugs.length) {
     const histRows = await prisma.contentItem.findMany({
@@ -239,14 +229,14 @@ export async function getEvidenceForContent(parent: Candidate): Promise<ContentD
         tags: { some: { tag: { type: TagType.valdkond, slug: { in: valdkondSlugs } } } },
       },
       include: candidateInclude,
-      orderBy: [{ date: { sort: "asc", nulls: "last" } }],
+      orderBy: [{ date: { sort: "desc", nulls: "last" } }],
       take: TOPIC_HISTORY_CAP * 3,
     });
     const seen = new Set<string>([...annualIds, ...duplicateIds, parent.id]);
     topicHistory = histRows
-      .filter((r) => isEvidenceEligible(r) && !seen.has(r.id))
+      .filter((row) => isEvidenceEligible(row) && !seen.has(row.id))
       .slice(0, TOPIC_HISTORY_CAP)
-      .map((r) => toEvidenceRow(toCandidate(r), isPublicSearchEligible(r)));
+      .map((row) => toEvidenceRow(toCandidate(row), isPublicSearchEligible(row)));
   }
 
   if (

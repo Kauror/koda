@@ -7,7 +7,7 @@
 import { Prisma, TagType } from "@prisma/client";
 import { prisma } from "./db";
 import { isPublicSearchEligible } from "./eligibility";
-import { publicTitle, publicSummary, publicUrl } from "./content-display";
+import { compactText, getCleanPublicExcerpt, publicSourceUrl, publicTitle, sourceCtaLabel } from "./content-display";
 import {
   type Candidate,
   type ResultKind,
@@ -15,6 +15,7 @@ import {
   type SearchQuery,
   assignKind,
   buildBadges,
+  compareRankedCandidates,
   isAchievement,
   isEmptyQuery,
   parseSearchParams,
@@ -134,6 +135,7 @@ export type ResultCard = {
   title: string;
   summary: string | null;
   url: string | null;
+  sourceCtaLabel: string;
   date: string | null;
   kind: ResultKind;
   type: ResultType;
@@ -199,7 +201,7 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
     scored.push({ c, total: s.total });
   }
 
-  const deduped = dedupe(scored).sort((a, b) => b.total - a.total);
+  const deduped = dedupe(scored).sort(compareRankedCandidates);
 
   // Group by kind, applying caps.
   const groups: Record<ResultKind, { c: Candidate; total: number }[]> = {
@@ -219,8 +221,9 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
     id: s.c.id,
     detailId: s.c.externalId ?? s.c.id,
     title: publicTitle(s.c),
-    summary: publicSummary(s.c),
-    url: publicUrl(s.c),
+    summary: compactText(getCleanPublicExcerpt(s.c), isAchievement(s.c) ? 180 : 260),
+    url: publicSourceUrl(s.c),
+    sourceCtaLabel: sourceCtaLabel(s.c),
     date: s.c.date ? s.c.date.toISOString() : null,
     kind: assignKind(s.c),
     type: primaryType(s.c),

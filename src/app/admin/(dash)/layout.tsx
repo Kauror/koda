@@ -14,6 +14,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <Link href="/admin/content">Sisu</Link>
         <Link href="/admin/topics">Teemagrupid</Link>
         <Link href="/admin/tags">Sildid</Link>
+        <Link href="/admin/site-texts">Avalehe tekstid</Link>
         <Link href="/" target="_blank">
           Avalik vaade ↗
         </Link>

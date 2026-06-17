@@ -16,9 +16,9 @@ function Badges({ card }: { card: ResultCard }) {
   if (card.badges.length === 0 && !card.date) return null;
   return (
     <p className="item-meta">
-      {card.badges.map((b) => (
-        <span key={b} className={`badge${b === "Töövõit" ? " win-badge" : ""}`}>
-          {b === "Töövõit" ? `✔ ${b}` : b}
+      {card.badges.map((badge) => (
+        <span key={badge} className={`badge${badge === "Töövõit" ? " win-badge" : ""}`}>
+          {badge === "Töövõit" ? `✓ ${badge}` : badge}
         </span>
       ))}
       {formatDate(card.date) && <span className="badge-date">{formatDate(card.date)}</span>}
@@ -26,63 +26,53 @@ function Badges({ card }: { card: ResultCard }) {
   );
 }
 
-function EvidenceHint({ card }: { card: ResultCard }) {
-  const hints: string[] = [];
-  if (card.evidence.relatedOpinions > 0)
-    hints.push(`${card.evidence.relatedOpinions} toetavat arvamust`);
-  if (card.evidence.annualContext) hints.push("aastaaruande kontekst");
-  if (hints.length === 0) return null;
-  return <p className="evidence-hint">Seotud allikad: {hints.join(" · ")}</p>;
-}
-
 function Card({
   card,
   sessionId,
   fromQuery,
+  compact,
 }: {
   card: ResultCard;
   sessionId: string | null;
   fromQuery: string;
+  compact?: boolean;
 }) {
   const detailHref = `/sisu/${encodeURIComponent(card.detailId)}${
     fromQuery ? `?from=${encodeURIComponent(fromQuery)}` : ""
   }`;
   return (
-    <article className={`other-item${card.isAchievement ? " win" : ""}`}>
+    <article className={`other-item${card.isAchievement ? " win" : ""}${compact ? " compact-result" : ""}`}>
       <Badges card={card} />
       <h3>
-        {/* Title → internal source-based summary/detail page. */}
         <Link href={detailHref}>{card.title}</Link>
       </h3>
       {card.summary && <p className="item-excerpt small">{card.summary}</p>}
-      {(card.valdkonnad.length > 0 || card.tegevusalad.length > 0) && (
+      {!compact && (card.valdkonnad.length > 0 || card.tegevusalad.length > 0) && (
         <div className="card-tags">
-          {card.valdkonnad.slice(0, 3).map((t) => (
-            <span key={`v-${t.slug}`} className="tag">
-              {t.name}
+          {card.valdkonnad.slice(0, 3).map((tag) => (
+            <span key={`v-${tag.slug}`} className="tag">
+              {tag.name}
             </span>
           ))}
-          {card.tegevusalad.slice(0, 2).map((t) => (
-            <span key={`s-${t.slug}`} className="tag tag-muted">
-              {t.name}
+          {card.tegevusalad.slice(0, 2).map((tag) => (
+            <span key={`s-${tag.slug}`} className="tag tag-muted">
+              {tag.name}
             </span>
           ))}
         </div>
       )}
-      <EvidenceHint card={card} />
       <p className="card-links">
         <Link href={detailHref} className="btn btn-secondary btn-small">
           Vaata kokkuvõtet
         </Link>
         {card.url && (
-          // Original Koda source link kept separate (with click tracking).
           <TrackedLink
             href={card.url}
             sessionId={sessionId}
             contentItemId={card.id}
             className="item-source-link"
           >
-            Ava algallikas →
+            {card.sourceCtaLabel} →
           </TrackedLink>
         )}
       </p>
@@ -96,23 +86,42 @@ function Section({
   cards,
   sessionId,
   fromQuery,
+  compactAchievements = false,
 }: {
   title: string;
   sub: string;
   cards: ResultCard[];
   sessionId: string | null;
   fromQuery: string;
+  compactAchievements?: boolean;
 }) {
   if (cards.length === 0) return null;
+  const visibleCards = compactAchievements ? cards.slice(0, 2) : cards;
+  const hiddenCards = compactAchievements ? cards.slice(2) : [];
+
   return (
     <section className="results-section">
       <h2>
         {title} <span className="result-count">({cards.length})</span>
       </h2>
       <p className="section-sub">{sub}</p>
-      {cards.map((card) => (
-        <Card key={card.id} card={card} sessionId={sessionId} fromQuery={fromQuery} />
+      {visibleCards.map((card) => (
+        <Card
+          key={card.id}
+          card={card}
+          sessionId={sessionId}
+          fromQuery={fromQuery}
+          compact={compactAchievements}
+        />
       ))}
+      {hiddenCards.length > 0 && (
+        <details className="results-more">
+          <summary>Näita veel töövõite ({hiddenCards.length})</summary>
+          {hiddenCards.map((card) => (
+            <Card key={card.id} card={card} sessionId={sessionId} fromQuery={fromQuery} compact />
+          ))}
+        </details>
+      )}
     </section>
   );
 }
@@ -125,7 +134,6 @@ export default async function ResultsPage({
   const params = await searchParams;
   const query = parseSearchParams(params);
 
-  // Analytics: store the search session (filters only, no personal data).
   let sessionId: string | null = null;
   try {
     const h = await headers();
@@ -140,23 +148,21 @@ export default async function ResultsPage({
       },
     });
     sessionId = session.id;
-  } catch (e) {
-    console.error("Failed to store search session", e);
+  } catch (error) {
+    console.error("Failed to store search session", error);
   }
 
   const [results, options] = await Promise.all([search(query), getFilterOptions()]);
   const hasResults = results.total > 0;
 
-  // Map selected filter slugs → names for the active-filter summary.
   const nameOf = (opts: { slug: string; name: string }[], slug: string) =>
-    opts.find((o) => o.slug === slug)?.name ?? slug;
+    opts.find((option) => option.slug === slug)?.name ?? slug;
   const activeFilters = [
-    ...query.valdkond.map((s) => nameOf(options.valdkonnad, s)),
-    ...query.tegevusala.map((s) => nameOf(options.tegevusalad, s)),
-    ...query.tapsustus.map((s) => nameOf(options.tapsustused, s)),
+    ...query.valdkond.map((slug) => nameOf(options.valdkonnad, slug)),
+    ...query.tegevusala.map((slug) => nameOf(options.tegevusalad, slug)),
+    ...query.tapsustus.map((slug) => nameOf(options.tapsustused, slug)),
   ];
 
-  // "Muuda otsingut" / detail back-link carry the current selection.
   const editParams = new URLSearchParams();
   if (query.q) editParams.set("q", query.q);
   if (query.valdkond.length) editParams.set("valdkond", query.valdkond.join(","));
@@ -165,12 +171,7 @@ export default async function ResultsPage({
   if (query.type.length) editParams.set("type", query.type.join(","));
   const editQuery = editParams.toString();
   const fromQuery = editQuery;
-
-  // Only background/history rows matched — suggest broadening.
-  const onlyContext =
-    hasResults && results.achievements.length === 0 && results.positions.length === 0;
-
-  // A few broad topic suggestions for the empty state.
+  const onlyContext = hasResults && results.achievements.length === 0 && results.positions.length === 0;
   const topicSuggestions = options.valdkonnad.slice(0, 6);
 
   return (
@@ -181,14 +182,14 @@ export default async function ResultsPage({
           <h1>{query.q ? `Otsing: „${query.q}"` : "Mida on koda teinud ja öelnud"}</h1>
           <p className="sub">
             Allikapõhine ülevaade koja avalikest töövõitudest, seisukohtadest ja aastaaruannete
-            taustast – iga tulemus viitab algallikale.
+            taustast.
           </p>
           {(query.q || activeFilters.length > 0) && (
             <div className="filter-summary">
               {query.q && <span className="tag accent">„{query.q}"</span>}
-              {activeFilters.map((n) => (
-                <span key={n} className="tag">
-                  {n}
+              {activeFilters.map((name) => (
+                <span key={name} className="tag">
+                  {name}
                 </span>
               ))}
             </div>
@@ -200,11 +201,7 @@ export default async function ResultsPage({
       </div>
 
       <div className="container results-body">
-        {hasResults && (
-          <p className="results-count-line">
-            Leidsime {results.total} sobivat tulemust koja allikatest.
-          </p>
-        )}
+        {hasResults && <p className="results-count-line">Leidsime {results.total} sobivat tulemust.</p>}
 
         {onlyContext && (
           <div className="card notice" style={{ marginTop: 16 }}>
@@ -218,18 +215,18 @@ export default async function ResultsPage({
         {!hasResults && (
           <div className="card empty-state" style={{ marginTop: 36 }}>
             <h2>Selle valiku kohta ei leidnud me sobivaid materjale</h2>
-            <p>Proovi laiemat otsingut – üldisem märksõna või vähem filtreid.</p>
+            <p>Proovi laiemat otsingut - üldisem märksõna või vähem filtreid.</p>
             {topicSuggestions.length > 0 && (
               <>
                 <p className="section-sub">Proovi mõnda laiemat teemat:</p>
                 <div className="theme-links">
-                  {topicSuggestions.map((t) => (
+                  {topicSuggestions.map((topic) => (
                     <Link
-                      key={t.slug}
-                      href={`/tulemused?valdkond=${encodeURIComponent(t.slug)}`}
+                      key={topic.slug}
+                      href={`/tulemused?valdkond=${encodeURIComponent(topic.slug)}`}
                       className="theme-link"
                     >
-                      {t.name}
+                      {topic.name}
                     </Link>
                   ))}
                 </div>
@@ -257,6 +254,7 @@ export default async function ResultsPage({
           cards={results.achievements}
           sessionId={sessionId}
           fromQuery={fromQuery}
+          compactAchievements
         />
         <Section
           title="Koja seisukohad ja selgitused"

@@ -1,111 +1,63 @@
-# Public detail page & evidence view (v1)
+# Public Detail & Evidence v1
 
-A clickable, source-based explanation page for a single public result, plus the
-supporting evidence/context around it. Builds on the search/ranking layer
-(`docs/search-ranking-v1.md`). No AI, no invented claims — everything shown comes
-from imported fields.
+`/sisu/[id]` is the clean public explanation page for one public result. It resolves `[id]` by `externalId` first, then DB id, and still enforces `isPublicSearchEligible()`.
 
-## Route
+## Public Page Contract
 
-`/sisu/[id]` — `[id]` resolves by **`externalId` first** (stable across
-re-imports: `ACH000007`, `WEB000123`, `AR-2014-001`, …), falling back to the DB
-`id`. Result cards link with `externalId ?? id`. Stable public identifiers are
-preferred so links survive a DB reset + re-import.
+The public page is intentionally not an import/debug/audit view.
 
-Code:
+It does not render:
 
-| File | Responsibility |
+- `Algallikas` metadata sections
+- source dataset/layer/source-type metadata
+- source file names from import, CSV, XLSX, or other source files
+- canonical/internal URL text
+- supporting opinion lists
+- `Seotud allikad ja taust`
+- duplicate/backend evidence sections
+
+If a real public source URL exists, the page shows one contextual source button instead.
+
+## Source CTA Labels
+
+Source buttons use front-facing labels:
+
+| Source | Label |
 | --- | --- |
-| `src/app/sisu/[id]/page.tsx` | the page (server component, `force-dynamic`) |
-| `src/lib/content-detail.ts` | `getContentDetail()`, `getEvidenceForContent()` |
-| `src/lib/labels.ts` | Estonian source/outcome/dataset labels |
-| `src/lib/eligibility.ts` | `isPublicSearchEligible` (direct access) + `isEvidenceEligible` |
-| `src/lib/search-core.ts` | `rankRelatedOpinions()` |
+| Koda news / `meie_uudis` | `Loe uudist` |
+| Koda opinion article / `meie_arvamus_article` | `Loe koja arvamust` |
+| Achievement / `toovoit` | `Vaata töövõitu` |
+| Annual context | `Loe konteksti` |
+| Unknown public web source | `Ava koda.ee allikas` |
 
-## Direct-access rules
+The generic `Vaata allikat` wording is avoided.
 
-`getContentDetail(id)` loads the row and returns `null` (→ `notFound()` / 404)
-unless `isPublicSearchEligible()` passes. So **hidden, supporting, opinion,
-review, do-not-import and admin-hidden rows 404 on direct access**. Only the 803
-public-eligible rows have their own page. Admin overrides are respected
-(`adminVisibilityOverride === false` → 404; `=== true` → allowed).
+## Achievement Details
 
-## Page structure
+Achievement pages are centered on `Koja töövõit`:
 
-1. **Header** — back link, töövõit/source badge + outcome badge, date/year,
-   topic (`valdkond`) and sector (`tegevusala`) tags, title (admin override
-   first).
-2. **Summary** — `adminSummaryOverride || summary || companyRelevance ||
-   kodaPosition || excerpt`.
-3. **Achievement block** (achievements only) — from `AchievementEnrichment`:
-   outcome, regulatory area, value type, Koda role, numeric impact statement,
-   source-based evidence. Visually marked as a concrete töövõit.
-4. **„Miks see ettevõtjale oluline on?"** — `companyRelevance` (existing field
-   only; no generated claims).
-5. **„Koja seisukoht ja mõju"** — `kodaPosition`, `sourceEvidence`, and an
-   excerpt/body snippet only when no better field exists.
-6. **Allikas** — source + dataset label, section, report year, source file,
-   original `sourceUrl` ("Vaata allikat koda.ee-l →"), and the canonical URL when
-   it differs.
-7. **Seotud allikad ja taust** — evidence sections (below).
-8. **Back/search links** — returns to the originating search via `?from=`.
+- `Valdkond`
+- `Tulemus`
+- `Mõju`
+- `Mida saavutati?`
 
-## Source link behaviour
+The page uses `AchievementEnrichment`, `kodaPosition`, `sourceEvidence`, `summary`, and `companyRelevance` where useful, but deduplicates repeated text so the same sentence is not printed several times.
 
-The detail page is the internal explanation; the **original Koda source URL is
-always kept as a separate link** ("Vaata allikat …"), never replaced. Result
-cards now show both: title + "Loe selgitust →" (internal detail) and "Vaata
-allikat koda.ee-l →" (external source, click-tracked).
+## Non-Achievement Details
 
-## Evidence retrieval & rules
+Non-achievement pages keep:
 
-`getEvidenceForContent(parent)` runs four batched queries (no N+1):
+- `Koja seisukoht ja mõju`
+- `Miks see ettevõtjale oluline on?`
+- optional contextual public source button
+- optional `Teema ajalugu`
 
-1. **Annual context** & **duplicate/canonical** — from `ContentEvidenceLink`
-   (`annual_context`, `duplicate_canonical`), either link direction; the linked
-   rows are loaded in one query.
-2. **Supporting opinions** — hidden opinion rows (`sourceDataset=opinions`,
-   `isPublic=false`) sharing ≥1 `valdkond` tag, ranked by shared topics + light
-   text overlap (`rankRelatedOpinions`), **capped at 5**.
-3. **Topic history** — other public, non-achievement rows on the same topic,
-   oldest first, **capped at 4**.
+Empty, weak, or duplicate sections are hidden.
 
-Every evidence row must pass **`isEvidenceEligible`**: not admin-hidden, **not
-`needsHumanReview`**, and **not `failed`/`weak` extraction** (conservative —
-applies to linked rows too). Each evidence row shows its source label, title,
-date and source URL.
+## Teema Ajalugu
 
-### How hidden opinions are handled
+`Teema ajalugu` remains public where relevant. It shows clean title/date/summary snippets and contextual source CTAs. Body snippets with obvious navigation/menu/import noise are refused; if no clean excerpt exists, no excerpt is shown.
 
-Opinions are **supporting evidence only**. They appear under a public parent
-labelled "Toetavad arvamused (toetav taustamaterjal, mitte eraldi avalik
-tulemus)", are not linked to their own `/sisu` page (their direct URL 404s), and
-the 215 review-flagged opinions are excluded entirely. An admin can still surface
-a specific opinion as a real result via `adminVisibilityOverride = true`.
+## Evidence Data Is Preserved
 
-Evidence rows link to their own detail page **only** when they are themselves
-public-eligible (computed from the full row, not the reduced candidate). Public
-annual context rows therefore link through; hidden ones are shown as text only.
-
-## Fields used for display
-
-Title/summary/url go through `content-display.ts` (admin overrides first).
-Internal/audit/debug fields (import status, merge readiness, content hash,
-review reasons, confidence, extraction quality, raw body) are **not** rendered to
-normal users.
-
-## Wording / safety
-
-Source-based phrasing only: "Allika põhjal", "Koja seisukoht", "Seotud allikad",
-"Aastaaruande kontekst", "Toetavad arvamused". No certainty wording implying AI;
-weak/failed-extraction rows never shown.
-
-## Deferred
-
-- Click tracking for internal detail navigation (only external source clicks are
-  tracked today).
-- Full evidence pagination / "show all related opinions".
-- Richer body rendering (currently a guarded snippet only).
-- `supporting_opinion` / `topic_history` explicit links in `ContentEvidenceLink`
-  (currently topic-based at query time).
-- PostgreSQL full-text/trigram for the opinion/topic match; AI summaries.
+`getEvidenceForContent()` still loads annual context, duplicates, supporting opinions, and topic history. The public route currently renders only topic history. Supporting opinions and other evidence remain available in the data layer for future admin/backend UI and are not deleted from the database.
