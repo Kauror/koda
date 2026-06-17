@@ -7,3 +7,9 @@ npm-debug.log*
 README.md
 Dockerfile
 docker-compose.yml
+
+# Never bake local import data, generated reports or the local PGlite dev DB
+# into the image — import files are provided via a volume/bind mount at runtime.
+data/import/*.xlsx
+data/import/reports/
+.pglite/

@@ -53,8 +53,8 @@ export default async function AdminContentEdit({ params }: { params: Promise<{ i
       <h1 style={{ fontSize: "1.4rem" }}>{item.displayTitle || item.title}</h1>
       <p className="muted small">
         Allikas:{" "}
-        <a href={item.canonicalUrl} target="_blank" rel="noopener noreferrer">
-          {item.canonicalUrl}
+        <a href={item.canonicalUrl || item.sourceUrl || "#"} target="_blank" rel="noopener noreferrer">
+          {item.canonicalUrl || item.sourceUrl || "(allikata)"}
         </a>{" "}
         · tüüp: {item.sourceType} · imporditud {item.scrapedAt.toLocaleDateString("et-EE")}
       </p>

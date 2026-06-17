@@ -15,7 +15,7 @@ export function adminCookieValue(): string {
  * runs in production mode but is often reached over plain HTTP locally
  * (http://localhost:3000), where a Secure cookie would be silently dropped and
  * admin login would appear to "do nothing". Real deployments use
- * https://liige.orgusaar.ee, so the cookie is Secure there.
+ * https://koda.orgusaar.ee, so the cookie is Secure there.
  */
 export function adminCookieOptions() {
   const secure = (process.env.APP_URL || "").startsWith("https://");

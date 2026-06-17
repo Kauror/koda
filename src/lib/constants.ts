@@ -55,4 +55,4 @@ export function optionName(options: Option[], slug: string | null | undefined): 
   return options.find((o) => o.slug === slug)?.name ?? null;
 }
 
-export const APP_URL = process.env.APP_URL || "https://liige.orgusaar.ee";
+export const APP_URL = process.env.APP_URL || "https://koda.orgusaar.ee";

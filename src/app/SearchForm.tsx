@@ -2,20 +2,16 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
-import { ACTIVITIES, INTERESTS, SECTORS, SIZES, type Option } from "@/lib/constants";
+import type { FilterOptions } from "@/lib/search";
 
-function PillGroup({
+function ChipGroup({
   options,
   selected,
   onToggle,
-  type,
-  name,
 }: {
-  options: Option[];
+  options: { slug: string; name: string }[];
   selected: string[];
   onToggle: (slug: string) => void;
-  type: "radio" | "checkbox";
-  name: string;
 }) {
   return (
     <div className="option-grid">
@@ -24,8 +20,7 @@ function PillGroup({
         return (
           <label key={o.slug} className={`option-pill${isSelected ? " selected" : ""}`}>
             <input
-              type={type}
-              name={name}
+              type="checkbox"
               value={o.slug}
               checked={isSelected}
               onChange={() => onToggle(o.slug)}
@@ -38,10 +33,8 @@ function PillGroup({
   );
 }
 
-export default function SearchForm() {
+export default function SearchForm({ options }: { options: FilterOptions }) {
   const router = useRouter();
-  // Prefill from URL params so "Muuda filtreid" on the results page
-  // brings the user back with their previous selections intact.
   const params = useSearchParams();
   const listParam = (key: string) =>
     (params.get(key) || "")
@@ -49,88 +42,138 @@ export default function SearchForm() {
       .map((s) => s.trim())
       .filter(Boolean);
 
-  const [sectors, setSectors] = useState<string[]>(listParam("sektor"));
-  const [size, setSize] = useState<string | null>(params.get("suurus"));
-  const [activities, setActivities] = useState<string[]>(listParam("tegevused"));
-  const [interests, setInterests] = useState<string[]>(listParam("huvid"));
-  const [error, setError] = useState<string | null>(null);
+  const [q, setQ] = useState<string>(params.get("q") || "");
+  const [valdkond, setValdkond] = useState<string[]>(listParam("valdkond"));
+  const [tegevusala, setTegevusala] = useState<string[]>(listParam("tegevusala"));
+  const [tapsustus, setTapsustus] = useState<string[]>(listParam("tapsustus"));
+  const [showOptional, setShowOptional] = useState(
+    listParam("tegevusala").length > 0 || listParam("tapsustus").length > 0
+  );
 
-  const toggleIn = (list: string[], set: (v: string[]) => void) => (slug: string) =>
+  const toggle = (list: string[], set: (v: string[]) => void) => (slug: string) =>
     set(list.includes(slug) ? list.filter((s) => s !== slug) : [...list, slug]);
+
+  const nameOf = (opts: { slug: string; name: string }[], slug: string) =>
+    opts.find((o) => o.slug === slug)?.name ?? slug;
+
+  // Flattened list of active filters so the user always sees (and can remove)
+  // what is selected, even when the advanced section is collapsed.
+  const activeFilters: { key: string; label: string; remove: () => void }[] = [
+    ...valdkond.map((s) => ({
+      key: `v-${s}`,
+      label: nameOf(options.valdkonnad, s),
+      remove: () => setValdkond((v) => v.filter((x) => x !== s)),
+    })),
+    ...tegevusala.map((s) => ({
+      key: `t-${s}`,
+      label: nameOf(options.tegevusalad, s),
+      remove: () => setTegevusala((v) => v.filter((x) => x !== s)),
+    })),
+    ...tapsustus.map((s) => ({
+      key: `p-${s}`,
+      label: nameOf(options.tapsustused, s),
+      remove: () => setTapsustus((v) => v.filter((x) => x !== s)),
+    })),
+  ];
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (sectors.length === 0) {
-      setError("Palun vali vähemalt üks tegevusala.");
-      return;
-    }
-    const params = new URLSearchParams();
-    params.set("sektor", sectors.join(","));
-    if (size) params.set("suurus", size);
-    if (interests.length) params.set("huvid", interests.join(","));
-    if (activities.length) params.set("tegevused", activities.join(","));
-    router.push(`/tulemused?${params.toString()}`);
+    const p = new URLSearchParams();
+    if (q.trim()) p.set("q", q.trim());
+    if (valdkond.length) p.set("valdkond", valdkond.join(","));
+    if (tegevusala.length) p.set("tegevusala", tegevusala.join(","));
+    if (tapsustus.length) p.set("tapsustus", tapsustus.join(","));
+    router.push(`/tulemused?${p.toString()}`);
   }
 
   return (
-    <form onSubmit={submit} className="card">
-      <fieldset>
-        <legend>1. Ettevõtte tegevusala</legend>
+    <form onSubmit={submit} className="card search-form">
+      {/* Free text is the primary action. */}
+      <div className="search-primary">
+        <label className="field-label" htmlFor="q">
+          Otsi teemat või märksõna
+        </label>
+        <div className="search-row">
+          <input
+            id="q"
+            type="search"
+            name="q"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Nt maksud, välistööjõud, mida on koda saavutanud…"
+            className="search-input search-input--primary"
+            aria-label="Otsi teemat või märksõna"
+            enterKeyHint="search"
+          />
+          <button type="submit" className="btn search-submit">
+            Otsi
+          </button>
+        </div>
         <p className="field-hint">
-          Kohustuslik. Võid valida mitu tegevusala – ainuüksi see valik annab juba tulemused.
+          Tegevusala ega filtri valimine ei ole kohustuslik – ainuüksi märksõnast või teemast piisab.
         </p>
-        <PillGroup
-          options={SECTORS}
-          selected={sectors}
-          onToggle={(slug) => {
-            setSectors(
-              sectors.includes(slug) ? sectors.filter((s) => s !== slug) : [...sectors, slug]
-            );
-            setError(null);
-          }}
-          type="checkbox"
-          name="sektor"
-        />
-      </fieldset>
+      </div>
 
-      <fieldset>
-        <legend>2. Ettevõtte suurus (valikuline)</legend>
-        <PillGroup
-          options={SIZES}
-          selected={size ? [size] : []}
-          onToggle={(slug) => setSize(size === slug ? null : slug)}
-          type="radio"
-          name="suurus"
-        />
-      </fieldset>
+      {activeFilters.length > 0 && (
+        <div className="selected-filters" aria-label="Valitud filtrid">
+          {activeFilters.map((f) => (
+            <button key={f.key} type="button" className="chip-remove" onClick={f.remove}>
+              {f.label}
+              <span aria-hidden="true"> ✕</span>
+              <span className="sr-only"> – eemalda filter</span>
+            </button>
+          ))}
+        </div>
+      )}
 
-      <fieldset>
-        <legend>3. Ettevõtte profiil (valikuline)</legend>
-        <p className="field-hint">Vali kõik, mis sinu ettevõtte kohta kehtib.</p>
-        <PillGroup
-          options={ACTIVITIES}
-          selected={activities}
-          onToggle={toggleIn(activities, setActivities)}
-          type="checkbox"
-          name="tegevused"
-        />
-      </fieldset>
+      {options.valdkonnad.length > 0 && (
+        <fieldset>
+          <legend>Teema</legend>
+          <p className="field-hint">Vali üks või mitu teemat (valikuline).</p>
+          <ChipGroup
+            options={options.valdkonnad}
+            selected={valdkond}
+            onToggle={toggle(valdkond, setValdkond)}
+          />
+        </fieldset>
+      )}
 
-      <fieldset>
-        <legend>4. Teemad, mis sind huvitavad (valikuline)</legend>
-        <PillGroup
-          options={INTERESTS}
-          selected={interests}
-          onToggle={toggleIn(interests, setInterests)}
-          type="checkbox"
-          name="huvid"
-        />
-      </fieldset>
+      <button
+        type="button"
+        className="btn btn-secondary btn-small disclosure"
+        onClick={() => setShowOptional((v) => !v)}
+        aria-expanded={showOptional}
+      >
+        {showOptional ? "Peida täpsemad valikud" : "Täpsemad valikud (tegevusala, olukord)"}
+      </button>
 
-      {error && (
-        <p className="form-error" role="alert">
-          {error}
-        </p>
+      {showOptional && (
+        <>
+          {options.tegevusalad.length > 0 && (
+            <fieldset>
+              <legend>Tegevusala (valikuline)</legend>
+              <p className="field-hint">Aitab esile tõsta sinu valdkonnale olulisemat.</p>
+              <ChipGroup
+                options={options.tegevusalad}
+                selected={tegevusala}
+                onToggle={toggle(tegevusala, setTegevusala)}
+              />
+            </fieldset>
+          )}
+          {options.tapsustused.length > 0 && (
+            <fieldset>
+              <legend>Ettevõtte olukord (valikuline, esialgne)</legend>
+              <p className="field-hint">
+                Esialgne täiendav filter – kasutame seda kergelt ega piira sellega tulemusi.
+              </p>
+              <ChipGroup
+                options={options.tapsustused}
+                selected={tapsustus}
+                onToggle={toggle(tapsustus, setTapsustus)}
+              />
+            </fieldset>
+          )}
+        </>
       )}
 
       <button type="submit" className="btn">

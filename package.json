@@ -10,23 +10,35 @@
     "lint": "next lint",
     "crawl": "tsx scripts/crawl.ts",
     "seed": "tsx scripts/seed.ts",
+    "import:validate": "tsx scripts/validate-merge-ready.ts",
+    "import:merge-ready": "tsx scripts/import-merge-ready.ts",
+    "import:test": "tsx scripts/test-merge-ready.ts",
+    "search:test": "tsx scripts/test-search.ts",
+    "import:verify-db": "tsx scripts/verify-db.ts",
+    "db:setup:pglite": "tsx scripts/db-setup-pglite.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy"
   },
   "dependencies": {
+    "@prisma/adapter-pg": "^6.19.3",
     "@prisma/client": "^6.8.2",
     "cheerio": "^1.0.0",
     "next": "^15.3.3",
+    "pg": "^8.13.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.3",
     "@types/node": "^22.15.21",
+    "@types/pg": "^8.11.10",
     "@types/react": "^19.1.5",
     "@types/react-dom": "^19.1.5",
+    "pglite-prisma-adapter": "^0.6.1",
     "prisma": "^6.8.2",
     "tsx": "^4.19.4",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "xlsx": "^0.18.5"
   }
 }

@@ -24,7 +24,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      APP_URL: ${APP_URL:-https://liige.orgusaar.ee}
+      APP_URL: ${APP_URL:-https://koda.orgusaar.ee}
       DATABASE_URL: postgresql://${POSTGRES_USER:-koda}:${POSTGRES_PASSWORD:-koda_password}@postgres:5432/${POSTGRES_DB:-koda}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
@@ -35,6 +35,11 @@ services:
       CRAWLER_DELAY_MS: ${CRAWLER_DELAY_MS:-1000}
       AI_ENABLED: ${AI_ENABLED:-false}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    volumes:
+      # Merge-ready Excel files + generated QA reports live OUTSIDE the image.
+      # Local dev: defaults to ./data/import. Unraid: set
+      # KODA_IMPORT_DIR=/mnt/user/appdata/koda/import in the .env file.
+      - ${KODA_IMPORT_DIR:-./data/import}:/app/data/import
     ports:
       - "3000:3000"
 

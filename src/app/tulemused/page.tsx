@@ -2,68 +2,118 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/db";
 import { anonymizeIp, hashUserAgent } from "@/lib/hash";
-import { ACTIVITIES, INTERESTS, SECTORS, SIZES, optionName } from "@/lib/constants";
-import { parseFilters, search, type ResultItem } from "@/lib/ranking";
+import { getFilterOptions, parseSearchParams, search, type ResultCard } from "@/lib/search";
 import TrackedLink from "./TrackedLink";
 
 export const dynamic = "force-dynamic";
 
-/** Only töövõidud get a visible mark – other source types show just the date. */
-function WinBadge() {
-  return <span className="win-badge">✔ Töövõit</span>;
-}
-
 function formatDate(iso: string | null): string | null {
   if (!iso) return null;
-  return new Date(iso).toLocaleDateString("et-EE", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
+  return new Date(iso).toLocaleDateString("et-EE", { day: "numeric", month: "long", year: "numeric" });
 }
 
-function ItemBlock({
-  item,
-  sessionId,
-  topicGroupId,
-}: {
-  item: ResultItem;
-  sessionId: string | null;
-  topicGroupId?: string;
-}) {
-  const date = formatDate(item.date);
-  const isWin = item.sourceType === "achievement";
+function Badges({ card }: { card: ResultCard }) {
+  if (card.badges.length === 0 && !card.date) return null;
   return (
-    <article className={`main-item${isWin ? " win" : ""}`}>
-      {(isWin || date) && (
-        <p className="item-meta">
-          {isWin && <WinBadge />}
-          {date && <span>{date}</span>}
-        </p>
-      )}
+    <p className="item-meta">
+      {card.badges.map((b) => (
+        <span key={b} className={`badge${b === "Töövõit" ? " win-badge" : ""}`}>
+          {b === "Töövõit" ? `✔ ${b}` : b}
+        </span>
+      ))}
+      {formatDate(card.date) && <span className="badge-date">{formatDate(card.date)}</span>}
+    </p>
+  );
+}
+
+function EvidenceHint({ card }: { card: ResultCard }) {
+  const hints: string[] = [];
+  if (card.evidence.relatedOpinions > 0)
+    hints.push(`${card.evidence.relatedOpinions} toetavat arvamust`);
+  if (card.evidence.annualContext) hints.push("aastaaruande kontekst");
+  if (hints.length === 0) return null;
+  return <p className="evidence-hint">Seotud allikad: {hints.join(" · ")}</p>;
+}
+
+function Card({
+  card,
+  sessionId,
+  fromQuery,
+}: {
+  card: ResultCard;
+  sessionId: string | null;
+  fromQuery: string;
+}) {
+  const detailHref = `/sisu/${encodeURIComponent(card.detailId)}${
+    fromQuery ? `?from=${encodeURIComponent(fromQuery)}` : ""
+  }`;
+  return (
+    <article className={`other-item${card.isAchievement ? " win" : ""}`}>
+      <Badges card={card} />
       <h3>
-        <TrackedLink
-          href={item.url}
-          sessionId={sessionId}
-          contentItemId={item.id}
-          topicGroupId={topicGroupId}
-        >
-          {item.title}
-        </TrackedLink>
+        {/* Title → internal source-based summary/detail page. */}
+        <Link href={detailHref}>{card.title}</Link>
       </h3>
-      {(item.summary || item.excerpt) && (
-        <p className="item-excerpt">{item.summary || item.excerpt}</p>
+      {card.summary && <p className="item-excerpt small">{card.summary}</p>}
+      {(card.valdkonnad.length > 0 || card.tegevusalad.length > 0) && (
+        <div className="card-tags">
+          {card.valdkonnad.slice(0, 3).map((t) => (
+            <span key={`v-${t.slug}`} className="tag">
+              {t.name}
+            </span>
+          ))}
+          {card.tegevusalad.slice(0, 2).map((t) => (
+            <span key={`s-${t.slug}`} className="tag tag-muted">
+              {t.name}
+            </span>
+          ))}
+        </div>
       )}
-      <TrackedLink
-        href={item.url}
-        sessionId={sessionId}
-        contentItemId={item.id}
-        topicGroupId={topicGroupId}
-        className="item-source-link"
-      >
-        Loe lähemalt koda.ee lehel →
-      </TrackedLink>
+      <EvidenceHint card={card} />
+      <p className="card-links">
+        <Link href={detailHref} className="btn btn-secondary btn-small">
+          Vaata kokkuvõtet
+        </Link>
+        {card.url && (
+          // Original Koda source link kept separate (with click tracking).
+          <TrackedLink
+            href={card.url}
+            sessionId={sessionId}
+            contentItemId={card.id}
+            className="item-source-link"
+          >
+            Ava algallikas →
+          </TrackedLink>
+        )}
+      </p>
     </article>
+  );
+}
+
+function Section({
+  title,
+  sub,
+  cards,
+  sessionId,
+  fromQuery,
+}: {
+  title: string;
+  sub: string;
+  cards: ResultCard[];
+  sessionId: string | null;
+  fromQuery: string;
+}) {
+  if (cards.length === 0) return null;
+  return (
+    <section className="results-section">
+      <h2>
+        {title} <span className="result-count">({cards.length})</span>
+      </h2>
+      <p className="section-sub">{sub}</p>
+      {cards.map((card) => (
+        <Card key={card.id} card={card} sessionId={sessionId} fromQuery={fromQuery} />
+      ))}
+    </section>
   );
 }
 
@@ -73,7 +123,7 @@ export default async function ResultsPage({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const params = await searchParams;
-  const filters = parseFilters(params);
+  const query = parseSearchParams(params);
 
   // Analytics: store the search session (filters only, no personal data).
   let sessionId: string | null = null;
@@ -82,10 +132,9 @@ export default async function ResultsPage({
     const ip = (h.get("x-forwarded-for") || "").split(",")[0].trim() || null;
     const session = await prisma.searchSession.create({
       data: {
-        selectedSector: filters.sectors.join(",") || null,
-        selectedSize: filters.size,
-        selectedInterests: filters.interests,
-        selectedActivities: filters.activities,
+        selectedSector: query.tegevusala.join(",") || null,
+        selectedInterests: query.valdkond,
+        selectedActivities: query.tegevusala,
         anonymizedIpHash: anonymizeIp(ip),
         userAgentHash: hashUserAgent(h.get("user-agent")),
       },
@@ -95,82 +144,100 @@ export default async function ResultsPage({
     console.error("Failed to store search session", e);
   }
 
-  const results = await search(filters);
+  const [results, options] = await Promise.all([search(query), getFilterOptions()]);
+  const hasResults = results.total > 0;
 
-  const sectorNames = filters.sectors
-    .map((s) => optionName(SECTORS, s))
-    .filter((n): n is string => !!n);
-  const sizeName = optionName(SIZES, filters.size);
-  const interestNames = filters.interests
-    .map((s) => optionName(INTERESTS, s))
-    .filter((n): n is string => !!n);
-  const activityNames = filters.activities
-    .map((s) => optionName(ACTIVITIES, s))
-    .filter((n): n is string => !!n);
+  // Map selected filter slugs → names for the active-filter summary.
+  const nameOf = (opts: { slug: string; name: string }[], slug: string) =>
+    opts.find((o) => o.slug === slug)?.name ?? slug;
+  const activeFilters = [
+    ...query.valdkond.map((s) => nameOf(options.valdkonnad, s)),
+    ...query.tegevusala.map((s) => nameOf(options.tegevusalad, s)),
+    ...query.tapsustus.map((s) => nameOf(options.tapsustused, s)),
+  ];
 
-  // Theme browsing from the homepage: one interest, no sector.
-  const themeOnly =
-    filters.sectors.length === 0 && interestNames.length === 1 ? interestNames[0] : null;
-
-  // "Muuda filtreid" carries the current selection back to the form.
+  // "Muuda otsingut" / detail back-link carry the current selection.
   const editParams = new URLSearchParams();
-  if (filters.sectors.length) editParams.set("sektor", filters.sectors.join(","));
-  if (filters.size) editParams.set("suurus", filters.size);
-  if (filters.interests.length) editParams.set("huvid", filters.interests.join(","));
-  if (filters.activities.length) editParams.set("tegevused", filters.activities.join(","));
-  const editFiltersQuery = editParams.toString();
+  if (query.q) editParams.set("q", query.q);
+  if (query.valdkond.length) editParams.set("valdkond", query.valdkond.join(","));
+  if (query.tegevusala.length) editParams.set("tegevusala", query.tegevusala.join(","));
+  if (query.tapsustus.length) editParams.set("tapsustus", query.tapsustus.join(","));
+  if (query.type.length) editParams.set("type", query.type.join(","));
+  const editQuery = editParams.toString();
+  const fromQuery = editQuery;
 
-  const hasResults = results.groups.length > 0 || results.otherItems.length > 0;
+  // Only background/history rows matched — suggest broadening.
+  const onlyContext =
+    hasResults && results.achievements.length === 0 && results.positions.length === 0;
+
+  // A few broad topic suggestions for the empty state.
+  const topicSuggestions = options.valdkonnad.slice(0, 6);
 
   return (
     <main>
       <div className="results-header">
         <div className="container">
-          <span className="eyebrow">Koja mõju sinu ettevõttele</span>
-          <h1>
-            {themeOnly
-              ? `Koja seisukohad teemal „${themeOnly}"`
-              : "Mida on koda teinud sinu ettevõtte heaks"}
-          </h1>
+          <span className="eyebrow">Allikapõhine ülevaade koja tööst</span>
+          <h1>{query.q ? `Otsing: „${query.q}"` : "Mida on koda teinud ja öelnud"}</h1>
           <p className="sub">
-            Ülevaade on koostatud Eesti Kaubandus-Tööstuskoja avalike seisukohtade, uudiste ja
-            käsilolevate teemade põhjal.
+            Allikapõhine ülevaade koja avalikest töövõitudest, seisukohtadest ja aastaaruannete
+            taustast – iga tulemus viitab algallikale.
           </p>
-          <div className="filter-summary">
-            {sectorNames.map((n) => (
-              <span key={n} className="tag accent">
-                {n}
-              </span>
-            ))}
-            {sizeName && <span className="tag">{sizeName}</span>}
-            {activityNames.map((n) => (
-              <span key={n} className="tag">
-                {n}
-              </span>
-            ))}
-            {interestNames.map((n) => (
-              <span key={n} className="tag">
-                {n}
-              </span>
-            ))}
-          </div>
-          <Link href={`/?${editFiltersQuery}#vorm`} className="btn btn-secondary btn-small">
-            ← Muuda filtreid
+          {(query.q || activeFilters.length > 0) && (
+            <div className="filter-summary">
+              {query.q && <span className="tag accent">„{query.q}"</span>}
+              {activeFilters.map((n) => (
+                <span key={n} className="tag">
+                  {n}
+                </span>
+              ))}
+            </div>
+          )}
+          <Link href={`/?${editQuery}#vorm`} className="btn btn-secondary btn-small">
+            ← Muuda otsingut
           </Link>
         </div>
       </div>
 
       <div className="container results-body">
+        {hasResults && (
+          <p className="results-count-line">
+            Leidsime {results.total} sobivat tulemust koja allikatest.
+          </p>
+        )}
+
+        {onlyContext && (
+          <div className="card notice" style={{ marginTop: 16 }}>
+            <p>
+              Leidsime peamiselt tausta ja teema ajalugu. Proovi laiemat märksõna või eemalda
+              filtreid, et näha ka konkreetseid töövõite ja seisukohti.
+            </p>
+          </div>
+        )}
+
         {!hasResults && (
           <div className="card empty-state" style={{ marginTop: 36 }}>
-            <h2>Selle valiku kohta ei leidnud me veel sobivaid materjale</h2>
-            <p>
-              Proovi valida ainult tegevusala või vähem filtreid – nii näed laiemat pilti koja
-              tööst.
-            </p>
-            <p>
-              <Link href={`/?${editFiltersQuery}#vorm`} className="btn btn-secondary btn-small">
-                Muuda valikuid
+            <h2>Selle valiku kohta ei leidnud me sobivaid materjale</h2>
+            <p>Proovi laiemat otsingut – üldisem märksõna või vähem filtreid.</p>
+            {topicSuggestions.length > 0 && (
+              <>
+                <p className="section-sub">Proovi mõnda laiemat teemat:</p>
+                <div className="theme-links">
+                  {topicSuggestions.map((t) => (
+                    <Link
+                      key={t.slug}
+                      href={`/tulemused?valdkond=${encodeURIComponent(t.slug)}`}
+                      className="theme-link"
+                    >
+                      {t.name}
+                    </Link>
+                  ))}
+                </div>
+              </>
+            )}
+            <p style={{ marginTop: 16 }}>
+              <Link href={`/?${editQuery}#vorm`} className="btn btn-secondary btn-small">
+                Muuda otsingut
               </Link>{" "}
               <a
                 href="https://www.koda.ee/et/meie-arvamus"
@@ -184,168 +251,46 @@ export default async function ResultsPage({
           </div>
         )}
 
-        {results.achievements.length > 0 && (
-          <section className="results-section">
-            <h2>Koja töövõidud sinu valikus</h2>
-            <p className="section-sub">
-              Konkreetsed tulemused, mille koda on saavutanud just sinu valitud teemadel.
-            </p>
-            {results.achievements.map((item) => (
-              <div key={item.id} className="other-item win">
-                <p className="item-meta">
-                  <WinBadge />
-                </p>
-                <h3>
-                  <TrackedLink href={item.url} sessionId={sessionId} contentItemId={item.id}>
-                    {item.title}
-                  </TrackedLink>
-                </h3>
-                {(item.summary || item.excerpt) && (
-                  <p className="item-excerpt small">{item.summary || item.excerpt}</p>
-                )}
-              </div>
-            ))}
-          </section>
-        )}
-
-        {results.groups.length > 0 && (
-          <section className="results-section">
-            <h2>Kõige olulisemad teemad sinu ettevõttele</h2>
-            <p className="section-sub">
-              Iga teema juures on koja viimased seisukohad ja viited algallikatele.
-            </p>
-            {results.groups.map((group) => (
-              <article key={group.id} className="topic-card">
-                <h2>{group.title}</h2>
-
-                <div className={`item-grid${group.secondItem ? "" : " single"}`}>
-                  {group.mainItem && (
-                    <ItemBlock item={group.mainItem} sessionId={sessionId} topicGroupId={group.id} />
-                  )}
-                  {group.secondItem && (
-                    <ItemBlock
-                      item={group.secondItem}
-                      sessionId={sessionId}
-                      topicGroupId={group.id}
-                    />
-                  )}
-                </div>
-
-                {group.history.length > 0 && (
-                  <details className="history">
-                    <summary>Teema ajalugu ({group.history.length})</summary>
-                    <ul>
-                      {group.history.map((item) => (
-                        <li key={item.id}>
-                          <span className="date">{formatDate(item.date) ?? "—"}</span>
-                          <TrackedLink
-                            href={item.url}
-                            sessionId={sessionId}
-                            contentItemId={item.id}
-                            topicGroupId={group.id}
-                          >
-                            {item.title}
-                          </TrackedLink>
-                        </li>
-                      ))}
-                    </ul>
-                  </details>
-                )}
-
-                {group.tags.length > 0 && (
-                  <div className="card-tags">
-                    {group.tags.map((t) => (
-                      <span key={`${t.type}-${t.slug}`} className="tag">
-                        {t.name}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </article>
-            ))}
-          </section>
-        )}
-
-        {results.otherItems.length > 0 && (
-          <section className="results-section">
-            <h2>Viimased koja tegevused sinu valikuga seoses</h2>
-            {results.otherItems.map((item) => (
-              <div key={item.id} className="other-item">
-                {formatDate(item.date) && (
-                  <p className="item-meta">
-                    <span>{formatDate(item.date)}</span>
-                  </p>
-                )}
-                <h3>
-                  <TrackedLink href={item.url} sessionId={sessionId} contentItemId={item.id}>
-                    {item.title}
-                  </TrackedLink>
-                </h3>
-                {(item.summary || item.excerpt) && (
-                  <p className="item-excerpt small">{item.summary || item.excerpt}</p>
-                )}
-              </div>
-            ))}
-          </section>
-        )}
-
-        {results.services.length > 0 && (
-          <section className="results-section">
-            <h2>Teenused, mis võivad sulle kasulikud olla</h2>
-            <p className="section-sub">
-              Koja praktilised teenused ettevõtjale – liikmetele soodsamalt.
-            </p>
-            <div className="services-grid">
-              {results.services.map((item) => (
-                <article key={item.id} className="service-card">
-                  <h3>
-                    <TrackedLink href={item.url} sessionId={sessionId} contentItemId={item.id}>
-                      {item.title}
-                    </TrackedLink>
-                  </h3>
-                  {(item.summary || item.excerpt) && <p>{item.summary || item.excerpt}</p>}
-                </article>
-              ))}
-            </div>
-          </section>
-        )}
+        <Section
+          title="Töövõidud"
+          sub="Konkreetsed tulemused ja võidud, mille koda on ettevõtjate jaoks saavutanud."
+          cards={results.achievements}
+          sessionId={sessionId}
+          fromQuery={fromQuery}
+        />
+        <Section
+          title="Koja seisukohad ja selgitused"
+          sub="Koja avalikud seisukohad, ettepanekud, hoiatused ja selgitavad uudised."
+          cards={results.positions}
+          sessionId={sessionId}
+          fromQuery={fromQuery}
+        />
+        <Section
+          title="Taust ja teema ajalugu"
+          sub="Aastaaruannete kontekst ja koja pikem töö samadel teemadel."
+          cards={results.context}
+          sessionId={sessionId}
+          fromQuery={fromQuery}
+        />
 
         {hasResults && (
-          <>
-            <div className="cta-box">
-              <h2>Vaata, mis on kojal hetkel käsil</h2>
-              <p>
-                Koda töötab pidevalt ettevõtjate jaoks oluliste seaduseelnõude ja teemadega.
-                Värske ülevaate käimasolevast tööst leiad koja kodulehelt.
-              </p>
-              <a
-                href="https://www.koda.ee/et/meie-moju/hetkel-kasil"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-small"
-              >
-                Hetkel käsil →
-              </a>
-            </div>
-
-            <div className="cta-box cta-box-dark">
-              <h2>Miks olla koja liige?</h2>
-              <p>
-                Kaubandus-Tööstuskoda on Eesti suurim ettevõtjate esindusorganisatsioon, kes
-                kaitseb ettevõtjate huve seadusloomes, aitab leida välispartnereid, väljastab
-                väliskaubandusdokumente ja hoiab liikmeid oluliste muudatustega kursis. Ülaltoodud
-                töö on vaid osa sellest, mida koda sinu valdkonna ettevõtete heaks teeb.
-              </p>
-              <a
-                href="https://www.koda.ee/et/liikmed/miks-olla-meie-liige"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-small"
-              >
-                Loe liikmelisuse kohta lähemalt
-              </a>
-            </div>
-          </>
+          <div className="cta-box cta-box-dark">
+            <h2>Miks olla koja liige?</h2>
+            <p>
+              Kaubandus-Tööstuskoda on Eesti suurim ettevõtjate esindusorganisatsioon, kes kaitseb
+              ettevõtjate huve seadusloomes, aitab leida välispartnereid ja väljastab
+              väliskaubandusdokumente. Ülaltoodud töö on vaid osa sellest, mida koda ettevõtjate
+              heaks teeb.
+            </p>
+            <a
+              href="https://www.koda.ee/et/liikmed/miks-olla-meie-liige"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-small"
+            >
+              Loe liikmelisuse kohta lähemalt
+            </a>
+          </div>
         )}
       </div>
     </main>

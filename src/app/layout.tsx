@@ -15,7 +15,7 @@ const barlow = Barlow({
   variable: "--font-din-fallback",
 });
 
-const appUrl = process.env.APP_URL || "https://liige.orgusaar.ee";
+const appUrl = process.env.APP_URL || "https://koda.orgusaar.ee";
 
 export const metadata: Metadata = {
   metadataBase: new URL(appUrl),

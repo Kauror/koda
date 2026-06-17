@@ -8,13 +8,15 @@
  * Usage: npm run seed   (idempotent, safe to re-run)
  */
 import { PrismaClient, SourceType } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { loadEnv } from "./env";
 import { ACTIVITIES, INTERESTS, SECTORS, SIZES } from "../src/lib/constants";
 import { contentHash } from "../src/lib/hash";
 
 loadEnv();
 
-const prisma = new PrismaClient();
+// Engine-free client (see schema.prisma) → must pass a driver adapter.
+const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
 
 function daysAgo(n: number): Date {
   const d = new Date();

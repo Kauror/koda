@@ -16,3 +16,11 @@ yarn-error.log*
 next-env.d.ts
 
 .claude/settings.local.json
+
+# Local merge-ready import source files and generated QA reports (kept out of git).
+# See data/import/README.md for what goes here.
+data/import/*.xlsx
+data/import/reports/
+
+# Local PGlite verification database (machines without Docker/Postgres).
+.pglite/

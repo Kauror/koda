@@ -84,8 +84,62 @@ npm run dev                 # http://localhost:3000
 | `npm run start`          | Production server                                        |
 | `npm run seed`           | Sildid (sektorid, suurused, huvid, profiilid) + näidissisu |
 | `npm run crawl`          | Impordib sisu koda.ee avalikelt lehtedelt                |
+| `npm run import:validate`| Valideerib merge-ready Exceli failid (ilma andmebaasita) |
+| `npm run import:merge-ready` | Impordib merge-ready Exceli failid andmebaasi (idempotentne) |
+| `npm run import:verify-db` | Kontrollib andmebaasi pärast importi (invariandid)     |
+| `npm run import:test`    | Deterministlikud kontrollid merge-ready impordile        |
+| `npm run db:setup:pglite`| Lokaalne PGlite andmebaas + migratsioonid (verifitseerimiseks) |
 | `npm run prisma:migrate` | `prisma migrate dev` (arendus)                           |
 | `npm run prisma:deploy`  | `prisma migrate deploy` (server)                         |
+
+## Merge-ready import (v1 andmemudel)
+
+Rakenduse v1 sisu **tõeallikas** on neli puhastatud merge-ready Exceli faili
+(`data/import/`), mitte crawler ega seed. Vt täielikku juhendit:
+[`docs/import-merge-ready.md`](docs/import-merge-ready.md).
+
+```bash
+# Failid kausta data/import/ (vt data/import/README.md), siis:
+npm run import:validate        # valideeri (ilma andmebaasita)
+npm run prisma:deploy          # rakenda skeem (sh merge-ready migratsioonid)
+npm run import:merge-ready     # impordi (idempotentne)
+npm run import:verify-db       # kontrolli andmebaasi invariandid
+```
+
+- Sisuread: web **3937** + arvamused **759** + aastaaruanded **237** = **4933**
+  (enne avalikkuse väljajätte). Töövõidud-rikastusfail on **ainult rikastus** ja
+  **ei loo** uusi sisuridu (kui import tekitab 5009 rida, on see vale).
+- 76 kanoonilist töövõidu-rida rikastatakse standalone failist pealkirjavõtme
+  alusel; rikastus läheb `AchievementEnrichment` tabelisse.
+- QA raport: `data/import/reports/import-report.{json,md}`.
+- Import on **idempotentne** (upsert `externalId` järgi); teine jooks annab
+  `created=0 updated=4933` ilma ridade paljunemiseta.
+- Lokaalseks verifitseerimiseks ilma Postgresita on PGlite-haru
+  (`KODA_DB_DRIVER=pglite`) — vt [`docs/import-merge-ready.md`](docs/import-merge-ready.md).
+- Allikapõhised väljad kirjutatakse importimisel üle; admin-väljad
+  (`manualWeight`, AI, `admin*Override`) säilivad. Vt impordilepingut dokumendis.
+- AI jääb väljalülitatuks ja pole impordiks vajalik.
+
+## Otsing ja järjestus (v1)
+
+Otsing kasutab imporditud taksonoomiat (mitte vanu konstante). Tegevusala ei ole
+kohustuslik; toetatud on vabatekst `q` ning filtrid `valdkond`, `tegevusala`,
+`tapsustus`, `type`. Tulemused on rühmitatud: **Töövõidud**, **Koja seisukohad ja
+selgitused**, **Teema ajalugu ja taust**. Arvamused on vaikimisi tõendusmaterjal
+(ei kuvata peamiste tulemustena). Avalik nähtavus käib läbi
+`isPublicSearchEligible()` värava. Täielik kirjeldus:
+[`docs/search-ranking-v1.md`](docs/search-ranking-v1.md).
+
+Tulemuse kaardilt avaneb avalik detailileht `/sisu/[id]` (allikapõhine selgitus,
+töövõidu rikastus, seotud aastaaruande kontekst ja toetavad arvamused).
+Peidetud/toetavad read 404-vad otselingil ning kuvatakse ainult tõendusena
+avaliku tulemuse all. Originaalallika link säilib eraldi. Vt
+[`docs/public-detail-evidence-v1.md`](docs/public-detail-evidence-v1.md).
+
+Avalik kasutajateekond (avaleht → otsing → rühmitatud tulemused → detailileht):
+vabatekst on esmane, tegevusala pole kohustuslik, valitud filtrid on nähtavad ja
+eemaldatavad, kaartidel on kaks eraldi tegevust („Vaata kokkuvõtet" ja „Ava
+algallikas"). Vt [`docs/public-ux-v1.md`](docs/public-ux-v1.md).
 
 ## Keskkonnamuutujad (`.env.example`)
 
@@ -153,27 +207,32 @@ autentimisteenust.
   (`anonymizedIpHash`), sama kehtib User-Agentile.
 - Avalikul lehel on eestikeelne privaatsusmärge.
 
-## Juurutus liige.orgusaar.ee peale
+## Juurutus (Docker / Unraid, test: koda.orgusaar.ee)
 
-1. Klooni repo serverisse, `cp .env.example .env` ja sea:
-   - `APP_URL=https://liige.orgusaar.ee`
+Täielik juurutusjuhend: [`docs/deploy-unraid.md`](docs/deploy-unraid.md).
+Lühidalt:
+
+1. Klooni repo hostile, `cp .env.example .env` ja sea:
+   - `APP_URL=https://koda.orgusaar.ee`
    - tugev `ADMIN_PASSWORD` ja `POSTGRES_PASSWORD`
-2. `docker compose up -d --build` – app kuulab pordil 3000.
-3. Suuna pöördproksi (nt Caddy või nginx + certbot) `liige.orgusaar.ee` →
-   `localhost:3000`. Näide Caddyfile:
-
+   - `KODA_IMPORT_DIR=/mnt/user/appdata/koda/import` (Unraid)
+2. Pane 4 merge-ready `.xlsx` faili `KODA_IMPORT_DIR` kausta (neid **ei**
+   commitita gitti ega panda image'isse).
+3. `docker compose build && docker compose up -d` – app kuulab pordil 3000;
+   migratsioonid (`prisma migrate deploy`) jooksevad konteineri käivitumisel.
+4. Impordi andmebaasi (konteineri sees, `@prisma/adapter-pg` + natiivne engine):
+   ```bash
+   docker compose exec app npm run import:validate
+   docker compose exec app npm run import:merge-ready
+   docker compose exec app npm run import:verify-db
    ```
-   liige.orgusaar.ee {
-       reverse_proxy localhost:3000
-   }
-   ```
+5. Suuna pöördproksi / Cloudflare / Unraid `koda.orgusaar.ee` → app `:3000`.
+6. Eemalda/komenteeri `docker-compose.yml`-ist postgresi `ports` või piira
+   tulemüüriga (avalikus serveris ei pea 5432 väljas olema).
 
-4. `docker compose exec app npm run seed && docker compose exec app npm run crawl`
-5. Eemalda/komenteeri `docker-compose.yml`-ist postgresi `ports` sektsioon või
-   piira see tulemüüriga (avalikus serveris ei pea 5432 väljas olema).
-
-Domeeni vahetuseks (ametlik Koja domeen) muuda ainult `APP_URL` ja proksi
-seadistust.
+> Konteineris **ei** kasutata PGlite/x64-Node lahendust – see on ainult
+> lokaalseks Windows-ARM arenduseks (vt [`docs/import-merge-ready.md`](docs/import-merge-ready.md)).
+> `npm run seed` on demo-sisu ega kuulu test/prod juurutusse.
 
 ## AI-otsingu teekaart (hiljem, feature flag'i taga)
 

@@ -15,13 +15,15 @@
  */
 import * as cheerio from "cheerio";
 import { PrismaClient, SourceType } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { loadEnv } from "./env";
 import { contentHash, normalizeTitle } from "../src/lib/hash";
 import { slugify } from "../src/lib/slug";
 
 loadEnv();
 
-const prisma = new PrismaClient();
+// Engine-free client (see schema.prisma) → must pass a driver adapter.
+const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
 
 const USER_AGENT = `KodaLiikmevaartusBot/0.1 (+${process.env.APP_URL || "https://liige.orgusaar.ee"}; viisakas importija)`;
 

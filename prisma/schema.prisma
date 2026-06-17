@@ -18,6 +18,14 @@ enum SourceType {
   unknown
 }
 
+/// Which merge-ready workbook a ContentItem was imported from.
+/// Distinct from SourceType (kept for crawler/seed compatibility).
+enum SourceDataset {
+  web
+  opinions
+  annual_reports
+}
+
 enum TagType {
   sector
   interest
@@ -25,6 +33,12 @@ enum TagType {
   activity
   region
   service
+  // Merge-ready taxonomy (v1 Koda data model). These come from the cleaned
+  // filter_*_merge fields and are the authoritative taxonomy after import.
+  // The older sector/interest/activity/size tags stay for compatibility.
+  valdkond // topic     -> filter_valdkonnad_merge
+  tegevusala // sector   -> filter_tegevusala_merge
+  tapsustus // provisional detail -> filter_tapsustus_merge_provisional
 }
 
 enum RelationType {
@@ -33,10 +47,21 @@ enum RelationType {
   related
 }
 
+/// How one ContentItem supports/relates to another (evidence graph).
+enum EvidenceLinkType {
+  supporting_opinion // public result -> opinion-file evidence
+  annual_context // public result -> annual report context
+  topic_history // public result -> earlier item on the same topic
+  duplicate_canonical // duplicate row -> its canonical row
+  achievement_enrichment // achievement row -> its enrichment record source
+}
+
 model ContentItem {
   id           String     @id @default(cuid())
-  sourceUrl    String
-  canonicalUrl String     @unique
+  sourceUrl    String?
+  // canonicalUrl is optional now: opinion/annual rows have no public URL.
+  // Still unique where present (Postgres allows many NULLs under a unique index).
+  canonicalUrl String?    @unique
   title        String
   displayTitle String?
   date         DateTime?
@@ -51,6 +76,58 @@ model ContentItem {
   isEvergreen  Boolean    @default(false)
   manualWeight Int        @default(0)
   language     String     @default("et")
+
+  // --- Merge-ready import fields (v1 Koda source-layer data model) ---
+  // Idempotency key: the stable external content ID from the source workbook
+  // (e.g. WEB000001, WRK000059, ACH000007, OPINION-0001, AR-2014-001).
+  externalId         String?        @unique
+  sourceDataset      SourceDataset? // web | opinions | annual_reports
+  sourceLayer        String? // koda_news, koda_public_opinion, koda_achievement, koda_workgroup_context, opinion_file, annual_report, ...
+  sourceTypeDetail   String? // meie_uudis, toovoit, opinion_file, annual_report_policy_context, ...
+  sourceFileName     String? // source_input_file / file_name / source_file
+  sourceSection      String? // source_section
+  sourcePageLocation String? // source_page_or_location (annual reports)
+  reportYear         Int? // annual report_year
+  year               Int? // calendar year of the content
+
+  kodaPosition     String? // koda_position_or_impact_et
+  companyRelevance String? // company_relevance_et
+  sourceEvidence   String? // source_evidence_short / source_evidence
+  outcomeStatus    String? // outcome_status / outcome_status_merge
+
+  // Status / gating fields (copied verbatim from the merge-ready workbook).
+  importStatus        String? // import_status_merge
+  publicDisplayStatus String? // public_display_merge
+  mergeReadiness      String? // merge_readiness
+  mergeNotes          String? // merge_notes
+  extractionQuality   String? // extraction_quality / text_extraction_quality
+  needsHumanReview    Boolean @default(false) // needs_human_review_merge
+  reviewReason        String?
+  publicPriority      String? // high | medium | low
+
+  // Derived operational visibility: true only when the row passes all the
+  // conservative public gating rules. isHidden mirrors !isPublic so the
+  // existing search (which filters on isHidden=false) shows only public rows.
+  isPublic Boolean @default(false)
+
+  // Taxonomy snapshots from the merge fields (also materialised as Tags).
+  primaryCategory     String? // primary_category / primary_category_merge
+  secondaryCategories String? // secondary_categories
+  topicGroupCandidate String? // topic_group_candidate
+
+  // Duplicate / canonical linkage.
+  canonicalContentId String? // canonical_content_id (external id of the canonical row)
+  duplicateStatus    String? // unique | possible_duplicate | ...
+
+  // --- Admin-owned override fields ---
+  // The merge-ready import is the source of truth for the imported fields above
+  // and overwrites them on every re-run. These override fields are NEVER written
+  // by the import, so admin edits survive re-imports. Readers (search/UI) should
+  // prefer the override when set, e.g. adminDisplayTitleOverride ?? displayTitle.
+  adminDisplayTitleOverride String?
+  adminSummaryOverride      String?
+  adminVisibilityOverride   Boolean? // null = follow import gating; true/false = force public/hidden
+  adminReviewNote           String?
 
   // AI-ready fields, unused while AI_ENABLED=false.
   // embedding is a plain float array for now; switch to pgvector when AI search lands.
@@ -67,9 +144,21 @@ model ContentItem {
   mainOfGroups TopicGroup[]        @relation("TopicGroupMainItem")
   clicks       SearchResultClick[]
 
+  // Evidence graph: links where this item is the public result (from) or the
+  // supporting/duplicate target (to).
+  evidenceLinksFrom ContentEvidenceLink[] @relation("EvidenceFrom")
+  evidenceLinksTo   ContentEvidenceLink[] @relation("EvidenceTo")
+
+  // Achievement enrichment (1:1) for canonical töövõit rows. The standalone
+  // enrichment workbook never becomes its own content row – it lives here.
+  achievementEnrichment AchievementEnrichment?
+
   @@index([contentHash])
   @@index([date])
   @@index([isHidden])
+  @@index([isPublic])
+  @@index([sourceDataset])
+  @@index([sourceLayer])
 }
 
 model TopicGroup {
@@ -162,4 +251,56 @@ model SearchResultClick {
   searchSession SearchSession @relation(fields: [searchSessionId], references: [id], onDelete: Cascade)
   contentItem   ContentItem?  @relation(fields: [contentItemId], references: [id], onDelete: SetNull)
   topicGroup    TopicGroup?   @relation(fields: [topicGroupId], references: [id], onDelete: SetNull)
+}
+
+/// Evidence graph linking a public result to its supporting opinions, annual
+/// context, topic history, duplicate/canonical rows and achievement enrichment.
+model ContentEvidenceLink {
+  id            String           @id @default(cuid())
+  fromContentId String
+  toContentId   String
+  linkType      EvidenceLinkType
+  note          String?
+  createdAt     DateTime         @default(now())
+
+  from ContentItem @relation("EvidenceFrom", fields: [fromContentId], references: [id], onDelete: Cascade)
+  to   ContentItem @relation("EvidenceTo", fields: [toContentId], references: [id], onDelete: Cascade)
+
+  @@unique([fromContentId, toContentId, linkType])
+  @@index([toContentId])
+}
+
+/// Achievement (töövõit) enrichment. One row per canonical web achievement
+/// ContentItem. Populated by left-joining the standalone töövõidud enrichment
+/// workbook onto the 76 canonical achievement rows – it never creates content
+/// rows of its own.
+model AchievementEnrichment {
+  id            String @id @default(cuid())
+  contentItemId String @unique
+
+  // Source identity from the standalone enrichment workbook (A0001-style id).
+  standaloneAchievementId String?
+  matchKey                String? // normalized title key used for the join
+  matchPriority           String? // 1_title_url_year | 2_title_url
+  enrichmentStatus        String? // achievement_enrichment_status
+  rowMergeRole            String? // enrichment_only (sanity marker)
+
+  // Enrichment payload.
+  numericImpactStatement    String?
+  kodaRole                  String?
+  valueType                 String?
+  affectedCompanyTypes      String?
+  affectedBusinessFunctions String?
+  regulatoryArea            String?
+  primaryTopic              String?
+  secondaryTopics           String?
+  outcomeStatus             String?
+  confidence                String?
+  sourceEvidence            String?
+  indexNote                 String?
+
+  importedAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  contentItem ContentItem @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
 }
