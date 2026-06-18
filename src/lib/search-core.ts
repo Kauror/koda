@@ -1,6 +1,6 @@
 /**
  * Pure search/ranking core for the merge-ready Koda data model. No Prisma, no
- * I/O — so it can be unit-tested with plain candidate objects. The DB
+ * I/O, so it can be unit-tested with plain candidate objects. The DB
  * orchestration lives in search.ts.
  *
  * Estonian text matching is intentionally simple (normalized lowercase
@@ -8,7 +8,23 @@
  * can replace the text scorer later without touching the rest.
  */
 import { normalizeTitle } from "./hash";
-import { publicTitle, publicSummary } from "./content-display";
+import { publicSummary, publicTitle } from "./content-display";
+import { getSectorRelevance as getSectorRelevanceForScore, sectorMatchesSlug } from "./sector-relevance";
+
+export {
+  getRelatedTopicsForSector,
+  getSectorRelevance,
+  getSectorRelevanceExplanation,
+  hasExactSectorMatch,
+  hasGenericSectorTag,
+  hasOnlyGenericOrNoSector,
+  hasSpecificNonMatchingSector,
+} from "./sector-relevance";
+export type {
+  SectorRelevanceExplanation,
+  SectorRelevanceRule,
+  SectorRelevanceScore,
+} from "./sector-relevance";
 
 // ---------------------------------------------------------------------------
 // Query model
@@ -21,7 +37,7 @@ export type SearchQuery = {
   q: string;
   valdkond: string[]; // tag slugs (TagType.valdkond)
   tegevusala: string[]; // tag slugs (TagType.tegevusala)
-  tapsustus: string[]; // tag slugs (TagType.tapsustus) — provisional, light weight
+  tapsustus: string[]; // tag slugs (TagType.tapsustus), provisional/light weight
   type: ResultType[]; // optional result-type filter
 };
 
@@ -53,8 +69,6 @@ export function parseSearchParams(params: Record<string, Raw>): SearchQuery {
     (RESULT_TYPES as string[]).includes(t)
   );
 
-  // Backward compatibility: if no new params were given but legacy ones were,
-  // fold the legacy slugs into the free-text query (best effort).
   const hasNew = q || valdkond.length || tegevusala.length || tapsustus.length || type.length;
   let effectiveQ = q;
   if (!hasNew) {
@@ -126,406 +140,15 @@ export function isFormalOpinion(c: Candidate): boolean {
   return c.sourceTypeDetail === "meie_arvamus_article" || c.sourceLayer === "koda_public_opinion";
 }
 
-export function hasGenericSectorTag(c: Candidate): boolean {
-  return c.tegevusalad.some((t) => {
-    const slug = normalizeTitle(t.slug);
-    const name = normalizeTitle(t.name);
-    return (
-      slug.includes("koik-tegevusalad") ||
-      slug.includes("valdkondadeulene") ||
-      name.includes("koik tegevusalad") ||
-      name.includes("valdkondadeulene")
-    );
-  });
-}
-
-export type SectorRelevanceRule = {
-  topicNeedles: string[];
-  keywordNeedles: string[];
-  singleKeywordNeedles?: string[];
-  exclusionNeedles?: string[];
-  requiredAnchorNeedles?: string[];
-  aliases?: string[];
-  keywordMatchThreshold?: number;
-};
-
-const SECTOR_RELEVANCE: Record<string, SectorRelevanceRule> = {
-  "info-side-ja-it": {
-    aliases: ["info-ja-side-it"],
-    topicNeedles: [
-      "digi",
-      "digitaal",
-      "tehnoloogia",
-      "andmed",
-      "andmekaitse",
-      "kuber",
-      "kyber",
-      "tehisintellekt",
-      "ai",
-      "infoturve",
-      "side",
-      "telekommunikatsioon",
-      "tarkvara",
-    ],
-    keywordNeedles: [
-      "digi",
-      "digitaliseerimine",
-      "digitaalne",
-      "digitaalne identiteet",
-      "digiriik",
-      "e riik",
-      "e teenus",
-      "e teenused",
-      "andmekaitse",
-      "andmed",
-      "kuberturvalisus",
-      "kyberturvalisus",
-      "kuberturve",
-      "kyberturve",
-      "e arve",
-      "e arved",
-      "tehisintellekt",
-      "infotehnoloogia",
-      "info ja side",
-      "elektrooniline side",
-      "infoyhiskond",
-      "info uhiskond",
-      "it",
-      "tehnoloogiaplatvorm",
-      "digiplatvorm",
-      "tarkvara",
-      "digiteenus",
-      "digiteenused",
-      "automatiseerimine",
-      "algoritm",
-      "automaatotsus",
-      "automaatotsused",
-      "infoturve",
-      "telekommunikatsioon",
-    ],
-    singleKeywordNeedles: [
-      "tehisintellekt",
-      "infotehnoloogia",
-      "kuberturvalisus",
-      "kyberturvalisus",
-      "kuberturve",
-      "kyberturve",
-      "digitaalne identiteet",
-      "elektrooniline side",
-      "tarkvara",
-      "telekommunikatsioon",
-      "infoturve",
-    ],
-    exclusionNeedles: [
-      "e kaubandus",
-      "e pood",
-      "tarbijakaitse",
-      "tarbija",
-      "kaubandus",
-      "jaekaubandus",
-      "pakend",
-      "pakendid",
-      "j\u00e4\u00e4tmed",
-      "jaatmed",
-      "j\u00e4\u00e4tmeseadus",
-      "jaatmeseadus",
-      "keskkonnav\u00e4ited",
-      "keskkonnavaited",
-      "rohev\u00e4ited",
-      "rohevaited",
-      "m\u00e4rgistus",
-      "margistus",
-      "kaupade h\u00e4vitamine",
-      "kaupade havitamine",
-      "taganemisnupp",
-      "ringmajandus",
-    ],
-  },
-  "pollumajandus-metsandus-ja-kalandus": {
-    topicNeedles: [
-      "pollu",
-      "p\u00f5llu",
-      "pollumajandus",
-      "p\u00f5llumajandus",
-      "p\u00f5llumajandustootja",
-      "metsandus",
-      "mets",
-      "kalandus",
-      "kalur",
-    ],
-    keywordNeedles: [
-      "pollumajandus",
-      "p\u00f5llumajandus",
-      "p\u00f5llumajandustootja",
-      "metsandus",
-      "kalandus",
-      "mets",
-      "kalur",
-      "p\u00f5ld",
-      "p\u00f5llu",
-      "pollu",
-      "toidu tootmine",
-      "toidutootmine",
-      "veterinaar",
-      "maakasutus",
-    ],
-    singleKeywordNeedles: [
-      "pollumajandus",
-      "p\u00f5llumajandus",
-      "p\u00f5llumajandustootja",
-      "metsandus",
-      "kalandus",
-    ],
-    requiredAnchorNeedles: [
-      "pollumajandus",
-      "p\u00f5llumajandus",
-      "p\u00f5llumajandustootja",
-      "pollu",
-      "p\u00f5llu",
-      "metsandus",
-      "kalandus",
-      "kalur",
-    ],
-    exclusionNeedles: [
-      "keskkond",
-      "planeering",
-      "luba",
-      "load",
-      "lubade",
-      "maa",
-      "toit",
-      "pakend",
-      "j\u00e4\u00e4tmed",
-      "jaatmed",
-      "ehitus",
-      "ehitamine",
-    ],
-  },
-};
-
-export function getRelatedTopicsForSector(tegevusalaSlug: string): SectorRelevanceRule | null {
-  const key = sectorRuleKey(tegevusalaSlug);
-  if (key) return SECTOR_RELEVANCE[key];
-  return null;
-
-}
-
-function sectorRuleKey(tegevusalaSlug: string): string | null {
-  const slug = normalizeTitle(tegevusalaSlug);
-  if (SECTOR_RELEVANCE[tegevusalaSlug]) return tegevusalaSlug;
-  for (const [key, rule] of Object.entries(SECTOR_RELEVANCE)) {
-    if (normalizeTitle(key) === slug) return key;
-    if (rule.aliases?.some((alias) => normalizeTitle(alias) === slug)) return key;
-  }
-  if ((slug.includes("info") && slug.includes("side")) || slug === "it") {
-    return "info-side-ja-it";
-  }
-  if (
-    slug.includes("pollumajandus") ||
-    slug.includes("p\u00f5llumajandus") ||
-    slug.includes("metsandus") ||
-    slug.includes("kalandus")
-  ) {
-    return "pollumajandus-metsandus-ja-kalandus";
-  }
-  return null;
-}
-
-function includesNeedle(haystack: string, needle: string): boolean {
-  const n = normalizeTitle(needle);
-  if (!n) return false;
-  if (n.length <= 3) return haystack.split(" ").includes(n);
-  return haystack.includes(n);
-}
-
-function matchedNeedles(haystack: string, needles: string[] | undefined): string[] {
-  if (!needles?.length) return [];
-  return [...new Set(needles.filter((needle) => includesNeedle(haystack, needle)))];
-}
-
-function sectorTagHaystack(c: Candidate): string {
-  return normalizeTitle([...c.valdkonnad, ...c.tapsustused].flatMap((t) => [t.slug, t.name]).join(" "));
-}
-
-function sectorHighSignalHaystack(c: Candidate): string {
-  return normalizeTitle(
-    [publicTitle(c), c.title, c.displayTitle, c.adminDisplayTitleOverride, publicSummary(c), c.summary, c.adminSummaryOverride]
-      .filter(Boolean)
-      .join(" ")
-  );
-}
-
-function sectorLowerSignalHaystack(c: Candidate): string {
-  return normalizeTitle([c.companyRelevance, c.kodaPosition, c.sourceEvidence].filter(Boolean).join(" "));
-}
-
-export type SectorRelevanceScore = {
-  matches: number;
-  topicMatches: number;
-  keywordMatches: number;
-};
-
-export type SectorRelevanceExplanation = {
-  sectorSlug: string;
-  ruleKey: string | null;
-  exactSectorMatch: boolean;
-  sectorTags: string[];
-  hasGenericSectorTag: boolean;
-  hasNoSectorTags: boolean;
-  hasSpecificNonMatchingSector: boolean;
-  topicMatchedTerms: string[];
-  keywordMatchedTerms: string[];
-  lowerSignalKeywordMatchedTerms: string[];
-  singleKeywordMatchedTerms: string[];
-  anchorMatchedTerms: string[];
-  exclusionMatchedTerms: string[];
-  fallbackAllowed: boolean;
-  fallbackBlockedReason: string | null;
-  finalInclude: boolean;
-};
-
-function isGenericSectorRef(t: TagRef): boolean {
-  const slug = normalizeTitle(t.slug);
-  const name = normalizeTitle(t.name);
-  return (
-    slug.includes("koik-tegevusalad") ||
-    slug.includes("valdkondadeulene") ||
-    name.includes("koik tegevusalad") ||
-    name.includes("valdkondadeulene")
-  );
-}
-
-function sectorMatchesSlug(tagSlug: string, selectedSectorSlugs: string[]): boolean {
-  const tagNorm = normalizeTitle(tagSlug);
-  const tagRule = sectorRuleKey(tagSlug);
-  return selectedSectorSlugs.some((selected) => {
-    if (normalizeTitle(selected) === tagNorm) return true;
-    const selectedRule = sectorRuleKey(selected);
-    return Boolean(tagRule && selectedRule && tagRule === selectedRule);
-  });
-}
-
-export function hasExactSectorMatch(c: Candidate, selectedSectorSlugs: string[]): boolean {
-  return c.tegevusalad.some((t) => sectorMatchesSlug(t.slug, selectedSectorSlugs));
-}
-
-export function hasOnlyGenericOrNoSector(c: Candidate): boolean {
-  return c.tegevusalad.length === 0 || c.tegevusalad.every(isGenericSectorRef);
-}
-
-export function hasSpecificNonMatchingSector(c: Candidate, selectedSectorSlugs: string[]): boolean {
-  return c.tegevusalad.some((t) => !isGenericSectorRef(t) && !sectorMatchesSlug(t.slug, selectedSectorSlugs));
-}
-
-export function getSectorRelevanceExplanation(c: Candidate, sectorSlug: string): SectorRelevanceExplanation {
-  const ruleKey = sectorRuleKey(sectorSlug);
-  const rule = ruleKey ? SECTOR_RELEVANCE[ruleKey] : null;
-  const selectedSectorSlugs = [sectorSlug];
-  const exactSectorMatch = hasExactSectorMatch(c, selectedSectorSlugs);
-  const genericSectorTag = hasGenericSectorTag(c);
-  const hasNoSectorTags = c.tegevusalad.length === 0;
-  const specificNonMatching = hasSpecificNonMatchingSector(c, selectedSectorSlugs);
-  const sectorTags = c.tegevusalad.map((t) => t.slug);
-
-  if (!rule) {
-    return {
-      sectorSlug,
-      ruleKey,
-      exactSectorMatch,
-      sectorTags,
-      hasGenericSectorTag: genericSectorTag,
-      hasNoSectorTags,
-      hasSpecificNonMatchingSector: specificNonMatching,
-      topicMatchedTerms: [],
-      keywordMatchedTerms: [],
-      lowerSignalKeywordMatchedTerms: [],
-      singleKeywordMatchedTerms: [],
-      anchorMatchedTerms: [],
-      exclusionMatchedTerms: [],
-      fallbackAllowed: false,
-      fallbackBlockedReason: "no-sector-fallback-mapping",
-      finalInclude: exactSectorMatch,
-    };
-  }
-
-  const tagHay = sectorTagHaystack(c);
-  const highHay = sectorHighSignalHaystack(c);
-  const lowerHay = sectorLowerSignalHaystack(c);
-  const fallbackHay = normalizeTitle([tagHay, highHay, lowerHay].filter(Boolean).join(" "));
-  const topicMatchedTerms = matchedNeedles(tagHay, rule.topicNeedles);
-  const keywordMatchedTerms = matchedNeedles(highHay, rule.keywordNeedles);
-  const lowerSignalKeywordMatchedTerms = matchedNeedles(lowerHay, rule.keywordNeedles);
-  const singleKeywordMatchedTerms = matchedNeedles(highHay, rule.singleKeywordNeedles);
-  const anchorMatchedTerms = matchedNeedles(fallbackHay, rule.requiredAnchorNeedles);
-  const exclusionMatchedTerms = matchedNeedles(fallbackHay, rule.exclusionNeedles);
-
-  const keywordThreshold = rule.keywordMatchThreshold ?? 2;
-  const hasStrongTopic = topicMatchedTerms.length > 0;
-  const hasStrongKeyword = keywordMatchedTerms.length >= keywordThreshold || singleKeywordMatchedTerms.length > 0;
-  const hasRequiredAnchor = !rule.requiredAnchorNeedles?.length || anchorMatchedTerms.length > 0;
-  const exclusionBlocks = exclusionMatchedTerms.length > 0 && !anchorMatchedTerms.length;
-
-  let fallbackAllowed = false;
-  let fallbackBlockedReason: string | null = null;
-  if (exactSectorMatch) {
-    fallbackBlockedReason = "exact-sector-match";
-  } else if (!hasOnlyGenericOrNoSector(c)) {
-    fallbackBlockedReason = specificNonMatching ? "specific-nonmatching-sector-tag" : "non-generic-sector-tag";
-  } else if (exclusionBlocks) {
-    fallbackBlockedReason = "sector-fallback-exclusion";
-  } else if (!hasRequiredAnchor) {
-    fallbackBlockedReason = "missing-required-sector-anchor";
-  } else if (!hasStrongTopic && !hasStrongKeyword) {
-    fallbackBlockedReason = "no-strong-sector-signal";
-  } else {
-    fallbackAllowed = true;
-  }
-
-  return {
-    sectorSlug,
-    ruleKey,
-    exactSectorMatch,
-    sectorTags,
-    hasGenericSectorTag: genericSectorTag,
-    hasNoSectorTags,
-    hasSpecificNonMatchingSector: specificNonMatching,
-    topicMatchedTerms,
-    keywordMatchedTerms,
-    lowerSignalKeywordMatchedTerms,
-    singleKeywordMatchedTerms,
-    anchorMatchedTerms,
-    exclusionMatchedTerms,
-    fallbackAllowed,
-    fallbackBlockedReason,
-    finalInclude: exactSectorMatch || fallbackAllowed,
-  };
-}
-
-export function getSectorRelevance(c: Candidate, sectorSlugs: string[]): SectorRelevanceScore {
-  let strictMatches = 0;
-  let strictTopicMatches = 0;
-  let strictKeywordMatches = 0;
-  if (sectorSlugs.length === 0) return { matches: strictMatches, topicMatches: strictTopicMatches, keywordMatches: strictKeywordMatches };
-
-  for (const sector of sectorSlugs) {
-    const explanation = getSectorRelevanceExplanation(c, sector);
-    if (!explanation.fallbackAllowed) continue;
-    strictMatches++;
-    strictTopicMatches += explanation.topicMatchedTerms.length;
-    strictKeywordMatches += explanation.keywordMatchedTerms.length + explanation.singleKeywordMatchedTerms.length;
-  }
-
-  return { matches: strictMatches, topicMatches: strictTopicMatches, keywordMatches: strictKeywordMatches };
-
-}
-
 export type ResultKind = "toovoit" | "arvamus" | "uudis" | "kontekst";
+export const RESULT_GROUPS: ResultKind[] = ["toovoit", "arvamus", "uudis", "kontekst"];
 
 /** Which result group a candidate belongs to. */
 export function assignKind(c: Candidate): ResultKind {
   if (isAchievement(c)) return "toovoit";
-  if (c.sourceDataset === "annual_reports" || c.sourceLayer === "koda_workgroup_context")
+  if (c.sourceDataset === "annual_reports" || c.sourceLayer === "koda_workgroup_context") {
     return "kontekst";
+  }
   if (isKodaNews(c)) return "uudis";
   return "arvamus";
 }
@@ -535,8 +158,7 @@ export function primaryType(c: Candidate): ResultType {
   if (isAchievement(c)) return "toovoit";
   if (c.sourceDataset === "annual_reports") return "aastaaruanne";
   if (isKodaNews(c)) return "uudis";
-  if (isFormalOpinion(c) || c.sourceDataset === "opinions")
-    return "arvamus";
+  if (isFormalOpinion(c) || c.sourceDataset === "opinions") return "arvamus";
   if (c.sourceLayer === "koda_workgroup_context") return "kontekst";
   return "uudis";
 }
@@ -575,7 +197,6 @@ function recencyBoost(date: Date | null): number {
 }
 
 export function scoreCandidate(c: Candidate, q: SearchQuery): ScoreBreakdown {
-  // --- B. Text match ---
   let text = 0;
   const qn = normalizeTitle(q.q || "");
   const tokens = qn ? qn.split(" ").filter(Boolean) : [];
@@ -599,11 +220,14 @@ export function scoreCandidate(c: Candidate, q: SearchQuery): ScoreBreakdown {
     text = Math.min(text, 220); // cap so body spam cannot dominate
   }
 
-  // --- C. Filter match ---
   const valdkondMatches = c.valdkonnad.filter((t) => q.valdkond.includes(t.slug)).length;
   const tegevusalaMatches = c.tegevusalad.filter((t) => sectorMatchesSlug(t.slug, q.tegevusala)).length;
   const tapsustusMatches = c.tapsustused.filter((t) => q.tapsustus.includes(t.slug)).length;
-  const sectorRelevance = tegevusalaMatches === 0 ? getSectorRelevance(c, q.tegevusala) : { matches: 0, topicMatches: 0, keywordMatches: 0 };
+  const sectorRelevance =
+    tegevusalaMatches === 0
+      ? getSectorRelevanceForScore(c, q.tegevusala)
+      : { matches: 0, topicMatches: 0, keywordMatches: 0 };
+
   let filter = 0;
   filter += Math.min(valdkondMatches, 2) * 40; // topic: high, capped
   filter += Math.min(tegevusalaMatches, 2) * 44; // exact sector: high, capped
@@ -612,11 +236,9 @@ export function scoreCandidate(c: Candidate, q: SearchQuery): ScoreBreakdown {
   filter += Math.min(sectorRelevance.keywordMatches, 2) * 3; // keyword-only fallback: light
   filter += Math.min(tapsustusMatches, 2) * 8; // provisional: light, capped
 
-  // --- D/E/F/G. Static boosts (always applied) ---
   let boost = 0;
-  // Source / public-display priority. Töövõidud are the product's headline
-  // result type and must rank strongly even when their title does not literally
-  // contain the query word, so they get a large source boost.
+  // Toovoit rows are the product's headline result type and must rank strongly
+  // even when their title does not literally contain the query word.
   if (isAchievement(c)) boost += 90;
   else if (c.publicDisplayStatus === "main_result_candidate") boost += 30;
   else if (c.sourceLayer === "koda_news" || c.sourceLayer === "koda_public_opinion") boost += 12;
@@ -637,18 +259,14 @@ export function scoreCandidate(c: Candidate, q: SearchQuery): ScoreBreakdown {
     else if (activeTopicOrSector && sectorRelevance.matches > 0) boost += 4;
   }
 
-  // Outcome status.
   if (c.outcomeStatus === "achieved") boost += 20;
   else if (c.outcomeStatus === "partially_achieved") boost += 14;
   else if (c.outcomeStatus === "ongoing") boost += 10;
 
-  // Priority / manual weight / evergreen.
   if (c.publicPriority === "high") boost += 15;
   else if (c.publicPriority === "medium") boost += 6;
   boost += c.manualWeight * 10;
   if (c.isEvergreen) boost += 6;
-
-  // Small recency boost (capped, cannot outrank a strong achievement).
   boost += recencyBoost(c.date);
 
   return {
@@ -665,20 +283,71 @@ export function scoreCandidate(c: Candidate, q: SearchQuery): ScoreBreakdown {
 }
 
 /**
- * Does the candidate satisfy all *active* filters? AND across active
- * constraints. `tapsustus` is never required (provisional) — it only boosts.
+ * Does the candidate satisfy all active filters? AND across active constraints.
+ * `tapsustus` is never required (provisional), it only boosts.
  */
 export function passesActiveFilters(q: SearchQuery, s: ScoreBreakdown, c: Candidate): boolean {
-  if (q.q && s.text === 0) return false; // free text given but nothing matched
+  if (q.q && s.text === 0) return false;
   if (q.valdkond.length && s.valdkondMatches === 0) return false;
-  if (q.tegevusala.length && s.tegevusalaMatches === 0) {
-    if (s.sectorFallbackMatches === 0) return false;
+  if (q.tegevusala.length && s.tegevusalaMatches === 0 && s.sectorFallbackMatches === 0) {
+    return false;
   }
   if (q.type.length && !q.type.includes(primaryType(c))) return false;
   return true;
 }
 
 export type RankedCandidate = { c: Candidate; total: number };
+export type GroupCapMap = Record<ResultKind, number>;
+export type RankedGroups = Record<ResultKind, RankedCandidate[]>;
+export type ResultGroupCount = { matched: number; displayed: number; cap: number };
+export type ResultGroupCounts = Record<ResultKind, ResultGroupCount>;
+
+export type GroupedRankedCandidates = {
+  allGroups: RankedGroups;
+  displayedGroups: RankedGroups;
+  displayed: RankedCandidate[];
+  groupCounts: ResultGroupCounts;
+  totalMatchedBeforeCaps: number;
+  totalDisplayed: number;
+};
+
+function emptyRankedGroups(): RankedGroups {
+  return { toovoit: [], arvamus: [], uudis: [], kontekst: [] };
+}
+
+export function groupRankedCandidates(scored: RankedCandidate[], caps: GroupCapMap): GroupedRankedCandidates {
+  const allGroups = emptyRankedGroups();
+  for (const s of scored) {
+    allGroups[assignKind(s.c)].push(s);
+  }
+
+  const displayedGroups = emptyRankedGroups();
+  const groupCounts = {} as ResultGroupCounts;
+  for (const kind of RESULT_GROUPS) {
+    displayedGroups[kind] = allGroups[kind].slice(0, caps[kind]);
+    groupCounts[kind] = {
+      matched: allGroups[kind].length,
+      displayed: displayedGroups[kind].length,
+      cap: caps[kind],
+    };
+  }
+
+  const displayed = [
+    ...displayedGroups.toovoit,
+    ...displayedGroups.arvamus,
+    ...displayedGroups.uudis,
+    ...displayedGroups.kontekst,
+  ];
+
+  return {
+    allGroups,
+    displayedGroups,
+    displayed,
+    groupCounts,
+    totalMatchedBeforeCaps: scored.length,
+    totalDisplayed: displayed.length,
+  };
+}
 
 function dateMs(c: Candidate): number {
   return c.date?.getTime() ?? 0;
@@ -726,7 +395,7 @@ const TYPE_BADGE: Record<ResultType, string> = {
 
 /**
  * Rank supporting opinion rows for a public parent by shared topic + light text
- * overlap, then cap. Pure — the caller supplies already-eligible opinion rows.
+ * overlap, then cap. Pure; the caller supplies already-eligible opinion rows.
  */
 export function rankRelatedOpinions(parent: Candidate, opinions: Candidate[], cap: number): Candidate[] {
   const parentValdkond = new Set(parent.valdkonnad.map((t) => t.slug));

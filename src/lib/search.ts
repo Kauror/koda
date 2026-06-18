@@ -10,12 +10,14 @@ import { isPublicSearchEligible } from "./eligibility";
 import { compactText, getCleanPublicExcerpt, publicSourceUrl, publicTitle, sourceCtaLabel } from "./content-display";
 import {
   type Candidate,
+  type ResultGroupCounts,
   type ResultKind,
   type ResultType,
   type SearchQuery,
   assignKind,
   buildBadges,
   compareRankedCandidates,
+  groupRankedCandidates,
   isAchievement,
   isEmptyQuery,
   parseSearchParams,
@@ -154,7 +156,11 @@ export type SearchResults = {
   positions: ResultCard[];
   news: ResultCard[];
   context: ResultCard[];
+  /** Compatibility alias for displayed rows after per-group caps. */
   total: number;
+  totalMatchedBeforeCaps: number;
+  totalDisplayed: number;
+  groupCounts: ResultGroupCounts;
   includesRelatedSectorMatches: boolean;
 };
 
@@ -205,19 +211,9 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
 
   const deduped = dedupe(scored).sort(compareRankedCandidates);
 
-  // Group by kind, applying caps.
-  const groups: Record<ResultKind, { c: Candidate; total: number }[]> = {
-    toovoit: [],
-    arvamus: [],
-    uudis: [],
-    kontekst: [],
-  };
-  for (const s of deduped) {
-    const kind = assignKind(s.c);
-    if (groups[kind].length < GROUP_CAPS[kind]) groups[kind].push(s);
-  }
-
-  const displayed = [...groups.toovoit, ...groups.arvamus, ...groups.uudis, ...groups.kontekst];
+  const grouped = groupRankedCandidates(deduped, GROUP_CAPS);
+  const groups = grouped.displayedGroups;
+  const displayed = grouped.displayed;
   const evidence = await buildEvidence(displayed.map((s) => s.c));
   const includesRelatedSectorMatches =
     query.tegevusala.length > 0 &&
@@ -251,7 +247,10 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
     positions: groups.arvamus.map(toCard),
     news: groups.uudis.map(toCard),
     context: groups.kontekst.map(toCard),
-    total: displayed.length,
+    total: grouped.totalDisplayed,
+    totalMatchedBeforeCaps: grouped.totalMatchedBeforeCaps,
+    totalDisplayed: grouped.totalDisplayed,
+    groupCounts: grouped.groupCounts,
     includesRelatedSectorMatches,
   };
 }

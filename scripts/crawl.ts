@@ -23,7 +23,10 @@ import { slugify } from "../src/lib/slug";
 loadEnv();
 
 // Engine-free client (see schema.prisma) → must pass a driver adapter.
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
+let prisma: PrismaClient;
+let prismaConnected = false;
+
+const LEGACY_OK = process.argv.includes("--legacy-ok");
 
 const USER_AGENT = `KodaLiikmevaartusBot/0.1 (+${process.env.APP_URL || "https://liige.orgusaar.ee"}; viisakas importija)`;
 
@@ -338,10 +341,22 @@ async function importAchievements(): Promise<{ created: number; updated: number 
 }
 
 async function main() {
-  if ((process.env.CRAWLER_ENABLED || "true") !== "true") {
-    log("CRAWLER_ENABLED is not 'true' – exiting.");
+  if (!LEGACY_OK) {
+    console.error(
+      "[crawl] Refusing to run the legacy crawler. The merge-ready workbooks are the v1 source of truth. " +
+        "Re-run only for a deliberate local legacy check with: npm run crawl -- --legacy-ok"
+    );
+    process.exitCode = 1;
     return;
   }
+
+  if ((process.env.CRAWLER_ENABLED || "false") !== "true") {
+    log("CRAWLER_ENABLED is not 'true' - exiting.");
+    return;
+  }
+
+  prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
+  prismaConnected = true;
 
   log(`Starting crawl: ${SOURCES.length} sources, max ${MAX_PAGES} listing pages each, delay ${DELAY_MS}ms`);
 
@@ -461,4 +476,6 @@ main()
     console.error(e);
     process.exitCode = 1;
   })
-  .finally(() => prisma.$disconnect());
+  .finally(() => {
+    if (prismaConnected) return prisma.$disconnect();
+  });

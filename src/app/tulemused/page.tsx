@@ -153,7 +153,8 @@ export default async function ResultsPage({
   }
 
   const [results, options] = await Promise.all([search(query), getFilterOptions()]);
-  const hasResults = results.total > 0;
+  const hasResults = results.totalDisplayed > 0;
+  const hasCappedResults = results.totalMatchedBeforeCaps > results.totalDisplayed;
 
   const nameOf = (opts: { slug: string; name: string }[], slug: string) =>
     opts.find((option) => option.slug === slug)?.name ?? slug;
@@ -205,7 +206,13 @@ export default async function ResultsPage({
       </div>
 
       <div className="container results-body">
-        {hasResults && <p className="results-count-line">Leidsime {results.total} sobivat tulemust.</p>}
+        {hasResults && (
+          <p className="results-count-line">
+            {hasCappedResults
+              ? `Leidsime ${results.totalMatchedBeforeCaps} sobivat tulemust. Kuvame neist ${results.totalDisplayed} kõige asjakohasemat.`
+              : `Leidsime ${results.totalDisplayed} sobivat tulemust.`}
+          </p>
+        )}
 
         {results.includesRelatedSectorMatches && (
           <div className="card notice" style={{ marginTop: 16 }}>

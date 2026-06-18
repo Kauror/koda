@@ -96,5 +96,21 @@ check("results page separates news/progress from opinions", () => {
   assert.ok(!source.includes("Vaata allikat"));
 });
 
+check("results page distinguishes matched totals from capped displayed totals", () => {
+  const source = readFileSync("src/app/tulemused/page.tsx", "utf8");
+  assert.ok(source.includes("totalMatchedBeforeCaps"));
+  assert.ok(source.includes("totalDisplayed"));
+  assert.ok(source.includes("Kuvame neist"));
+});
+
+check("legacy crawler requires explicit opt-in before running", () => {
+  const source = readFileSync("scripts/crawl.ts", "utf8");
+  const envExample = readFileSync(".env.example", "utf8");
+  assert.ok(source.includes("--legacy-ok"));
+  assert.ok(source.includes("CRAWLER_ENABLED || \"false\""));
+  assert.ok(source.includes("Refusing to run the legacy crawler"));
+  assert.ok(envExample.includes("CRAWLER_ENABLED=false"));
+});
+
 console.log(`\n[test] ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exitCode = 1;

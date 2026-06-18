@@ -54,11 +54,11 @@ docker compose up -d --build
 ```
 
 Migratsioonid (`prisma migrate deploy`) jooksevad app-konteineri käivitumisel
-automaatselt. Seejärel lae algandmed:
+automaatselt. Seejärel loo soovi korral demoandmed:
 
 ```bash
 docker compose exec app npm run seed     # sildid + näidissisu + teemagrupid
-docker compose exec app npm run crawl    # impordi päris sisu koda.ee-st
+# Päris v1 sisu tuleb merge-ready Excelitest, mitte legacy crawlerist.
 ```
 
 Rakendus: <http://localhost:3000> · Admin: <http://localhost:3000/admin>
@@ -85,7 +85,7 @@ npm run dev                 # http://localhost:3000
 | `npm run seed`           | Sildid (sektorid, suurused, huvid, profiilid) + näidissisu |
 | `npm run site-texts:seed`| Loob puuduvad avalehe tekstiread, olemasolevaid muudatusi üle kirjutamata |
 | `npm run freshness:audit`| Raporteerib avalike ridade värskuse ja 2025/2026 katvuse DB põhjal |
-| `npm run crawl`          | Impordib sisu koda.ee avalikelt lehtedelt                |
+| `npm run crawl`          | Legacy crawler; requires `-- --legacy-ok` and `CRAWLER_ENABLED=true` |
 | `npm run import:validate`| Valideerib merge-ready Exceli failid (ilma andmebaasita) |
 | `npm run import:merge-ready` | Impordib merge-ready Exceli failid andmebaasi (idempotentne) |
 | `npm run import:verify-db` | Kontrollib andmebaasi pärast importi (invariandid)     |
@@ -153,7 +153,7 @@ algallikas"). Vt [`docs/public-ux-v1.md`](docs/public-ux-v1.md).
 | `POSTGRES_USER/PASSWORD/DB`| Postgres konteineri seadistus                                 |
 | `ADMIN_EMAIL`              | Admini e-post (valikuline; kui tühi, kontrollitakse vaid parooli) |
 | `ADMIN_PASSWORD`           | Admini parool – **muuda kindlasti ära**                       |
-| `CRAWLER_ENABLED`          | `true/false` – kas `npm run crawl` üldse käivitub             |
+| `CRAWLER_ENABLED`          | vaikimisi `false`; legacy crawler vajab lisaks `-- --legacy-ok` |
 | `CRAWLER_MAX_PAGES`        | Mitu lehekülge igast allikast (pagineerimine)                 |
 | `CRAWLER_FETCH_BODY`       | Kas tõmmata ka artiklite täistekstid                          |
 | `CRAWLER_MAX_BODY_FETCHES` | Viisakuspiir täisteksti päringutele ühe jooksu kohta          |
@@ -162,6 +162,17 @@ algallikas"). Vt [`docs/public-ux-v1.md`](docs/public-ux-v1.md).
 | `OPENAI_API_KEY`           | Tulevikuks; MVP-s ei kasutata                                 |
 
 ## Crawler
+
+**Status:** legacy / not the v1 source of truth. The merge-ready workbooks in
+`data/import/` are the supported ingestion path. `npm run crawl` refuses to run
+unless it is a deliberate local legacy check with both:
+
+```bash
+CRAWLER_ENABLED=true npm run crawl -- --legacy-ok
+```
+
+Do not use the crawler for production ingestion until it is modernized and
+reviewed against the current merge-ready schema and safety expectations.
 
 Allikad (avalikud koda.ee lehed):
 
@@ -175,12 +186,8 @@ piiratud lehtede arv), logib selgelt ja on idempotentne. Dubleerimist
 välditakse kolmel tasandil: kanooniline URL, normaliseeritud pealkiri ja
 sisuräsi (`contentHash`). Sama jooksutamine mitu korda ei tekita duplikaate.
 
-Käsitsi: `npm run crawl` (või `docker compose exec app npm run crawl`).
-Hiljem saab sama käsu panna cron'i, nt:
-
-```
-0 6 * * * cd /opt/koda && docker compose exec -T app npm run crawl
-```
+Käsitsi ainult legacy-kontrolliks: `npm run crawl -- --legacy-ok` koos `CRAWLER_ENABLED=true`.
+Legacy crawlerit ei soovitata cron'i panna enne moderniseerimist.
 
 TODO: artikli täisteksti CSS-selektorid (`ARTICLE_BODY_SELECTORS` failis
 `scripts/crawl.ts`) on koda.ee praeguse Drupali-markupi parim pakkumine – kui
@@ -258,7 +265,7 @@ Skeem ja kood on ette valmistatud, midagi ümber ehitada pole vaja:
 ## Märkused
 
 - `npm run seed` loob **näidissisu** (selgelt koja-laadne, aga illustratiivne),
-  et UI-d saaks kohe testida. Päris sisu tuleb crawleriga; näidiskirjed saab
-  admin-vaates peita või kustutada, kui päris andmed olemas.
+  et UI-d saaks kohe testida. Päris v1 sisu tuleb merge-ready Excelitest;
+  näidiskirjed saab admin-vaates peita või kustutada, kui päris andmed olemas.
 - Teadlikult väljas (spec'i järgi): Kubernetes, väline auth, tasuline otsing,
   chatbot, CRM/liikmesüsteemi integratsioon, e-posti kogumine, Drupali sõltuvus.

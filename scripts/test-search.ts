@@ -19,6 +19,7 @@ import {
   getRelatedTopicsForSector,
   getSectorRelevance,
   getSectorRelevanceExplanation,
+  groupRankedCandidates,
   hasGenericSectorTag,
   hasOnlyGenericOrNoSector,
   hasSpecificNonMatchingSector,
@@ -476,6 +477,22 @@ check("type filter restricts result type", () => {
   const news = cand({ sourceTypeDetail: "meie_uudis", sourceLayer: "koda_news" });
   assert.equal(passesActiveFilters(q, scoreCandidate(ach, q), ach), true);
   assert.equal(passesActiveFilters(q, scoreCandidate(news, q), news), false);
+});
+
+check("grouped result counts distinguish matched rows from displayed capped rows", () => {
+  const scored = [
+    { c: cand({ id: "ach-1", sourceTypeDetail: "toovoit", sourceLayer: "koda_achievement" }), total: 90 },
+    { c: cand({ id: "ach-2", sourceTypeDetail: "toovoit", sourceLayer: "koda_achievement" }), total: 80 },
+    { c: cand({ id: "ach-3", sourceTypeDetail: "toovoit", sourceLayer: "koda_achievement" }), total: 70 },
+    { c: cand({ id: "news-1", sourceTypeDetail: "meie_uudis", sourceLayer: "koda_news" }), total: 60 },
+    { c: cand({ id: "news-2", sourceTypeDetail: "meie_uudis", sourceLayer: "koda_news" }), total: 50 },
+  ];
+  const grouped = groupRankedCandidates(scored, { toovoit: 2, arvamus: 5, uudis: 1, kontekst: 5 });
+  assert.equal(grouped.totalMatchedBeforeCaps, 5);
+  assert.equal(grouped.totalDisplayed, 3);
+  assert.deepEqual(grouped.groupCounts.toovoit, { matched: 3, displayed: 2, cap: 2 });
+  assert.deepEqual(grouped.groupCounts.uudis, { matched: 2, displayed: 1, cap: 1 });
+  assert.deepEqual(grouped.displayed.map((row) => row.c.id), ["ach-1", "ach-2", "news-1"]);
 });
 
 // ---- Param parsing (Task 3) ----

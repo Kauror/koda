@@ -10,7 +10,8 @@ Code map:
 | --- | --- |
 | `src/lib/eligibility.ts` | `isPublicSearchEligible()` — the one public gate (Prisma-free) |
 | `src/lib/content-display.ts` | `publicTitle` / `publicSummary` / `publicUrl` (admin-override aware) |
-| `src/lib/search-core.ts` | query parsing, candidate model, scoring, classification, badges (pure) |
+| `src/lib/sector-relevance.ts` | conservative sector fallback rules and explanations (pure) |
+| `src/lib/search-core.ts` | query parsing, candidate model, scoring, classification, grouping, badges (pure) |
 | `src/lib/search.ts` | DB orchestration: fetch candidates, filter options, evidence, `search()` |
 | `src/app/page.tsx`, `SearchForm.tsx`, `tulemused/page.tsx` | UI |
 
@@ -104,6 +105,12 @@ present), so duplicates never appear as separate cards.
 2. **Koja seisukohad ja arvamused** — formal Koda positions/opinion articles (cap 15)
 3. **Uudised ja arengud** — Koda.ee news/progress updates (cap 12)
 4. **Teema ajalugu ja taust** — annual reports + workgroup context (cap 10)
+
+The response distinguishes counts before and after caps: `totalMatchedBeforeCaps`
+is the deduped matched set, `totalDisplayed` / `total` are rows shown after
+per-group caps, and `groupCounts` reports `matched`, `displayed`, and `cap` per
+group. Public UI copy must not present capped display counts as the full match
+set.
 
 News/progress rows are a first-class public value story: they often explain what
 changed after a position, whether an issue moved forward, and what companies

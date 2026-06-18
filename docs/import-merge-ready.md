@@ -200,12 +200,18 @@ PASS/FAIL status.
 
 ## Relationship to crawler and seed
 
-- **Crawler** (`npm run crawl`) remains available but is **not** the primary
-  path for this v1 import. It writes rows without `externalId`/`sourceDataset`,
-  so it does not collide with merge-ready rows.
+- **Crawler** (`npm run crawl`) is legacy and is **not** the primary path for
+  this v1 import. It refuses to run without `-- --legacy-ok` and
+  `CRAWLER_ENABLED=true`. It writes rows without `externalId`/`sourceDataset`,
+  so it does not collide with merge-ready rows, but it should not be used for
+  production ingestion until modernized.
 - **Seed** (`npm run seed`) is **demo content only** and is not required for the
   merge-ready import. Demo rows can be hidden/deleted in the admin once real
   data is imported.
+- **Future compare-web command:** `import:compare-web` does not exist yet. The
+  intended next step is a read-only comparison script that stages current
+  merge-ready data and reports drift against a fresh web crawl/export without
+  mutating the database.
 
 ## AI
 
