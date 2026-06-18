@@ -14,6 +14,8 @@
     "freshness:audit": "tsx scripts/audit-freshness.ts",
     "data:freshness-audit": "tsx scripts/audit-freshness.ts",
     "data:sector-audit": "tsx scripts/audit-freshness.ts",
+    "data:bundle": "tsx scripts/build-data-bundle.ts",
+    "data:validate-bundle": "tsx scripts/validate-data-bundle.ts",
     "import:validate": "tsx scripts/validate-merge-ready.ts",
     "import:merge-ready": "tsx scripts/import-merge-ready.ts",
     "import:test": "tsx scripts/test-merge-ready.ts",

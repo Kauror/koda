@@ -21,6 +21,7 @@ next-env.d.ts
 # See data/import/README.md for what goes here.
 data/import/*.xlsx
 data/import/reports/
+data/import/bundles/
 
 # Local PGlite verification database (machines without Docker/Postgres).
 .pglite/
