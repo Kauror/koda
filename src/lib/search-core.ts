@@ -118,22 +118,197 @@ export function isAchievement(c: Candidate): boolean {
   return c.sourceTypeDetail === "toovoit" || c.sourceLayer === "koda_achievement";
 }
 
-export type ResultKind = "toovoit" | "seisukoht" | "kontekst";
+export function isKodaNews(c: Candidate): boolean {
+  return c.sourceTypeDetail === "meie_uudis" || c.sourceLayer === "koda_news";
+}
+
+export function isFormalOpinion(c: Candidate): boolean {
+  return c.sourceTypeDetail === "meie_arvamus_article" || c.sourceLayer === "koda_public_opinion";
+}
+
+export function hasGenericSectorTag(c: Candidate): boolean {
+  return c.tegevusalad.some((t) => {
+    const slug = normalizeTitle(t.slug);
+    const name = normalizeTitle(t.name);
+    return (
+      slug.includes("koik-tegevusalad") ||
+      slug.includes("valdkondadeulene") ||
+      name.includes("koik tegevusalad") ||
+      name.includes("valdkondadeulene")
+    );
+  });
+}
+
+export type SectorRelevanceRule = {
+  topicNeedles: string[];
+  keywordNeedles: string[];
+};
+
+const SECTOR_RELEVANCE: Record<string, SectorRelevanceRule> = {
+  "info-ja-side-it": {
+    topicNeedles: [
+      "digi",
+      "digitaal",
+      "tehnoloogia",
+      "andmed",
+      "andmekaitse",
+      "kuber",
+      "kyber",
+      "e kaubandus",
+      "tarbijakaitse",
+      "tehisintellekt",
+      "ai",
+    ],
+    keywordNeedles: [
+      "digi",
+      "digitaliseerimine",
+      "digitaalne",
+      "andmekaitse",
+      "andmed",
+      "kuberturvalisus",
+      "kyberturvalisus",
+      "kuberturve",
+      "kyberturve",
+      "e kaubandus",
+      "e pood",
+      "e arve",
+      "e arved",
+      "tehisintellekt",
+      "infotehnoloogia",
+      "info ja side",
+      "infoyhiskond",
+      "info uhiskond",
+      "it",
+      "platvorm",
+      "tarkvara",
+      "digiteenus",
+      "digiteenused",
+      "automatiseerimine",
+      "elektrooniline",
+    ],
+  },
+  "pollumajandus-metsandus-ja-kalandus": {
+    topicNeedles: [
+      "keskkond",
+      "planeering",
+      "lubade",
+      "toit",
+      "toidu",
+      "mets",
+      "maa",
+      "maakasutus",
+      "pollu",
+      "põllu",
+      "kalandus",
+    ],
+    keywordNeedles: [
+      "pollumajandus",
+      "põllumajandus",
+      "metsandus",
+      "kalandus",
+      "toidu",
+      "toit",
+      "veterinaar",
+      "maa",
+      "maakasutus",
+      "mets",
+      "keskkond",
+      "planeering",
+      "luba",
+      "load",
+    ],
+  },
+};
+
+export function getRelatedTopicsForSector(tegevusalaSlug: string): SectorRelevanceRule | null {
+  const slug = normalizeTitle(tegevusalaSlug);
+  if (SECTOR_RELEVANCE[tegevusalaSlug]) return SECTOR_RELEVANCE[tegevusalaSlug];
+  if ((slug.includes("info") && slug.includes("side")) || slug === "it") {
+    return SECTOR_RELEVANCE["info-ja-side-it"];
+  }
+  if (slug.includes("pollumajandus") || slug.includes("põllumajandus") || slug.includes("metsandus") || slug.includes("kalandus")) {
+    return SECTOR_RELEVANCE["pollumajandus-metsandus-ja-kalandus"];
+  }
+  return null;
+}
+
+function includesNeedle(haystack: string, needle: string): boolean {
+  const n = normalizeTitle(needle);
+  if (!n) return false;
+  if (n.length <= 3) return haystack.split(" ").includes(n);
+  return haystack.includes(n);
+}
+
+function sectorHaystack(c: Candidate): string {
+  return normalizeTitle(
+    [
+      publicTitle(c),
+      publicSummary(c),
+      c.kodaPosition,
+      c.companyRelevance,
+      c.sourceEvidence,
+      c.excerpt,
+      c.bodyText,
+      ...c.valdkonnad.flatMap((t) => [t.slug, t.name]),
+      ...c.tapsustused.flatMap((t) => [t.slug, t.name]),
+    ]
+      .filter(Boolean)
+      .join(" ")
+  );
+}
+
+export type SectorRelevanceScore = {
+  matches: number;
+  topicMatches: number;
+  keywordMatches: number;
+};
+
+export function getSectorRelevance(c: Candidate, sectorSlugs: string[]): SectorRelevanceScore {
+  let matches = 0;
+  let topicMatches = 0;
+  let keywordMatches = 0;
+  if (sectorSlugs.length === 0) return { matches, topicMatches, keywordMatches };
+
+  const hay = sectorHaystack(c);
+  const tagHay = normalizeTitle(
+    [...c.valdkonnad, ...c.tapsustused].flatMap((t) => [t.slug, t.name]).join(" ")
+  );
+  const generic = hasGenericSectorTag(c);
+  const hasNoSectorTags = c.tegevusalad.length === 0;
+
+  for (const sector of sectorSlugs) {
+    const rule = getRelatedTopicsForSector(sector);
+    if (!rule) continue;
+    const topic = rule.topicNeedles.filter((needle) => includesNeedle(tagHay, needle)).length;
+    const keyword = rule.keywordNeedles.filter((needle) => includesNeedle(hay, needle)).length;
+    const strongTopicMatch = topic > 0;
+    const controlledKeywordMatch = keyword > 0 && (generic || hasNoSectorTags);
+    if (!strongTopicMatch && !controlledKeywordMatch) continue;
+    matches++;
+    topicMatches += topic;
+    keywordMatches += keyword;
+  }
+
+  return { matches, topicMatches, keywordMatches };
+}
+
+export type ResultKind = "toovoit" | "arvamus" | "uudis" | "kontekst";
 
 /** Which result group a candidate belongs to. */
 export function assignKind(c: Candidate): ResultKind {
   if (isAchievement(c)) return "toovoit";
   if (c.sourceDataset === "annual_reports" || c.sourceLayer === "koda_workgroup_context")
     return "kontekst";
-  return "seisukoht";
+  if (isKodaNews(c)) return "uudis";
+  return "arvamus";
 }
 
 /** Primary result-type token (for the `type` filter). */
 export function primaryType(c: Candidate): ResultType {
   if (isAchievement(c)) return "toovoit";
   if (c.sourceDataset === "annual_reports") return "aastaaruanne";
-  if (c.sourceTypeDetail === "meie_uudis") return "uudis";
-  if (c.sourceTypeDetail === "meie_arvamus_article" || c.sourceDataset === "opinions")
+  if (isKodaNews(c)) return "uudis";
+  if (isFormalOpinion(c) || c.sourceDataset === "opinions")
     return "arvamus";
   if (c.sourceLayer === "koda_workgroup_context") return "kontekst";
   return "uudis";
@@ -151,6 +326,9 @@ export type ScoreBreakdown = {
   /** distinct topic/sector/tapsustus matches, for the filter predicate */
   valdkondMatches: number;
   tegevusalaMatches: number;
+  sectorFallbackMatches: number;
+  sectorRelatedTopicMatches: number;
+  sectorKeywordMatches: number;
 };
 
 function countTokens(haystack: string, tokens: string[]): number {
@@ -198,9 +376,13 @@ export function scoreCandidate(c: Candidate, q: SearchQuery): ScoreBreakdown {
   const valdkondMatches = c.valdkonnad.filter((t) => q.valdkond.includes(t.slug)).length;
   const tegevusalaMatches = c.tegevusalad.filter((t) => q.tegevusala.includes(t.slug)).length;
   const tapsustusMatches = c.tapsustused.filter((t) => q.tapsustus.includes(t.slug)).length;
+  const sectorRelevance = tegevusalaMatches === 0 ? getSectorRelevance(c, q.tegevusala) : { matches: 0, topicMatches: 0, keywordMatches: 0 };
   let filter = 0;
   filter += Math.min(valdkondMatches, 2) * 40; // topic: high, capped
-  filter += Math.min(tegevusalaMatches, 2) * 28; // sector: medium-high, capped
+  filter += Math.min(tegevusalaMatches, 2) * 44; // exact sector: high, capped
+  filter += Math.min(sectorRelevance.topicMatches, 2) * 14; // related sector topic: medium
+  filter += Math.min(sectorRelevance.matches, 1) * 6; // controlled sector fallback
+  filter += Math.min(sectorRelevance.keywordMatches, 2) * 3; // keyword-only fallback: light
   filter += Math.min(tapsustusMatches, 2) * 8; // provisional: light, capped
 
   // --- D/E/F/G. Static boosts (always applied) ---
@@ -213,6 +395,20 @@ export function scoreCandidate(c: Candidate, q: SearchQuery): ScoreBreakdown {
   else if (c.sourceLayer === "koda_news" || c.sourceLayer === "koda_public_opinion") boost += 12;
   else if (c.publicDisplayStatus === "annual_context") boost += 8;
   else if (c.publicDisplayStatus === "topic_history") boost += 4;
+
+  if (isKodaNews(c)) {
+    const activeTopicOrSector =
+      q.valdkond.length > 0 || q.tegevusala.length > 0 || q.tapsustus.length > 0;
+    const directFilterMatch =
+      valdkondMatches > 0 ||
+      tegevusalaMatches > 0 ||
+      sectorRelevance.matches > 0 ||
+      tapsustusMatches > 0;
+    const textMatch = q.q.length > 0 && text > 0;
+    if (directFilterMatch || textMatch) boost += 12;
+    if (activeTopicOrSector && tegevusalaMatches > 0) boost += 8;
+    else if (activeTopicOrSector && sectorRelevance.matches > 0) boost += 4;
+  }
 
   // Outcome status.
   if (c.outcomeStatus === "achieved") boost += 20;
@@ -235,6 +431,9 @@ export function scoreCandidate(c: Candidate, q: SearchQuery): ScoreBreakdown {
     total: text + filter + boost,
     valdkondMatches,
     tegevusalaMatches,
+    sectorFallbackMatches: sectorRelevance.matches,
+    sectorRelatedTopicMatches: sectorRelevance.topicMatches,
+    sectorKeywordMatches: sectorRelevance.keywordMatches,
   };
 }
 
@@ -245,7 +444,9 @@ export function scoreCandidate(c: Candidate, q: SearchQuery): ScoreBreakdown {
 export function passesActiveFilters(q: SearchQuery, s: ScoreBreakdown, c: Candidate): boolean {
   if (q.q && s.text === 0) return false; // free text given but nothing matched
   if (q.valdkond.length && s.valdkondMatches === 0) return false;
-  if (q.tegevusala.length && s.tegevusalaMatches === 0) return false;
+  if (q.tegevusala.length && s.tegevusalaMatches === 0) {
+    if (s.sectorFallbackMatches === 0) return false;
+  }
   if (q.type.length && !q.type.includes(primaryType(c))) return false;
   return true;
 }
@@ -266,7 +467,7 @@ export function compareRankedCandidates(a: RankedCandidate, b: RankedCandidate):
   const bKind = assignKind(b.c);
   const sameKind = aKind === bKind;
   const neitherAchievement = aKind !== "toovoit" && bKind !== "toovoit";
-  const threshold = sameKind && neitherAchievement ? 32 : sameKind ? 12 : 0;
+  const threshold = sameKind && aKind === "uudis" ? 48 : sameKind && neitherAchievement ? 32 : sameKind ? 12 : 0;
 
   if (threshold > 0 && Math.abs(a.total - b.total) <= threshold) {
     const byDate = dateMs(b.c) - dateMs(a.c);

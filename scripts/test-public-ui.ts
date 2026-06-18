@@ -87,5 +87,14 @@ check("results page shows two achievements before the expand control", () => {
   assert.ok(source.includes("hiddenCards.map"));
 });
 
+check("results page separates news/progress from opinions", () => {
+  const source = readFileSync("src/app/tulemused/page.tsx", "utf8");
+  assert.ok(source.includes("Koja seisukohad ja arvamused"));
+  assert.ok(source.includes("Uudised ja arengud"));
+  assert.ok(source.includes("results.news"));
+  assert.ok(source.includes("valdkondadeüleseid tulemusi"));
+  assert.ok(!source.includes("Vaata allikat"));
+});
+
 console.log(`\n[test] ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exitCode = 1;

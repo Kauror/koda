@@ -27,7 +27,7 @@ import {
 export { parseSearchParams };
 export type { SearchQuery };
 
-const GROUP_CAPS: Record<ResultKind, number> = { toovoit: 12, seisukoht: 15, kontekst: 10 };
+const GROUP_CAPS: Record<ResultKind, number> = { toovoit: 12, arvamus: 15, uudis: 12, kontekst: 10 };
 
 // ---------------------------------------------------------------------------
 // Candidate loading
@@ -152,8 +152,10 @@ export type SearchResults = {
   query: SearchQuery;
   achievements: ResultCard[];
   positions: ResultCard[];
+  news: ResultCard[];
   context: ResultCard[];
   total: number;
+  includesRelatedSectorMatches: boolean;
 };
 
 /** Drop duplicate/canonical rows so the same content is not shown twice. */
@@ -206,7 +208,8 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
   // Group by kind, applying caps.
   const groups: Record<ResultKind, { c: Candidate; total: number }[]> = {
     toovoit: [],
-    seisukoht: [],
+    arvamus: [],
+    uudis: [],
     kontekst: [],
   };
   for (const s of deduped) {
@@ -214,8 +217,14 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
     if (groups[kind].length < GROUP_CAPS[kind]) groups[kind].push(s);
   }
 
-  const displayed = [...groups.toovoit, ...groups.seisukoht, ...groups.kontekst];
+  const displayed = [...groups.toovoit, ...groups.arvamus, ...groups.uudis, ...groups.kontekst];
   const evidence = await buildEvidence(displayed.map((s) => s.c));
+  const includesRelatedSectorMatches =
+    query.tegevusala.length > 0 &&
+    displayed.some((s) => {
+      const breakdown = scoreCandidate(s.c, query);
+      return breakdown.tegevusalaMatches === 0 && breakdown.sectorFallbackMatches > 0;
+    });
 
   const toCard = (s: { c: Candidate; total: number }): ResultCard => ({
     id: s.c.id,
@@ -239,9 +248,11 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
   return {
     query,
     achievements: groups.toovoit.map(toCard),
-    positions: groups.seisukoht.map(toCard),
+    positions: groups.arvamus.map(toCard),
+    news: groups.uudis.map(toCard),
     context: groups.kontekst.map(toCard),
     total: displayed.length,
+    includesRelatedSectorMatches,
   };
 }
 

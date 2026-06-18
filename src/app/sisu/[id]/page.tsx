@@ -98,7 +98,14 @@ function AchievementDetail({ item }: { item: ContentDetail }) {
 }
 
 function StandardDetail({ item }: { item: ContentDetail }) {
-  const mainTexts = uniquePublicTexts([item.kodaPosition, item.sourceEvidence, item.summary, item.bodySnippet]);
+  const mainTexts = item.isNews
+    ? uniquePublicTexts([item.summary, item.sourceEvidence, item.bodySnippet])
+    : uniquePublicTexts([item.kodaPosition, item.sourceEvidence, item.summary, item.bodySnippet]);
+  const newsPositionTexts = item.isNews
+    ? uniquePublicTexts([item.kodaPosition]).filter(
+        (text) => !mainTexts.some((main) => main === text)
+      )
+    : [];
   const relevanceTexts = uniquePublicTexts([item.companyRelevance]).filter(
     (text) => !mainTexts.some((main) => main === text)
   );
@@ -107,11 +114,20 @@ function StandardDetail({ item }: { item: ContentDetail }) {
     <>
       {mainTexts.length > 0 && (
         <section className="card">
-          <h2>Koja seisukoht ja mõju</h2>
+          <h2>{item.isNews ? "Uudise kokkuvõte" : "Koja seisukoht ja mõju"}</h2>
           {mainTexts.map((text) => (
             <p key={text}>{text}</p>
           ))}
           <SourceButton item={item} />
+        </section>
+      )}
+
+      {newsPositionTexts.length > 0 && (
+        <section className="card">
+          <h2>Koja seisukoht ja mõju</h2>
+          {newsPositionTexts.map((text) => (
+            <p key={text}>{text}</p>
+          ))}
         </section>
       )}
 

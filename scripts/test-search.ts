@@ -16,6 +16,10 @@ import {
   type SearchQuery,
   assignKind,
   compareRankedCandidates,
+  getRelatedTopicsForSector,
+  getSectorRelevance,
+  hasGenericSectorTag,
+  isKodaNews,
   parseSearchParams,
   passesActiveFilters,
   primaryType,
@@ -23,6 +27,7 @@ import {
   scoreCandidate,
 } from "../src/lib/search-core";
 import { outcomeLabel, sourceLabel } from "../src/lib/labels";
+import { sourceCtaLabel } from "../src/lib/content-display";
 
 let passed = 0;
 let failed = 0;
@@ -234,8 +239,19 @@ check("annual report classified as kontekst", () => {
   assert.equal(primaryType(c), "aastaaruanne");
   assert.equal(assignKind(c), "kontekst");
 });
-check("news classified as seisukoht", () => {
-  assert.equal(assignKind(cand({ sourceTypeDetail: "meie_uudis", sourceLayer: "koda_news" })), "seisukoht");
+check("news classified as uudis/news group", () => {
+  const c = cand({ sourceTypeDetail: "meie_uudis", sourceLayer: "koda_news" });
+  assert.equal(primaryType(c), "uudis");
+  assert.equal(assignKind(c), "uudis");
+  assert.equal(isKodaNews(c), true);
+});
+check("Koda opinion/article classified as arvamus group", () => {
+  const c = cand({
+    sourceTypeDetail: "meie_arvamus_article",
+    sourceLayer: "koda_public_opinion",
+  });
+  assert.equal(primaryType(c), "arvamus");
+  assert.equal(assignKind(c), "arvamus");
 });
 
 check("valdkond filter excludes non-matching", () => {
@@ -249,6 +265,88 @@ check("tegevusala filter works", () => {
   const no = cand({ tegevusalad: [] });
   assert.equal(passesActiveFilters(q, scoreCandidate(yes, q), yes), true);
   assert.equal(passesActiveFilters(q, scoreCandidate(no, q), no), false);
+});
+check("sector-only search includes sector-matching Koda news", () => {
+  const q: SearchQuery = { ...EMPTY, tegevusala: ["pollumajandus-metsandus-ja-kalandus"] };
+  const news = cand({
+    tegevusalad: [{ slug: "pollumajandus-metsandus-ja-kalandus", name: "Põllumajandus" }],
+  });
+  assert.equal(passesActiveFilters(q, scoreCandidate(news, q), news), true);
+});
+check("generic sector fallback does not flood unrelated sector searches", () => {
+  const q: SearchQuery = { ...EMPTY, tegevusala: ["pollumajandus-metsandus-ja-kalandus"] };
+  const generic = cand({
+    publicPriority: "medium",
+    tegevusalad: [{ slug: "koik-tegevusalad-valdkondadeulene", name: "Kõik tegevusalad / valdkondadeülene" }],
+  });
+  assert.equal(hasGenericSectorTag(generic), true);
+  assert.equal(passesActiveFilters(q, scoreCandidate(generic, q), generic), false);
+});
+check("related generic sector row can appear below sector-specific matches", () => {
+  const q: SearchQuery = { ...EMPTY, tegevusala: ["info-ja-side-it"] };
+  const specific = cand({
+    id: "specific",
+    title: "IT teenuste areng",
+    tegevusalad: [{ slug: "info-ja-side-it", name: "Info ja side / IT" }],
+  });
+  const generic = cand({
+    id: "generic",
+    title: "Andmekaitse ja digiteenused ettevõtjatele",
+    tegevusalad: [{ slug: "koik-tegevusalad-valdkondadeulene", name: "Kõik tegevusalad / valdkondadeülene" }],
+    valdkonnad: [{ slug: "digi-andmed-ja-tehnoloogia", name: "Digi, andmed ja tehnoloogia" }],
+  });
+  assert.equal(passesActiveFilters(q, scoreCandidate(generic, q), generic), true);
+  assert.ok(scoreCandidate(specific, q).total > scoreCandidate(generic, q).total);
+});
+check("Info/IT sector has deterministic related topic mapping", () => {
+  const rule = getRelatedTopicsForSector("info-ja-side-it");
+  assert.ok(rule);
+  assert.ok(rule.topicNeedles.some((needle) => needle.includes("digi")));
+});
+check("Info/IT sector includes digital/e-commerce/cyber rows without exact sector tag", () => {
+  const q: SearchQuery = { ...EMPTY, tegevusala: ["info-ja-side-it"] };
+  const digital = cand({
+    id: "digital",
+    sourceLayer: "koda_public_opinion",
+    sourceTypeDetail: "meie_arvamus_article",
+    title: "E-kaubanduse ja andmekaitse muudatused",
+    tegevusalad: [{ slug: "koik-tegevusalad-valdkondadeulene", name: "Kõik tegevusalad / valdkondadeülene" }],
+    valdkonnad: [{ slug: "e-kaubandus-ja-tarbijakaitse", name: "E-kaubandus ja tarbijakaitse" }],
+  });
+  const relevance = getSectorRelevance(digital, q.tegevusala);
+  assert.ok(relevance.matches > 0);
+  assert.equal(passesActiveFilters(q, scoreCandidate(digital, q), digital), true);
+});
+check("Koda news can appear in Info/IT sector results through related topic fallback", () => {
+  const q: SearchQuery = { ...EMPTY, tegevusala: ["info-ja-side-it"] };
+  const news = cand({
+    id: "news-it",
+    sourceLayer: "koda_news",
+    sourceTypeDetail: "meie_uudis",
+    title: "Kübertugevuse ja tehisintellekti nõuded ettevõtjatele",
+    tegevusalad: [{ slug: "koik-tegevusalad-valdkondadeulene", name: "Kõik tegevusalad / valdkondadeülene" }],
+    valdkonnad: [{ slug: "digi-andmed-ja-tehnoloogia", name: "Digi, andmed ja tehnoloogia" }],
+  });
+  assert.equal(assignKind(news), "uudis");
+  assert.equal(passesActiveFilters(q, scoreCandidate(news, q), news), true);
+});
+check("recent relevant news wins within the news group", () => {
+  const q: SearchQuery = { ...EMPTY, tegevusala: ["pollumajandus-metsandus-ja-kalandus"] };
+  const oldNews = cand({
+    id: "old-news",
+    date: new Date("2022-01-01"),
+    tegevusalad: [{ slug: "pollumajandus-metsandus-ja-kalandus", name: "Põllumajandus" }],
+  });
+  const newNews = cand({
+    id: "new-news",
+    date: new Date("2026-01-01"),
+    tegevusalad: [{ slug: "pollumajandus-metsandus-ja-kalandus", name: "Põllumajandus" }],
+  });
+  const sorted = [
+    { c: oldNews, total: scoreCandidate(oldNews, q).total },
+    { c: newNews, total: scoreCandidate(newNews, q).total },
+  ].sort(compareRankedCandidates);
+  assert.equal(sorted[0].c.id, "new-news");
 });
 check("query-only search requires a text match", () => {
   const q: SearchQuery = { ...EMPTY, q: "energia" };
@@ -341,6 +439,10 @@ check("source labels are Estonian + correct", () => {
   assert.equal(sourceLabel("koda_news", "meie_uudis"), "Koja uudis");
   assert.equal(sourceLabel("annual_report", "annual_report_policy_context"), "Aastaaruande kontekst");
   assert.equal(sourceLabel("opinion_file", "opinion_file"), "Koja arvamus / toetav allikas");
+});
+check("Koda news uses news label and CTA", () => {
+  assert.equal(sourceLabel("koda_news", "meie_uudis"), "Koja uudis");
+  assert.equal(sourceCtaLabel({ sourceLayer: "koda_news", sourceTypeDetail: "meie_uudis" }), "Loe uudist");
 });
 check("outcome labels are Estonian", () => {
   assert.equal(outcomeLabel("achieved"), "Saavutatud");

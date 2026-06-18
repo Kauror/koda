@@ -18,6 +18,7 @@ import {
   type Candidate,
   buildBadges,
   isAchievement,
+  isKodaNews,
   rankRelatedOpinions,
 } from "./search-core";
 import { candidateInclude, toCandidate } from "./search";
@@ -62,6 +63,7 @@ export type ContentDetail = {
   year: number | null;
   reportYear: number | null;
   isAchievement: boolean;
+  isNews: boolean;
   badges: string[];
   sourceLabel: string;
   datasetLabel: string;
@@ -128,6 +130,7 @@ export async function getContentDetail(id: string): Promise<ContentDetail | null
     year: item.year,
     reportYear: item.reportYear,
     isAchievement: isAchievement(c),
+    isNews: isKodaNews(c),
     badges: buildBadges(c),
     sourceLabel: sourceLabel(c.sourceLayer, c.sourceTypeDetail),
     datasetLabel: datasetLabel(c.sourceDataset),

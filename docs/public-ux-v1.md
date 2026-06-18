@@ -21,10 +21,21 @@ The homepage keeps example searches, DB-driven topic chips, and links to koda.ee
 Results are grouped as:
 
 1. `Töövõidud`
-2. `Koja seisukohad ja selgitused`
-3. `Taust ja teema ajalugu`
+2. `Koja seisukohad ja arvamused`
+3. `Uudised ja arengud`
+4. `Taust ja teema ajalugu`
 
 The `Töövõidud` group is compact by default: only the first two cards are shown, and the rest sit behind `Näita veel töövõite (X)`.
+
+Koda.ee news/progress rows are shown separately from formal opinions. They are
+useful because they often explain newer practical changes, follow-up
+developments, warnings, or progress after an earlier Koda position.
+
+Tegevusala filters are treated as relevance filters. Exact sector matches rank
+first, but valdkondadeülene material can appear when deterministic sector-topic
+mapping shows it is clearly related, for example IT/digital/e-commerce/cyber
+content under `Info ja side / IT`. When broader matches are included, the
+results page may show a short reader-facing note without debug wording.
 
 Cards use clean short summaries and contextual public source CTAs:
 
@@ -52,6 +63,10 @@ Achievement pages are centered on `Koja töövõit` with:
 - `Mida saavutati?`
 
 Non-achievement pages show `Koja seisukoht ja mõju` and `Miks see ettevõtjale oluline on?` only when those sections add distinct content.
+
+News pages use news wording by default: `Uudise kokkuvõte`, badge `Koja uudis`
+/ `Uudis`, and CTA `Loe uudist`. `Koja seisukoht ja mõju` appears on a news
+detail page only when the row has distinct position/impact text.
 
 Public detail pages no longer show:
 

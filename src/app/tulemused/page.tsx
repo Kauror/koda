@@ -171,7 +171,11 @@ export default async function ResultsPage({
   if (query.type.length) editParams.set("type", query.type.join(","));
   const editQuery = editParams.toString();
   const fromQuery = editQuery;
-  const onlyContext = hasResults && results.achievements.length === 0 && results.positions.length === 0;
+  const onlyContext =
+    hasResults &&
+    results.achievements.length === 0 &&
+    results.positions.length === 0 &&
+    results.news.length === 0;
   const topicSuggestions = options.valdkonnad.slice(0, 6);
 
   return (
@@ -181,8 +185,8 @@ export default async function ResultsPage({
           <span className="eyebrow">Allikapõhine ülevaade koja tööst</span>
           <h1>{query.q ? `Otsing: „${query.q}"` : "Mida on koda teinud ja öelnud"}</h1>
           <p className="sub">
-            Allikapõhine ülevaade koja avalikest töövõitudest, seisukohtadest ja aastaaruannete
-            taustast.
+            Allikapõhine ülevaade koja avalikest töövõitudest, seisukohtadest, uudistest ja
+            aastaaruannete taustast.
           </p>
           {(query.q || activeFilters.length > 0) && (
             <div className="filter-summary">
@@ -203,11 +207,17 @@ export default async function ResultsPage({
       <div className="container results-body">
         {hasResults && <p className="results-count-line">Leidsime {results.total} sobivat tulemust.</p>}
 
+        {results.includesRelatedSectorMatches && (
+          <div className="card notice" style={{ marginTop: 16 }}>
+            <p>Näitan ka valdkondadeüleseid tulemusi, mis on valitud tegevusalaga seotud.</p>
+          </div>
+        )}
+
         {onlyContext && (
           <div className="card notice" style={{ marginTop: 16 }}>
             <p>
               Leidsime peamiselt tausta ja teema ajalugu. Proovi laiemat märksõna või eemalda
-              filtreid, et näha ka konkreetseid töövõite ja seisukohti.
+              filtreid, et näha ka konkreetseid töövõite, seisukohti ja uudiseid.
             </p>
           </div>
         )}
@@ -257,9 +267,16 @@ export default async function ResultsPage({
           compactAchievements
         />
         <Section
-          title="Koja seisukohad ja selgitused"
-          sub="Koja avalikud seisukohad, ettepanekud, hoiatused ja selgitavad uudised."
+          title="Koja seisukohad ja arvamused"
+          sub="Koja avalikud seisukohad, ettepanekud ja hoiatused."
           cards={results.positions}
+          sessionId={sessionId}
+          fromQuery={fromQuery}
+        />
+        <Section
+          title="Uudised ja arengud"
+          sub="Koda.ee uudised, praktilised muutused ja teema edenemise vahekokkuvõtted."
+          cards={results.news}
           sessionId={sessionId}
           fromQuery={fromQuery}
         />

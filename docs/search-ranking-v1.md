@@ -76,15 +76,21 @@ per-token in title = +12; in summary/kodaPosition/companyRelevance = +8; in
 source evidence/excerpt = +5; in body = +2. Title/summary/url use the admin
 overrides first.
 
-**Filter:** valdkond match +40 each (cap 2); tegevusala +28 each (cap 2);
-tapsustus +8 each (cap 2).
+**Filter:** valdkond match +40 each (cap 2); exact tegevusala +44 each (cap
+2); related tegevusala topic fallback +14 each (cap 2), controlled sector
+fallback +6, related keyword fallback +3 each (cap 2); tapsustus +8 each (cap
+2).
 
 **Boost:** achievement **+90** (headline result type), else
 `main_result_candidate` +30, else public news/opinion +12, else `annual_context`
 +8, else `topic_history` +4. Outcome: `achieved` +20, `partially_achieved` +14,
 `ongoing` +10. Priority: high +15 / medium +6. `manualWeight × 10`. Evergreen +6.
-Recency: small, capped at +10 (≤90 days), so a fresh low-value news row cannot
+Recency: small, capped at +16 (≤90 days), so a fresh low-value news row cannot
 outrank a strong older töövõit.
+
+Koda-owned news/progress rows (`meie_uudis` / `koda_news`) get an additional
+boost only when they match the active query, topic, or sector. This keeps
+relevant newer developments visible without letting unrelated news dominate.
 
 **Dedup:** by `contentHash` (keep highest score, prefer canonical on ties) and by
 `canonicalContentId` (drop a `possible_duplicate` when its canonical sibling is
@@ -92,11 +98,35 @@ present), so duplicates never appear as separate cards.
 
 ## Result grouping
 
-`search()` returns three capped, independently-sorted groups:
+`search()` returns four capped, independently-sorted groups:
 
 1. **Töövõidud** — `sourceTypeDetail = toovoit` (cap 12)
-2. **Koja seisukohad ja selgitused** — public web rows / public opinions (cap 15)
-3. **Teema ajalugu ja taust** — annual reports + workgroup context (cap 10)
+2. **Koja seisukohad ja arvamused** — formal Koda positions/opinion articles (cap 15)
+3. **Uudised ja arengud** — Koda.ee news/progress updates (cap 12)
+4. **Teema ajalugu ja taust** — annual reports + workgroup context (cap 10)
+
+News/progress rows are a first-class public value story: they often explain what
+changed after a position, whether an issue moved forward, and what companies
+need to know now. They are labelled as `Uudis` / `Koja uudis` and use the public
+CTA `Loe uudist`, not opinion wording.
+
+Tegevusala filters are relevance filters, not hard exclusions. Exact sector
+matches rank first. Rows can also pass through a small deterministic
+sector-topic mapping when their imported `valdkond` / `tapsustus` tags or public
+text clearly match the selected sector. Generic `Kõik tegevusalad /
+valdkondadeülene` content can appear only when the mapping finds a related
+topic/content signal; unrelated generic rows stay excluded.
+
+The first mapped sectors are:
+
+- `info-ja-side-it`: digitalisation, data, technology, cybersecurity,
+  e-commerce, consumer protection, AI/tehisintellekt, platforms, software,
+  e-invoices and other digital-service terms.
+- `pollumajandus-metsandus-ja-kalandus`: agriculture, forestry, fishing, food,
+  veterinary, land-use, environment, planning and permit terms.
+
+Extend the mapping in `getRelatedTopicsForSector(tegevusalaSlug)` in
+`src/lib/search-core.ts` when another sector needs curated horizontal topics.
 
 ## Evidence behaviour
 
@@ -125,3 +155,7 @@ unless an admin sets `adminVisibilityOverride = true` on a specific one.
 - A public result detail page with full evidence listing.
 - AI summaries/relevance (`AI_ENABLED=false`).
 - Smarter Estonian stemming/typo tolerance.
+- Latest-news crawler/data freshness improvements when public Koda.ee contains
+  newer news than the imported DB. Use `npm run data:freshness-audit -- --tegevusala=<slug>`
+  or `npm run data:sector-audit -- --tegevusala=<slug>` to inspect read-only
+  coverage before changing ingestion.
