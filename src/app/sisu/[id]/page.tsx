@@ -106,10 +106,6 @@ function StandardDetail({ item }: { item: ContentDetail }) {
         (text) => !mainTexts.some((main) => main === text)
       )
     : [];
-  const relevanceTexts = uniquePublicTexts([item.companyRelevance]).filter(
-    (text) => !mainTexts.some((main) => main === text)
-  );
-
   return (
     <>
       {mainTexts.length > 0 && (
@@ -131,16 +127,7 @@ function StandardDetail({ item }: { item: ContentDetail }) {
         </section>
       )}
 
-      {relevanceTexts.length > 0 && (
-        <section className="card">
-          <h2>Miks see ettevõtjale oluline on?</h2>
-          {relevanceTexts.map((text) => (
-            <p key={text}>{text}</p>
-          ))}
-        </section>
-      )}
-
-      {mainTexts.length === 0 && relevanceTexts.length === 0 && item.sourceUrl && (
+      {mainTexts.length === 0 && item.sourceUrl && (
         <section className="card">
           <h2>Koda.ee materjal</h2>
           <SourceButton item={item} />

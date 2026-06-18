@@ -4,6 +4,7 @@ import { sourceLabel } from "../src/lib/labels";
 import {
   type Candidate,
   getSectorRelevance,
+  getSectorRelevanceExplanation,
   hasGenericSectorTag,
   parseSearchParams,
   scoreCandidate,
@@ -76,6 +77,10 @@ function argValue(name: string): string | null {
   const prefix = `--${name}=`;
   const hit = process.argv.find((arg) => arg.startsWith(prefix));
   return hit ? hit.slice(prefix.length).trim() || null : null;
+}
+
+function hasFlag(name: string): boolean {
+  return process.argv.includes(`--${name}`);
 }
 
 function isOpinion(row: Row): boolean {
@@ -153,8 +158,44 @@ function printMap(label: string, map: Map<string, number>) {
   }
 }
 
+function fmtBool(value: boolean): string {
+  return value ? "yes" : "no";
+}
+
+function fmtList(values: string[]): string {
+  return values.length ? values.join(", ") : "-";
+}
+
+function printSectorExplanation(label: string, row: Row, sector: string, score: number) {
+  const explanation = getSectorRelevanceExplanation(toCandidate(row), sector);
+  console.log(
+    `  ${label} | score=${score} | decision=${explanation.finalInclude ? "include" : "exclude"} | fallback=${
+      explanation.fallbackAllowed ? "allowed" : "blocked"
+    } | reason=${explanation.fallbackBlockedReason ?? "-"} | ${row.externalId ?? row.id} | ${row.title}`
+  );
+  console.log(
+    `    exact=${fmtBool(explanation.exactSectorMatch)} generic=${fmtBool(
+      explanation.hasGenericSectorTag
+    )} noSector=${fmtBool(explanation.hasNoSectorTags)} specificNonmatching=${fmtBool(
+      explanation.hasSpecificNonMatchingSector
+    )}`
+  );
+  console.log(`    sectorTags=${fmtList(explanation.sectorTags)}`);
+  console.log(
+    `    topic=${fmtList(explanation.topicMatchedTerms)} keyword=${fmtList(
+      explanation.keywordMatchedTerms
+    )} lowerKeyword=${fmtList(explanation.lowerSignalKeywordMatchedTerms)}`
+  );
+  console.log(
+    `    singleKeyword=${fmtList(explanation.singleKeywordMatchedTerms)} anchor=${fmtList(
+      explanation.anchorMatchedTerms
+    )} exclusion=${fmtList(explanation.exclusionMatchedTerms)}`
+  );
+}
+
 async function main() {
   const sector = argValue("tegevusala") ?? argValue("sector");
+  const explain = hasFlag("explain");
   const { prisma } = await import("../src/lib/db");
   const rows: Row[] = await prisma.contentItem.findMany({
     select: {
@@ -316,6 +357,36 @@ async function main() {
           row.date?.toISOString().slice(0, 10) ?? "no date"
         } | ${row.sourceTypeDetail ?? "(empty)"} | ${row.sourceLayer ?? "(empty)"} | ${row.title}`
       );
+    }
+
+    if (explain) {
+      console.log(`[sector:${sector}] explanation for top exact-tagged rows:`);
+      for (const { row, score } of exactTop.slice(0, 10)) {
+        printSectorExplanation("exact", row, sector, score);
+      }
+
+      const excludedSuspiciousRows = publicRows
+        .filter((row) => !hasSector(row, sector))
+        .map((row) => {
+          const candidate = toCandidate(row);
+          const explanation = getSectorRelevanceExplanation(candidate, sector);
+          const score = scoreCandidate(candidate, q).total;
+          const suspicious =
+            explanation.exclusionMatchedTerms.length > 0 ||
+            explanation.hasSpecificNonMatchingSector ||
+            explanation.topicMatchedTerms.length > 0 ||
+            explanation.keywordMatchedTerms.length > 0 ||
+            explanation.lowerSignalKeywordMatchedTerms.length > 0;
+          return { row, score, suspicious };
+        })
+        .filter((item) => item.suspicious)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 20);
+
+      console.log(`[sector:${sector}] explanation for fallback/excluded suspicious rows:`);
+      for (const { row, score } of excludedSuspiciousRows) {
+        printSectorExplanation("candidate", row, sector, score);
+      }
     }
 
     const { search } = await import("../src/lib/search");

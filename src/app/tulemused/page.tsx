@@ -182,11 +182,11 @@ export default async function ResultsPage({
     <main>
       <div className="results-header">
         <div className="container">
-          <span className="eyebrow">Allikapõhine ülevaade koja tööst</span>
+          <span className="eyebrow">Ülevaade koja tööst</span>
           <h1>{query.q ? `Otsing: „${query.q}"` : "Mida on koda teinud ja öelnud"}</h1>
           <p className="sub">
-            Allikapõhine ülevaade koja avalikest töövõitudest, seisukohtadest, uudistest ja
-            aastaaruannete taustast.
+            Siit saad mugavalt otsida Sind huvitavaid Eesti Kaubandus-Tööstuskoja töövõite,
+            koja seisukohti ja teemade teemasid millega koda on läbi aastate tegelenud.
           </p>
           {(query.q || activeFilters.length > 0) && (
             <div className="filter-summary">

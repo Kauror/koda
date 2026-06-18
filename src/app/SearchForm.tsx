@@ -202,10 +202,6 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
         </>
       )}
 
-      <p className="privacy-note">
-        Me ei küsi sinu ettevõtte nime ega isikuandmeid. Valitud filtreid võime kasutada anonüümselt
-        selle tööriista parandamiseks.
-      </p>
     </form>
   );
 }

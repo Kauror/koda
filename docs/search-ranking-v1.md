@@ -110,23 +110,46 @@ changed after a position, whether an issue moved forward, and what companies
 need to know now. They are labelled as `Uudis` / `Koja uudis` and use the public
 CTA `Loe uudist`, not opinion wording.
 
-Tegevusala filters are relevance filters, not hard exclusions. Exact sector
-matches rank first. Rows can also pass through a small deterministic
+Tegevusala filters are conservative relevance filters. Exact sector
+matches rank first and always pass. Rows can also pass through a small deterministic
 sector-topic mapping when their imported `valdkond` / `tapsustus` tags or public
 text clearly match the selected sector. Generic `Kõik tegevusalad /
 valdkondadeülene` content can appear only when the mapping finds a related
 topic/content signal; unrelated generic rows stay excluded.
 
+Current fallback is narrower than ordinary text search: it normally applies only
+to rows with no tegevusala tag or only the generic all-sectors tag. Rows tagged
+to another specific sector do not pass a selected sector through fallback unless
+a future mapping explicitly allows that cross-sector case. Fallback eligibility
+uses high-signal fields: imported `valdkond` / `tapsustus` tags, public title,
+display title and summary/admin summary. Lower-confidence fields such as
+`companyRelevance`, `kodaPosition`, and `sourceEvidence` are shown in
+`--explain` diagnostics, but do not by themselves make fallback eligible. Full
+`bodyText` and long scraped excerpts are not used as sector fallback eligibility
+signals.
+
 The first mapped sectors are:
 
-- `info-ja-side-it`: digitalisation, data, technology, cybersecurity,
-  e-commerce, consumer protection, AI/tehisintellekt, platforms, software,
-  e-invoices and other digital-service terms.
-- `pollumajandus-metsandus-ja-kalandus`: agriculture, forestry, fishing, food,
-  veterinary, land-use, environment, planning and permit terms.
+- `info-side-ja-it` (alias `info-ja-side-it`): IT, info ja side, software,
+  digital services, digital identity, e-state/e-services where technology is
+  central, data protection, cybersecurity, AI/tehisintellekt, algorithms,
+  telecommunications/electronic communications, information security, and
+  clearly technology-centric platforms. E-commerce, e-shops, consumer
+  protection, trade/retail, packaging, waste, environmental/green claims,
+  product labelling, goods destruction and ordinary sales-channel obligations
+  are fallback exclusions unless the row has an exact Info/IT sector tag.
+- `pollumajandus-metsandus-ja-kalandus`: agriculture, agriculture producers,
+  forestry, fishing, and anchored food production/veterinary/land-use cases.
+  Broad terms such as environment, permit, planning, land, food, packaging and
+  waste are not enough on their own; fallback requires an agriculture, forestry
+  or fishing anchor.
 
 Extend the mapping in `getRelatedTopicsForSector(tegevusalaSlug)` in
 `src/lib/search-core.ts` when another sector needs curated horizontal topics.
+Add new mappings conservatively: start exact-only, list safe sector-specific
+terms, add explicit fallback exclusions for neighbouring domains, and verify
+with `npm run data:sector-audit -- --tegevusala=<slug> --explain` before
+promoting broad terms.
 
 ## Evidence behaviour
 

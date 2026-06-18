@@ -288,7 +288,7 @@ main.container-narrow {
 
 fieldset {
   border: none;
-  margin: 0 0 26px;
+  margin: 0 0 18px;
   padding: 0;
 }
 
@@ -309,20 +309,21 @@ legend,
 
 .option-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 6px;
 }
 
 .option-pill {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
-  padding: 10px 13px;
+  padding: 7px 10px;
   background: #fff;
   cursor: pointer;
-  font-size: 0.92rem;
+  font-size: 0.86rem;
+  line-height: 1.28;
   user-select: none;
   transition: border-color 0.1s ease, background 0.1s ease;
 }
@@ -387,6 +388,7 @@ textarea {
 }
 
 .privacy-note {
+  display: none;
   font-size: 0.83rem;
   color: var(--color-muted);
   margin-top: 16px;
@@ -1132,8 +1134,22 @@ table.admin-table th {
 }
 
 /* Search form: free text is the primary action. */
+.search-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.search-sector {
+  order: 1;
+}
+
+.search-form > fieldset:not(.search-sector) {
+  order: 3;
+}
+
 .search-primary {
-  margin-bottom: 22px;
+  order: 4;
+  margin-bottom: 0;
 }
 
 .search-row {
@@ -1155,15 +1171,17 @@ table.admin-table th {
 }
 
 .disclosure {
+  order: 2;
   margin-bottom: 20px;
 }
 
 /* Selected-filter chips (removable). */
 .selected-filters {
+  order: 5;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin: 0 0 20px;
+  margin: 14px 0 0;
 }
 
 .chip-remove {

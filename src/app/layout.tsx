@@ -54,17 +54,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <footer className="site-footer">
           <div className="container">
             <p>
-              See on Eesti Kaubandus-Tööstuskoja avaliku sisu põhjal koostatud tööriist. Kõik
-              materjalid pärinevad lehelt{" "}
-              <a href="https://www.koda.ee" target="_blank" rel="noopener noreferrer">
-                koda.ee
-              </a>
-              .
-            </p>
-            <p>
-              Privaatsus: me ei küsi ega salvesta sinu ettevõtte nime, sinu nime ega e-posti
-              aadressi. Valitud filtreid ja klikke võime kasutada anonüümselt tööriista
-              parandamiseks.
+              Privaatsus: me ei küsi ega salvesta sinu ettevõtte nime, sinu nime ega e-posti aadressi.
+              Valitud filtreid võime kasutada anonüümselt tööriista parandamiseks.
             </p>
           </div>
         </footer>

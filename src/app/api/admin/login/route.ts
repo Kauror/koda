@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
     return redirectTo(req, "/admin/login?viga=1");
   }
 
-  const res = NextResponse.redirect(new URL("/admin", req.url), 303);
+  const res = redirectTo(req, "/admin");
   res.cookies.set(ADMIN_COOKIE, adminCookieValue(), adminCookieOptions());
   return res;
 }

@@ -8,7 +8,7 @@ export type SiteTextDefault = {
 export const SITE_TEXT_DEFAULTS = [
   {
     key: "homepage.hero.eyebrow",
-    valueEt: "Allikapõhine ülevaade koja tööst",
+    valueEt: "Ülevaade koja tööst",
     description: "Avalehe kangelase ala väike ülarida.",
     group: "homepage.hero",
   },
@@ -21,14 +21,13 @@ export const SITE_TEXT_DEFAULTS = [
   {
     key: "homepage.hero.lead",
     valueEt:
-      "Allikapõhine ülevaade sellest, mida Eesti Kaubandus-Tööstuskoda on ettevõtjate huvide kaitseks teinud ja öelnud. Otsi konkreetseid töövõite, koja seisukohti ja teemade tausta - kõik viidetega algallikatele.",
+      "Siit saad mugavalt otsida Sind huvitavaid Eesti Kaubandus-Tööstuskoja töövõite, koja seisukohti ja teemade teemasid millega koda on läbi aastate tegelenud",
     description: "Avalehe põhiline sissejuhatav tekst.",
     group: "homepage.hero",
   },
   {
     key: "homepage.hero.note",
-    valueEt:
-      "See ei ole vestlusrobot ega uudistearhiiv. Tulemused põhinevad koja avalikel materjalidel ja indekseeritud allikatel.",
+    valueEt: "",
     description: "Lühike täpsustus avalehe sissejuhatuse all.",
     group: "homepage.hero",
   },
@@ -83,6 +82,18 @@ export const SITE_TEXT_DEFAULTS_BY_KEY = new Map<string, SiteTextDefault>(
   SITE_TEXT_DEFAULTS.map((item) => [item.key, item])
 );
 
+const LEGACY_SITE_TEXT_VALUES = new Map<string, string>([
+  ["homepage.hero.eyebrow", "Allikapõhine ülevaade koja tööst"],
+  [
+    "homepage.hero.lead",
+    "Allikapõhine ülevaade sellest, mida Eesti Kaubandus-Tööstuskoda on ettevõtjate huvide kaitseks teinud ja öelnud. Otsi konkreetseid töövõite, koja seisukohti ja teemade tausta - kõik viidetega algallikatele.",
+  ],
+  [
+    "homepage.hero.note",
+    "See ei ole vestlusrobot ega uudistearhiiv. Tulemused põhinevad koja avalikel materjalidel ja indekseeritud allikatel.",
+  ],
+]);
+
 export function defaultSiteTextMap(): SiteTextMap {
   return Object.fromEntries(SITE_TEXT_DEFAULTS.map((item) => [item.key, item.valueEt])) as SiteTextMap;
 }
@@ -91,6 +102,8 @@ export function resolveSiteTexts(rows: SiteTextRowLike[]): SiteTextMap {
   const texts = defaultSiteTextMap();
   for (const row of rows) {
     if (row.key in texts) {
+      const legacyDefault = LEGACY_SITE_TEXT_VALUES.get(row.key);
+      if (legacyDefault && row.valueEt === legacyDefault) continue;
       texts[row.key as SiteTextKey] = row.valueEt;
     }
   }

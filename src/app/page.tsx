@@ -35,7 +35,6 @@ export default async function HomePage() {
           <span className="eyebrow">{texts["homepage.hero.eyebrow"]}</span>
           <h1>{texts["homepage.hero.title"]}</h1>
           <p className="lead">{texts["homepage.hero.lead"]}</p>
-          <p className="lead-note">{texts["homepage.hero.note"]}</p>
         </div>
       </section>
 

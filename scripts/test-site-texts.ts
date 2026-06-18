@@ -34,6 +34,13 @@ check("database value overrides fallback for a known key", () => {
   assert.equal(texts["homepage.hero.title"], "Muudetud pealkiri");
 });
 
+check("legacy default database values are upgraded to current defaults", () => {
+  const texts = resolveSiteTexts([
+    { key: "homepage.hero.eyebrow", valueEt: "Allikapõhine ülevaade koja tööst" },
+  ]);
+  assert.equal(texts["homepage.hero.eyebrow"], "Ülevaade koja tööst");
+});
+
 check("unknown database keys are ignored by homepage resolver", () => {
   const texts = resolveSiteTexts([{ key: "other.key", valueEt: "Ei kuvata" }]);
   assert.equal(texts["homepage.hero.title"], defaultSiteTextMap()["homepage.hero.title"]);
