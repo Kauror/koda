@@ -4,15 +4,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import type { FilterOptions } from "@/lib/search";
 
-const RESULT_TYPES = ["toovoit", "arvamus", "uudis"] as const;
-type ResultType = (typeof RESULT_TYPES)[number];
-
-const RESULT_TYPE_LABELS: Record<ResultType, string> = {
-  toovoit: "Töövõit",
-  arvamus: "Arvamus",
-  uudis: "Uudis",
-};
-
 function isGenericSectorOption(option: { slug: string; name: string }): boolean {
   const text = `${option.slug} ${option.name}`.toLocaleLowerCase("et-EE");
   return (
@@ -67,14 +58,8 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
     listParam("tegevusala").filter((slug) => tegevusalaSlugs.has(slug))
   );
   const [valdkond, setValdkond] = useState<string[]>(listParam("valdkond"));
-  const [tapsustus, setTapsustus] = useState<string[]>(listParam("tapsustus"));
-  const [type, setType] = useState<string[]>(
-    listParam("type").filter((slug) => RESULT_TYPES.includes(slug as ResultType))
-  );
   const [showSectorError, setShowSectorError] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(
-    listParam("valdkond").length > 0 || listParam("tapsustus").length > 0 || listParam("type").length > 0
-  );
+  const [showAdvanced, setShowAdvanced] = useState(listParam("valdkond").length > 0);
 
   const toggle = (list: string[], set: (v: string[]) => void) => (slug: string) =>
     set(list.includes(slug) ? list.filter((s) => s !== slug) : [...list, slug]);
@@ -93,16 +78,6 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
       label: nameOf(options.valdkonnad, s),
       remove: () => setValdkond((v) => v.filter((x) => x !== s)),
     })),
-    ...tapsustus.map((s) => ({
-      key: `p-${s}`,
-      label: nameOf(options.tapsustused, s),
-      remove: () => setTapsustus((v) => v.filter((x) => x !== s)),
-    })),
-    ...type.map((s) => ({
-      key: `r-${s}`,
-      label: RESULT_TYPE_LABELS[s as ResultType] ?? s,
-      remove: () => setType((v) => v.filter((x) => x !== s)),
-    })),
   ];
 
   function submit(e: React.FormEvent) {
@@ -114,8 +89,6 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
     const p = new URLSearchParams();
     if (tegevusala.length) p.set("tegevusala", tegevusala.join(","));
     if (valdkond.length) p.set("valdkond", valdkond.join(","));
-    if (tapsustus.length) p.set("tapsustus", tapsustus.join(","));
-    if (type.length) p.set("type", type.join(","));
     router.push(`/tulemused?${p.toString()}`);
   }
 
@@ -161,7 +134,7 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
         onClick={() => setShowAdvanced((v) => !v)}
         aria-expanded={showAdvanced}
       >
-        {showAdvanced ? "Peida täpsemad valikud" : "Täpsemad valikud (teema, olukord)"}
+        {showAdvanced ? "Peida täpsemad valikud" : "Täpsemad valikud (teema)"}
       </button>
 
       {showAdvanced && (
@@ -178,26 +151,6 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
             </fieldset>
           )}
 
-          {options.tapsustused.length > 0 && (
-            <fieldset>
-              <legend>Ettevõtte olukord / täpsustus</legend>
-              <ChipGroup
-                options={options.tapsustused}
-                selected={tapsustus}
-                onToggle={toggle(tapsustus, setTapsustus)}
-              />
-            </fieldset>
-          )}
-
-          <fieldset>
-            <legend>Tulemuse tüüp</legend>
-            <p className="field-hint">Valikuline täpsustus, kui soovid näha ainult kindlat liiki tulemusi.</p>
-            <ChipGroup
-              options={RESULT_TYPES.map((slug) => ({ slug, name: RESULT_TYPE_LABELS[slug] }))}
-              selected={type}
-              onToggle={toggle(type, setType)}
-            />
-          </fieldset>
         </>
       )}
 

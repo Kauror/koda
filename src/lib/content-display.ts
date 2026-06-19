@@ -23,6 +23,19 @@ export type SourceLabelFields = {
   sourceDataset?: string | null;
 };
 
+export type PublicDetailSummaryFields = {
+  summary?: string | null;
+  adminSummaryOverride?: string | null;
+  kodaPosition?: string | null;
+  companyRelevance?: string | null;
+  sourceEvidence?: string | null;
+  excerpt?: string | null;
+  bodyText?: string | null;
+  sourceDataset?: string | null;
+  sourceLayer?: string | null;
+  sourceTypeDetail?: string | null;
+};
+
 export function publicTitle(i: DisplayFields): string {
   return i.adminDisplayTitleOverride || i.displayTitle || i.title || "";
 }
@@ -78,6 +91,10 @@ export function sourceCtaLabel(i: SourceLabelFields): string {
   return "Ava koda.ee allikas";
 }
 
+function cleanText(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
 function normalizeText(value: string): string {
   return value.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").replace(/\s+/g, " ").trim();
 }
@@ -122,6 +139,89 @@ export function isNoisyPublicExcerpt(value: string | null | undefined): boolean 
   return noisyHits >= 2 || text.length < 24;
 }
 
+export function isObviouslyTruncatedText(value: string | null | undefined): boolean {
+  const text = cleanText(value ?? "");
+  if (!text) return true;
+  if (/(?:\.\.\.|…|â€¦)$/u.test(text)) return true;
+  if (text.length < 90 && !/[.!?)]$/u.test(text)) return true;
+  return false;
+}
+
+export function isUnsafePublicDetailText(value: string | null | undefined): boolean {
+  const text = cleanText(value ?? "");
+  if (!text) return true;
+  if (isNoisyPublicExcerpt(text)) return true;
+  if (isObviouslyTruncatedText(text)) return true;
+  const normalized = normalizeText(text);
+  const artifacts = [
+    "liitu uudiskirjaga",
+    "jaga facebookis",
+    "prindi leht",
+    "tagasi nimekirja",
+    "browser does not support",
+    "enable javascript",
+    "lisa kalendrisse",
+  ];
+  if (artifacts.some((artifact) => normalized.includes(artifact))) return true;
+  return false;
+}
+
+export function firstCleanPublicParagraph(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const parts = value
+    .replace(/\r\n/g, "\n")
+    .split(/\n{2,}|\n/g)
+    .map(cleanText)
+    .filter(Boolean);
+  for (const part of parts) {
+    if (!isUnsafePublicDetailText(part)) return part;
+  }
+  return null;
+}
+
+function cleanDetailCandidate(value: string | null | undefined): string | null {
+  const text = cleanText(value ?? "");
+  if (!text || isUnsafePublicDetailText(text)) return null;
+  return text;
+}
+
+function isKodaWebLikeRow(i: PublicDetailSummaryFields): boolean {
+  return (
+    i.sourceDataset === "web" ||
+    i.sourceLayer === "koda_news" ||
+    i.sourceLayer === "koda_public_opinion" ||
+    i.sourceTypeDetail === "meie_uudis" ||
+    i.sourceTypeDetail === "meie_arvamus_article"
+  );
+}
+
+export function getPublicDetailSummary(i: PublicDetailSummaryFields): string | null {
+  const manual = cleanDetailCandidate(i.adminSummaryOverride);
+  if (manual) return manual;
+
+  if (isKodaWebLikeRow(i)) {
+    return (
+      firstCleanPublicParagraph(i.bodyText) ||
+      firstCleanPublicParagraph(i.sourceEvidence) ||
+      cleanDetailCandidate(i.summary) ||
+      cleanDetailCandidate(i.companyRelevance) ||
+      cleanDetailCandidate(i.kodaPosition) ||
+      cleanDetailCandidate(i.excerpt) ||
+      null
+    );
+  }
+
+  return (
+    cleanDetailCandidate(i.summary) ||
+    cleanDetailCandidate(i.companyRelevance) ||
+    cleanDetailCandidate(i.kodaPosition) ||
+    firstCleanPublicParagraph(i.sourceEvidence) ||
+    firstCleanPublicParagraph(i.bodyText) ||
+    cleanDetailCandidate(i.excerpt) ||
+    null
+  );
+}
+
 export function getCleanPublicExcerpt(i: {
   summary?: string | null;
   adminSummaryOverride?: string | null;
@@ -130,22 +230,11 @@ export function getCleanPublicExcerpt(i: {
   sourceEvidence?: string | null;
   excerpt?: string | null;
   bodyText?: string | null;
+  sourceDataset?: string | null;
+  sourceLayer?: string | null;
+  sourceTypeDetail?: string | null;
 }): string | null {
-  const candidates = [
-    i.adminSummaryOverride,
-    i.summary,
-    i.kodaPosition,
-    i.companyRelevance,
-    i.sourceEvidence,
-    i.excerpt,
-  ];
-  for (const value of candidates) {
-    const trimmed = value?.trim();
-    if (trimmed && !isNoisyPublicExcerpt(trimmed)) return trimmed;
-  }
-  const body = i.bodyText?.trim();
-  if (!body || isNoisyPublicExcerpt(body)) return null;
-  return body.length > 360 ? `${body.slice(0, 360).trim()}...` : body;
+  return getPublicDetailSummary(i);
 }
 
 export function compactText(value: string | null | undefined, maxLength = 220): string | null {

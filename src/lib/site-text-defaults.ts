@@ -8,7 +8,7 @@ export type SiteTextDefault = {
 export const SITE_TEXT_DEFAULTS = [
   {
     key: "homepage.hero.eyebrow",
-    valueEt: "Ülevaade koja tööst",
+    valueEt: "Ülevaade koja tegevustest",
     description: "Avalehe kangelase ala väike ülarida.",
     group: "homepage.hero",
   },
@@ -76,18 +76,22 @@ export const SITE_TEXT_DEFAULTS_BY_KEY = new Map<string, SiteTextDefault>(
   SITE_TEXT_DEFAULTS.map((item) => [item.key, item])
 );
 
-const LEGACY_SITE_TEXT_VALUES = new Map<string, string>([
-  ["homepage.hero.eyebrow", "Allikapõhine ülevaade koja tööst"],
-  ["homepage.hero.title", "Mida on koda sinu ettevõtte jaoks teinud ja öelnud?"],
+const LEGACY_SITE_TEXT_VALUES = new Map<string, string[]>([
+  ["homepage.hero.eyebrow", ["Ülevaade koja tööst", "Allikapõhine ülevaade koja tööst"]],
+  ["homepage.hero.title", ["Mida on koda sinu ettevõtte jaoks teinud ja öelnud?"]],
   [
     "homepage.hero.lead",
-    "Allikapõhine ülevaade sellest, mida Eesti Kaubandus-Tööstuskoda on ettevõtjate huvide kaitseks teinud ja öelnud. Otsi konkreetseid töövõite, koja seisukohti ja teemade tausta - kõik viidetega algallikatele.",
+    [
+      "Allikapõhine ülevaade sellest, mida Eesti Kaubandus-Tööstuskoda on ettevõtjate huvide kaitseks teinud ja öelnud. Otsi konkreetseid töövõite, koja seisukohti ja teemade tausta - kõik viidetega algallikatele.",
+    ],
   ],
   [
     "homepage.hero.note",
-    "See ei ole vestlusrobot ega uudistearhiiv. Tulemused põhinevad koja avalikel materjalidel ja indekseeritud allikatel.",
+    [
+      "See ei ole vestlusrobot ega uudistearhiiv. Tulemused põhinevad koja avalikel materjalidel ja indekseeritud allikatel.",
+    ],
   ],
-  ["homepage.topics.description", "Ei taha otsida? Vaata koja tööd ühe teema kaupa."],
+  ["homepage.topics.description", ["Ei taha otsida? Vaata koja tööd ühe teema kaupa."]],
 ]);
 
 export function defaultSiteTextMap(): SiteTextMap {
@@ -98,8 +102,8 @@ export function resolveSiteTexts(rows: SiteTextRowLike[]): SiteTextMap {
   const texts = defaultSiteTextMap();
   for (const row of rows) {
     if (row.key in texts) {
-      const legacyDefault = LEGACY_SITE_TEXT_VALUES.get(row.key);
-      if (legacyDefault && row.valueEt === legacyDefault) continue;
+      const legacyDefaults = LEGACY_SITE_TEXT_VALUES.get(row.key);
+      if (legacyDefaults?.includes(row.valueEt)) continue;
       texts[row.key as SiteTextKey] = row.valueEt;
     }
   }

@@ -38,7 +38,7 @@ check("legacy default database values are upgraded to current defaults", () => {
   const texts = resolveSiteTexts([
     { key: "homepage.hero.eyebrow", valueEt: "Allikapõhine ülevaade koja tööst" },
   ]);
-  assert.equal(texts["homepage.hero.eyebrow"], "Ülevaade koja tööst");
+  assert.equal(texts["homepage.hero.eyebrow"], "Ülevaade koja tegevustest");
 });
 
 check("unknown database keys are ignored by homepage resolver", () => {

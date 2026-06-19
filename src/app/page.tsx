@@ -41,24 +41,14 @@ const FALLBACK_FILTER_OPTIONS: FilterOptions = {
     fallbackOption("ettevotluskeskkond-ja-konkurentsivoime", "Ettevõtluskeskkond ja konkurentsivõime"),
     fallbackOption("kinnisvara-planeerimine-ja-ehitus", "Kinnisvara, planeerimine ja ehitus"),
   ],
-  tapsustused: [
-    fallbackOption("ekspordime", "Ekspordime"),
-    fallbackOption("impordime", "Impordime"),
-    fallbackOption("muume-e-poes", "Müüme e-poes"),
-    fallbackOption("kasutame-valistoojoud", "Kasutame välistööjõudu"),
-    fallbackOption("energiamahukas-ettevote", "Oleme energiamahukas ettevõte"),
-    fallbackOption("reguleeritud-valdkond", "Tegutseme reguleeritud valdkonnas"),
-    fallbackOption("riigihanked", "Osaleme riigihangetel"),
-    fallbackOption("valiskaubandusdokumendid", "Vajame väliskaubandusdokumente"),
-    fallbackOption("valispartnerid", "Soovime leida välispartnereid"),
-  ],
+  tapsustused: [],
 };
 
 function withFallbackOptions(options: FilterOptions): FilterOptions {
   return {
     tegevusalad: options.tegevusalad.length ? options.tegevusalad : FALLBACK_FILTER_OPTIONS.tegevusalad,
     valdkonnad: options.valdkonnad.length ? options.valdkonnad : FALLBACK_FILTER_OPTIONS.valdkonnad,
-    tapsustused: options.tapsustused.length ? options.tapsustused : FALLBACK_FILTER_OPTIONS.tapsustused,
+    tapsustused: options.tapsustused,
   };
 }
 

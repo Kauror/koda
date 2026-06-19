@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getContentDetail, type ContentDetail, type EvidenceRow } from "@/lib/content-detail";
-import { compactText, uniquePublicTexts } from "@/lib/content-display";
+import { compactText, isUnsafePublicDetailText, uniquePublicTexts } from "@/lib/content-display";
 
 export const dynamic = "force-dynamic";
 
@@ -54,9 +54,7 @@ function AchievementDetail({ item }: { item: ContentDetail }) {
     item.summary,
     item.companyRelevance,
     item.sourceEvidence,
-    item.excerpt,
-    item.bodySnippet,
-  ]);
+  ]).filter((text) => !isUnsafePublicDetailText(text));
   const field = item.enrichment?.regulatoryArea || item.valdkonnad[0]?.name || null;
   const impact = item.enrichment?.numericImpactStatement || null;
 
@@ -80,7 +78,7 @@ function AchievementDetail({ item }: { item: ContentDetail }) {
           {explanation.length > 0 && (
             <>
               <dt>Mida saavutati?</dt>
-              <dd>{explanation.map((text) => compactText(text, 420)).join(" ")}</dd>
+              <dd>{explanation.join(" ")}</dd>
             </>
           )}
         </dl>
@@ -92,38 +90,21 @@ function AchievementDetail({ item }: { item: ContentDetail }) {
 }
 
 function StandardDetail({ item }: { item: ContentDetail }) {
-  const mainTexts = item.isNews
-    ? uniquePublicTexts([item.summary, item.sourceEvidence, item.bodySnippet])
-    : uniquePublicTexts([item.kodaPosition, item.sourceEvidence, item.summary, item.bodySnippet]);
-  const newsPositionTexts = item.isNews
-    ? uniquePublicTexts([item.kodaPosition]).filter(
-        (text) => !mainTexts.some((main) => main === text)
-      )
-    : [];
+  const summary = item.summary;
   return (
     <>
-      {mainTexts.length > 0 && (
+      {summary && (
         <section className="card">
           <h2>{item.isNews ? "Uudise kokkuvõte" : "Koja seisukoht ja mõju"}</h2>
-          {mainTexts.map((text) => (
-            <p key={text}>{text}</p>
-          ))}
+          <p>{summary}</p>
           <SourceButton item={item} />
         </section>
       )}
 
-      {newsPositionTexts.length > 0 && (
-        <section className="card">
-          <h2>Koja seisukoht ja mõju</h2>
-          {newsPositionTexts.map((text) => (
-            <p key={text}>{text}</p>
-          ))}
-        </section>
-      )}
-
-      {mainTexts.length === 0 && item.sourceUrl && (
+      {!summary && item.sourceUrl && (
         <section className="card">
           <h2>Koda.ee materjal</h2>
+          <p>Täistekst on kättesaadav algallikas.</p>
           <SourceButton item={item} />
         </section>
       )}

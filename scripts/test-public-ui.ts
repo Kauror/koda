@@ -1,8 +1,11 @@
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import {
+  firstCleanPublicParagraph,
   getCleanPublicExcerpt,
+  getPublicDetailSummary,
   isDuplicateText,
+  isUnsafePublicDetailText,
   sourceCtaLabel,
   uniquePublicTexts,
 } from "../src/lib/content-display";
@@ -63,6 +66,81 @@ check("detail text deduplication removes repeated summary blocks", () => {
   assert.equal(isDuplicateText(values[0], values[1]), false);
 });
 
+check("text ending with ellipsis is unsafe for public detail summary", () => {
+  assert.equal(isUnsafePublicDetailText("Koda andis ministeeriumile teada, et eelnõu..."), true);
+  assert.equal(isUnsafePublicDetailText("Koda andis ministeeriumile teada, et eelnõu…"), true);
+  assert.equal(isUnsafePublicDetailText("Koda andis ministeeriumile teada, et eelnõuâ€¦"), true);
+});
+
+check("first clean body paragraph is preferred for Koda web rows", () => {
+  const summary = getPublicDetailSummary({
+    sourceDataset: "web",
+    sourceLayer: "koda_news",
+    sourceTypeDetail: "meie_uudis",
+    summary: "Katkine imporditud kokkuvõte...",
+    bodyText: "Liigu edasi põhisisu juurde\n\nKoda selgitas ministeeriumile, miks muudatus vajab täpsemat mõjuanalüüsi.\n\nTeine lõik.",
+  });
+  assert.equal(summary, "Koda selgitas ministeeriumile, miks muudatus vajab täpsemat mõjuanalüüsi.");
+});
+
+check("clean curated summary is allowed for non-web detail rows", () => {
+  const summary = getPublicDetailSummary({
+    sourceDataset: "annual_reports",
+    summary: "Aruanne kirjeldab koja pikemat tööd ettevõtjate halduskoormuse vähendamisel.",
+    bodyText: "Aruande toortekst võib olla pikem.",
+  });
+  assert.equal(summary, "Aruanne kirjeldab koja pikemat tööd ettevõtjate halduskoormuse vähendamisel.");
+});
+
+check("unsafe excerpt falls back to body text", () => {
+  const summary = getPublicDetailSummary({
+    sourceDataset: "web",
+    sourceLayer: "koda_public_opinion",
+    sourceTypeDetail: "meie_arvamus_article",
+    excerpt: "Koda tegi ettepaneku muuta määrust...",
+    bodyText: "Koda tegi ettepaneku muuta määrust nii, et ettevõtjatele jääks piisav üleminekuaeg.",
+  });
+  assert.equal(
+    summary,
+    "Koda tegi ettepaneku muuta määrust nii, et ettevõtjatele jääks piisav üleminekuaeg."
+  );
+});
+
+check("no safe text returns null and keeps source CTA fallback path", () => {
+  const summary = getPublicDetailSummary({
+    sourceDataset: "web",
+    sourceLayer: "koda_news",
+    summary: "Katkine tekst...",
+    excerpt: "Veel katkisem tekst...",
+    bodyText: "Avaleht Menüü Otsing Javascript",
+  });
+  assert.equal(summary, null);
+});
+
+check("WEB-like broken examples do not render truncated detail text", () => {
+  const ids = ["WEB003788", "WEB003719", "WEB003096"];
+  for (const id of ids) {
+    const summary = getPublicDetailSummary({
+      sourceDataset: "web",
+      sourceLayer: "koda_news",
+      sourceTypeDetail: "meie_uudis",
+      summary: `${id} katkine genereeritud kokkuvõte...`,
+      excerpt: `${id} katkine väljavõte...`,
+      bodyText: "Koda selgitas avalikus materjalis ettevõtjate jaoks olulist muudatust ja selle mõju.",
+    });
+    assert.ok(summary);
+    assert.ok(!summary.endsWith("..."));
+    assert.ok(!summary.endsWith("…"));
+  }
+});
+
+check("first paragraph extractor skips navigation fragments", () => {
+  assert.equal(
+    firstCleanPublicParagraph("Avaleht\nMenüü\n\nKoda toetab ettevõtjatele selgemaid reegleid."),
+    "Koda toetab ettevõtjatele selgemaid reegleid."
+  );
+});
+
 check("public detail page does not render backend metadata/supporting headings", () => {
   const source = readFileSync("src/app/sisu/[id]/page.tsx", "utf8");
   assert.ok(!source.includes("Algallikas"));
@@ -109,13 +187,18 @@ check("results page does not show capped total copy", () => {
 
 check("search form requires a concrete sector and hides removed type filters", () => {
   const source = readFileSync("src/app/SearchForm.tsx", "utf8");
-  assert.ok(source.includes('const RESULT_TYPES = ["toovoit", "arvamus", "uudis"] as const'));
   assert.ok(source.includes("tegevusala.length === 0"));
   assert.ok(source.includes("isGenericSectorOption"));
   assert.ok(source.includes('type="submit"'));
+  assert.ok(source.includes("Teema / valdkond"));
   assert.ok(!source.includes('type="search"'));
   assert.ok(!source.includes('name="q"'));
   assert.ok(!source.includes("Otsi teemat või märksõna"));
+  assert.ok(!source.includes("Ettevõtte olukord / täpsustus"));
+  assert.ok(!source.includes("Tulemuse tüüp"));
+  assert.ok(!source.includes("RESULT_TYPES"));
+  assert.ok(!source.includes('p.set("tapsustus"'));
+  assert.ok(!source.includes('p.set("type"'));
   assert.ok(!source.includes("Esialgne täiendav filter"));
   assert.ok(!source.includes("Aastaaruanne"));
   assert.ok(!source.includes("Taust"));
@@ -135,7 +218,7 @@ check("homepage keeps filter groups when database options are unavailable", () =
   assert.ok(source.includes("filterOptions"));
   assert.ok(source.includes("Tööstus ja tootmine"));
   assert.ok(source.includes("Maksud, tasud ja aruandlus"));
-  assert.ok(source.includes("Kasutame välistööjõudu"));
+  assert.ok(source.includes("tapsustused: []"));
   assert.ok(!source.includes("using empty filter list"));
 });
 

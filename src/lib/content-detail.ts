@@ -7,9 +7,10 @@ import { TagType } from "@prisma/client";
 import { prisma } from "./db";
 import { isEvidenceEligible, isPublicSearchEligible } from "./eligibility";
 import {
+  firstCleanPublicParagraph,
   getCleanPublicExcerpt,
+  getPublicDetailSummary,
   publicSourceUrl,
-  publicSummary,
   publicTitle,
   sourceCtaLabel,
 } from "./content-display";
@@ -120,7 +121,7 @@ export async function getContentDetail(id: string): Promise<ContentDetail | null
     id: c.id,
     detailId: detailIdOf(c),
     title: publicTitle(c),
-    summary: publicSummary(c),
+    summary: getPublicDetailSummary(c),
     companyRelevance: c.companyRelevance,
     kodaPosition: c.kodaPosition,
     sourceEvidence: c.sourceEvidence,
@@ -158,8 +159,7 @@ export async function getContentDetail(id: string): Promise<ContentDetail | null
 }
 
 function pickBodySnippet(c: Candidate): string | null {
-  if (publicSummary(c) || c.kodaPosition || c.companyRelevance) return null;
-  return getCleanPublicExcerpt({ bodyText: c.bodyText });
+  return firstCleanPublicParagraph(c.bodyText);
 }
 
 export async function getEvidenceForContent(parent: Candidate): Promise<ContentDetail["evidence"]> {
