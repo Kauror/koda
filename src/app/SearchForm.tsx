@@ -63,7 +63,6 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
   const tegevusalaOptions = options.tegevusalad.filter((option) => !isGenericSectorOption(option));
   const tegevusalaSlugs = new Set(tegevusalaOptions.map((option) => option.slug));
 
-  const [q, setQ] = useState<string>(params.get("q") || "");
   const [tegevusala, setTegevusala] = useState<string[]>(
     listParam("tegevusala").filter((slug) => tegevusalaSlugs.has(slug))
   );
@@ -113,7 +112,6 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
       return;
     }
     const p = new URLSearchParams();
-    if (q.trim()) p.set("q", q.trim());
     if (tegevusala.length) p.set("tegevusala", tegevusala.join(","));
     if (valdkond.length) p.set("valdkond", valdkond.join(","));
     if (tapsustus.length) p.set("tapsustus", tapsustus.join(","));
@@ -144,31 +142,6 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
           )}
         </fieldset>
       )}
-
-      <div className="search-primary">
-        <label className="field-label" htmlFor="q">
-          Otsi teemat või märksõna
-        </label>
-        <div className="search-row">
-          <input
-            id="q"
-            type="search"
-            name="q"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Nt maksud, välistööjõud, mida on koda saavutanud..."
-            className="search-input search-input--primary"
-            aria-label="Otsi teemat või märksõna"
-            enterKeyHint="search"
-          />
-          <button type="submit" className="btn search-submit">
-            Otsi
-          </button>
-        </div>
-        <p className="field-hint">
-          Alusta tegevusalast ja lisa soovi korral märksõna või teema.
-        </p>
-      </div>
 
       {activeFilters.length > 0 && (
         <div className="selected-filters" aria-label="Valitud filtrid">
@@ -228,6 +201,11 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
         </>
       )}
 
+      <div className="search-actions">
+        <button type="submit" className="btn search-submit">
+          Otsi
+        </button>
+      </div>
     </form>
   );
 }

@@ -6,17 +6,6 @@ import { getHomepageSiteTexts } from "@/lib/site-texts";
 
 export const dynamic = "force-dynamic";
 
-// Example searches shown on the homepage (source-based discovery prompts).
-const EXAMPLE_SEARCHES: { label: string; href: string }[] = [
-  { label: "Maksud ja aruandlus", href: "/tulemused?q=maksud" },
-  { label: "Tööjõud ja tööõigus", href: "/tulemused?q=t%C3%B6%C3%B6j%C3%B5ud" },
-  { label: "Pakendid", href: "/tulemused?q=pakendid" },
-  { label: "Energia", href: "/tulemused?q=energia" },
-  { label: "Välistööjõud", href: "/tulemused?q=v%C3%A4list%C3%B6%C3%B6j%C3%B5ud" },
-  { label: "Ekspordiga seotud teemad", href: "/tulemused?q=eksport" },
-  { label: "Mida on koda saavutanud?", href: "/tulemused?type=toovoit" },
-];
-
 const EMPTY_OPTIONS: FilterOptions = { valdkonnad: [], tegevusalad: [], tapsustused: [] };
 
 export default async function HomePage() {
@@ -43,17 +32,6 @@ export default async function HomePage() {
           <Suspense>
             <SearchForm options={options} />
           </Suspense>
-
-          <div className="examples">
-            <span className="examples-label">{texts["homepage.search.examplesTitle"]}</span>
-            <div className="theme-links">
-              {EXAMPLE_SEARCHES.map((e) => (
-                <Link key={e.href} href={e.href} className="theme-link">
-                  {e.label}
-                </Link>
-              ))}
-            </div>
-          </div>
         </div>
       </section>
 

@@ -1128,19 +1128,7 @@ table.admin-table th {
   margin: 0;
 }
 
-.examples {
-  margin-top: 14px;
-}
-
-.examples-label {
-  display: block;
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: var(--color-muted);
-  margin-bottom: 8px;
-}
-
-/* Search form: free text is the primary action. */
+/* Search form: filter-first discovery. */
 .search-form {
   display: flex;
   flex-direction: column;
@@ -1154,27 +1142,15 @@ table.admin-table th {
   order: 3;
 }
 
-.search-primary {
-  order: 4;
-  margin-bottom: 0;
-}
-
-.search-row {
-  display: flex;
-  gap: 10px;
-  align-items: stretch;
-}
-
-.search-input--primary {
-  font-size: 1.08rem;
-  padding: 14px 16px;
-  flex: 1;
-}
-
 .search-submit {
   flex: 0 0 auto;
   padding-left: 22px;
   padding-right: 22px;
+}
+
+.search-actions {
+  order: 6;
+  margin-top: 18px;
 }
 
 .disclosure {
@@ -1250,9 +1226,6 @@ table.admin-table th {
 
 /* Larger, clearer tap targets in the results card actions on mobile. */
 @media (max-width: 640px) {
-  .search-row {
-    flex-direction: column;
-  }
   .search-submit {
     width: 100%;
   }

@@ -112,9 +112,20 @@ check("search form requires a concrete sector and hides removed type filters", (
   assert.ok(source.includes('const RESULT_TYPES = ["toovoit", "arvamus", "uudis"] as const'));
   assert.ok(source.includes("tegevusala.length === 0"));
   assert.ok(source.includes("isGenericSectorOption"));
+  assert.ok(source.includes('type="submit"'));
+  assert.ok(!source.includes('type="search"'));
+  assert.ok(!source.includes('name="q"'));
+  assert.ok(!source.includes("Otsi teemat või märksõna"));
   assert.ok(!source.includes("Esialgne täiendav filter"));
   assert.ok(!source.includes("Aastaaruanne"));
   assert.ok(!source.includes("Taust"));
+});
+
+check("homepage does not show example keyword shortcuts", () => {
+  const source = readFileSync("src/app/page.tsx", "utf8");
+  assert.ok(!source.includes("EXAMPLE_SEARCHES"));
+  assert.ok(!source.includes("homepage.search.examplesTitle"));
+  assert.ok(!source.includes("Näiteks:"));
 });
 
 check("detail page hides front-facing outcome status metadata", () => {

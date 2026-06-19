@@ -32,12 +32,6 @@ export const SITE_TEXT_DEFAULTS = [
     group: "homepage.hero",
   },
   {
-    key: "homepage.search.examplesTitle",
-    valueEt: "Näiteks:",
-    description: "Tekst näidisotsingute loendi ees.",
-    group: "homepage.search",
-  },
-  {
     key: "homepage.topics.title",
     valueEt: "Sirvi teemade kaupa",
     description: "Teemade sirvimise ploki pealkiri.",
