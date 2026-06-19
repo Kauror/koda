@@ -3,6 +3,34 @@ import { prisma } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
+const ADMIN_TOOLS: { href: string; title: string; description: string }[] = [
+  {
+    href: "/admin/site-texts",
+    title: "Avalehe tekstid",
+    description: "Muuda avalehe ja avalikku teksti.",
+  },
+  {
+    href: "/admin/data-bundle",
+    title: "Andmepakett",
+    description: "Vaata genereeritud paketi staatust ja QA kokkuvõtet.",
+  },
+  {
+    href: "/admin/data-review",
+    title: "Andmeülevaatus",
+    description: "Kinnita või lükka tagasi soovitatud kategooria- ja tegevusalamuudatused.",
+  },
+  {
+    href: "/admin/content-items",
+    title: "Sisuread",
+    description: "Sirvi genereeritud paketi sisuridu (read-only).",
+  },
+  {
+    href: "/admin/taxonomy",
+    title: "Taksonoomia",
+    description: "Vaata taksonoomiat ja klassifitseerimisreegleid.",
+  },
+];
+
 export default async function AdminDashboard() {
   const [contentCount, hiddenCount, untaggedCount, topicCount, tagCount, decisionCount, sessionCount, clickCount, recentSessions] =
     await Promise.all([
@@ -20,6 +48,24 @@ export default async function AdminDashboard() {
   return (
     <>
       <h1>Töölaud</h1>
+      <p className="section-sub">
+        Koja liikmeväärtuse rakenduse haldusala. Vali tööriist või vaata allolevaid näitajaid.
+      </p>
+
+      <section className="card">
+        <h2 style={{ marginTop: 0 }}>Admin tööriistad</h2>
+        <ul className="admin-tool-list">
+          {ADMIN_TOOLS.map((tool) => (
+            <li key={tool.href}>
+              <Link href={tool.href} className="admin-tool-link">
+                {tool.title}
+              </Link>
+              <span className="muted small"> — {tool.description}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
       <div className="card">
         <table className="admin-table">
           <tbody>

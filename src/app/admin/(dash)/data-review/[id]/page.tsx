@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { findContentItem, findReviewCandidate, stringValue } from "@/lib/admin-bundle";
+import { DECISIONS_NOT_APPLIED_NOTICE } from "@/lib/admin-review-ui";
 
 export const dynamic = "force-dynamic";
 
@@ -51,12 +52,20 @@ export default async function AdminDataReviewDetail({ params }: { params: Promis
   return (
     <>
       <p>
-        <Link href="/admin/data-review">← Tagasi ülevaatusse</Link>
+        <Link href="/admin/data-review" className="btn btn-secondary btn-small">
+          ← Tagasi ülevaatusse
+        </Link>
       </p>
-      <h1 style={{ fontSize: "1.45rem" }}>{candidate.title || candidate.candidateId}</h1>
-      <p className="muted small">
+      <h1>{candidate.title || candidate.candidateId}</h1>
+      <p className="section-sub">
         Kandidaat: {candidate.candidateId} · otsus: {decision?.decision ?? "undecided"}
       </p>
+
+      <div className="card notice">
+        <p style={{ margin: 0 }}>
+          <strong>{DECISIONS_NOT_APPLIED_NOTICE}</strong>
+        </p>
+      </div>
 
       <div className="card">
         <h2 style={{ marginTop: 0 }}>Soovitus</h2>

@@ -27,6 +27,48 @@ export type Pagination = {
   pages: number;
 };
 
+export type ReviewProgress = {
+  total: number;
+  approved: number;
+  rejected: number;
+  needsReview: number;
+  decided: number;
+  undecided: number;
+  progressPercent: number;
+};
+
+/**
+ * Review progress over the current bundle candidates. Pure: takes the candidate
+ * ids and the saved decision-by-candidate map so it is trivial to unit-test.
+ * `progressPercent` is decided (any saved decision) / total.
+ */
+export function computeReviewProgress(
+  candidateIds: string[],
+  decisionByCandidateId: Map<string, string>,
+): ReviewProgress {
+  let approved = 0;
+  let rejected = 0;
+  let needsReview = 0;
+  for (const id of candidateIds) {
+    switch (decisionByCandidateId.get(id)) {
+      case "approved":
+        approved++;
+        break;
+      case "rejected":
+        rejected++;
+        break;
+      case "needs_review":
+        needsReview++;
+        break;
+    }
+  }
+  const total = candidateIds.length;
+  const decided = approved + rejected + needsReview;
+  const undecided = total - decided;
+  const progressPercent = total > 0 ? Math.round((decided / total) * 100) : 0;
+  return { total, approved, rejected, needsReview, decided, undecided, progressPercent };
+}
+
 export type ReviewCandidate = JsonRecord & {
   candidateId: string;
   contentId?: string;
@@ -239,7 +281,18 @@ export function filterReviewCandidates(
       .map((value) => normalize(stringValue(value)))
       .some((value) => value.includes(q));
   });
-  return paginate(filtered, filters.page, filters.pageSize);
+  // Undecided-first by default: still-to-review candidates surface above
+  // already-decided ones. Array.sort is stable, so bundle order is preserved
+  // within each group, and the explicit decision filters above are unaffected.
+  const ordered = filtered
+    .map((row, index) => ({ row, index }))
+    .sort((a, b) => {
+      const aDecided = decisionByCandidateId.has(a.row.candidateId) ? 1 : 0;
+      const bDecided = decisionByCandidateId.has(b.row.candidateId) ? 1 : 0;
+      return aDecided - bDecided || a.index - b.index;
+    })
+    .map((entry) => entry.row);
+  return paginate(ordered, filters.page, filters.pageSize);
 }
 
 export function filterContentItems(

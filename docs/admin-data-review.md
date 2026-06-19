@@ -45,6 +45,7 @@ Expected bundle invariants:
 
 ## Routes
 
+- `/admin` - admin landing page. Lists the major admin tools (SiteText, Data bundle, Data review, Content items, Taxonomy) with a one-line description each, plus dashboard counters and recent searches.
 - `/admin/data-bundle` - bundle status, counts, file presence, warning/error summary and links.
 - `/admin/data-review` - review candidate queue with filters, saved decision status and pagination.
 - `/admin/data-review/[id]` - candidate detail, matching bundle content row, editable approved tags/weights and save actions.
@@ -55,6 +56,84 @@ Expected bundle invariants:
 - `/api/admin/data-review/export?format=jsonl` - protected JSONL export.
 
 All routes live under the existing admin protection pattern used by `/admin/site-texts`.
+
+## Admin UI Workflow
+
+The admin pages share one consistent look so they read as a single admin area:
+each page has an `<h1>` heading and a muted `.section-sub` intro line, cards/tables
+use the same spacing, status labels reuse the `.flag` badges, primary/secondary
+buttons and filter forms are styled identically, and info/warning callouts use the
+shared `.notice` style. Raw JSON is only shown behind a collapsed technical
+`<details>` section, and tables scroll horizontally on narrow screens so long
+Estonian text never breaks the layout. Admin pages never display absolute
+local/server paths or stack traces.
+
+### Landing page
+
+`/admin` opens with an **Admin tööriistad** card linking to each major tool with a
+short description:
+
+- **Avalehe tekstid (SiteText)** — edit homepage and public copy.
+- **Andmepakett (Data bundle)** — inspect generated bundle status and QA.
+- **Andmeülevaatus (Data review)** — approve/reject suggested category and sector changes.
+- **Sisuread (Content items)** — browse generated content rows (read-only).
+- **Taksonoomia (Taxonomy)** — inspect taxonomy and classification rules.
+
+### Review progress
+
+`/admin/data-review` and `/admin/data-bundle` show a progress card with counters:
+total candidates, approved, rejected, needs review, undecided, and a progress bar.
+**Progress percentage** = candidates with any saved decision ÷ total candidates.
+Decisions whose `candidateId` is not in the current bundle are ignored. When the
+bundle is missing the counters render as unavailable (`—`).
+
+### Undecided-first workflow
+
+`/admin/data-review` defaults to the **undecided** filter so still-to-review
+candidates appear first. The decision filter offers: Undecided (default), Approved,
+Rejected, Needs review, All. Even under **All**, undecided rows are sorted ahead of
+already-decided rows. Already-reviewed candidates are never hidden — they remain
+reachable through the filter options.
+
+### Export buttons
+
+`/admin/data-review` shows clearly visible **Ekspordi otsused (CSV)** and
+**Ekspordi otsused (JSONL)** buttons. They link to the protected export endpoint
+(`/api/admin/data-review/export?format=csv|jsonl`). If no decisions exist yet the
+export simply returns an empty file. The export route remains admin-only.
+
+### Decisions are not applied live
+
+Both `/admin/data-review` and `/admin/data-review/[id]` show a prominent notice:
+
+> Ülevaatuse otsused salvestatakse hilisemaks kontrollitud rakendamiseks. Need ei
+> muuda avalikku sisu ega kategooriaid automaatselt.
+
+(*Review decisions are saved for later controlled application. They do not change
+public content or live categories automatically.*) Saving a decision only writes a
+`DataReviewDecision` row — it never edits `ContentItem`, the generated bundle, or
+the source workbooks.
+
+## Missing Bundle Files
+
+Every bundle-dependent admin page (`/admin/data-bundle`, `/admin/data-review`,
+`/admin/content-items`, `/admin/taxonomy`) degrades gracefully when the bundle is
+missing or unreadable. Instead of crashing or leaking a stack trace / absolute
+path, it shows a friendly notice listing the missing files and the commands to
+generate the bundle:
+
+```bash
+npm run data:bundle -- --input-dir=data/import --out=data/import/bundles/koda_data_bundle_v1
+```
+
+Then validate it:
+
+```bash
+npm run data:validate-bundle -- --bundle=data/import/bundles/koda_data_bundle_v1
+```
+
+A corrupt/unparseable bundle file produces the same kind of friendly, path-free
+message rather than an unhandled 500.
 
 ## Database Model
 

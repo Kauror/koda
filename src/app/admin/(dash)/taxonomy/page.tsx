@@ -1,4 +1,5 @@
 import { readTaxonomyBundle, stringValue } from "@/lib/admin-bundle";
+import MissingBundleNotice from "../_components/MissingBundleNotice";
 
 export const dynamic = "force-dynamic";
 
@@ -19,9 +20,7 @@ export default async function AdminTaxonomyPage() {
     return (
       <>
         <h1>Taksonoomia</h1>
-        <div className="card notice">
-          <p>{bundle.error}</p>
-        </div>
+        <MissingBundleNotice error={bundle.error} />
       </>
     );
   }
@@ -178,12 +177,12 @@ export default async function AdminTaxonomyPage() {
         </table>
       </section>
 
-      <section className="card">
-        <h2 style={{ marginTop: 0 }}>Sildisõnastik</h2>
+      <details className="card">
+        <summary>Sildisõnastik (tehniline JSON)</summary>
         <pre className="small" style={{ whiteSpace: "pre-wrap", overflowX: "auto" }}>
           {JSON.stringify(tagDictionary, null, 2)}
         </pre>
-      </section>
+      </details>
     </>
   );
 }

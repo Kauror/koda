@@ -1,11 +1,12 @@
 import assert from "node:assert";
-import { existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   REQUIRED_BUNDLE_FILES,
   bundleFriendlyError,
   bundlePath,
+  computeReviewProgress,
   type ContentBundleItem,
   filterContentItems,
   filterReviewCandidates,
@@ -18,6 +19,13 @@ import {
   readReviewCandidates,
   type ReviewCandidate,
 } from "../src/lib/admin-bundle";
+import {
+  BUNDLE_GENERATE_COMMAND,
+  BUNDLE_VALIDATE_COMMAND,
+  DECISIONS_NOT_APPLIED_NOTICE,
+} from "../src/lib/admin-review-ui";
+
+const readSource = (path: string) => readFileSync(path, "utf8");
 
 let passed = 0;
 let failed = 0;
@@ -121,6 +129,128 @@ check("filterReviewCandidates filters by decision, query and tags + paginates", 
   assert.equal(paged.pagination.pages, 2);
   assert.equal(paged.pagination.page, 2);
   assert.equal(paged.rows.length, 1);
+});
+
+check("review list defaults to undecided and sorts undecided first under 'all'", () => {
+  const decisions = new Map([["WEB000001", "approved"]]);
+
+  // Default (undecided) filter hides already-decided candidates.
+  const undecidedOnly = filterReviewCandidates(syntheticCandidates, { decision: "undecided" }, decisions);
+  assert.equal(undecidedOnly.pagination.total, 2);
+  assert.ok(undecidedOnly.rows.every((row) => !decisions.has(row.candidateId)));
+
+  // "all" keeps every row but undecided ones must rank ahead of decided ones.
+  const all = filterReviewCandidates(syntheticCandidates, { decision: "all" }, decisions);
+  assert.equal(all.pagination.total, 3);
+  const decidedFlags = all.rows.map((row) => decisions.has(row.candidateId));
+  const firstDecided = decidedFlags.indexOf(true);
+  const lastUndecided = decidedFlags.lastIndexOf(false);
+  assert.ok(firstDecided > lastUndecided, "all undecided rows must come before decided rows");
+});
+
+check("computeReviewProgress counts decisions and percentage", () => {
+  const ids = ["a", "b", "c", "d"];
+  const decisions = new Map([
+    ["a", "approved"],
+    ["b", "rejected"],
+    ["c", "needs_review"],
+  ]);
+  const progress = computeReviewProgress(ids, decisions);
+  assert.equal(progress.total, 4);
+  assert.equal(progress.approved, 1);
+  assert.equal(progress.rejected, 1);
+  assert.equal(progress.needsReview, 1);
+  assert.equal(progress.decided, 3);
+  assert.equal(progress.undecided, 1);
+  assert.equal(progress.progressPercent, 75);
+
+  // Decisions for candidates not in the current bundle are ignored.
+  const stray = computeReviewProgress(["a"], new Map([["zzz", "approved"]]));
+  assert.equal(stray.decided, 0);
+  assert.equal(stray.undecided, 1);
+
+  const empty = computeReviewProgress([], new Map());
+  assert.equal(empty.total, 0);
+  assert.equal(empty.progressPercent, 0);
+});
+
+// ---------------------------------------------------------------------------
+// 1b) Admin UI wiring — assert the page sources expose the required affordances
+//     (links, warnings, export buttons, friendly missing-bundle commands).
+// ---------------------------------------------------------------------------
+
+check("admin landing page links to all major admin tools", () => {
+  const src = readSource("src/app/admin/(dash)/page.tsx");
+  for (const href of [
+    "/admin/site-texts",
+    "/admin/data-bundle",
+    "/admin/data-review",
+    "/admin/content-items",
+    "/admin/taxonomy",
+  ]) {
+    assert.ok(src.includes(href), `landing page is missing a link to ${href}`);
+  }
+});
+
+check("data-review page shows progress, export buttons and the not-applied warning", () => {
+  const src = readSource("src/app/admin/(dash)/data-review/page.tsx");
+  assert.ok(src.includes("/api/admin/data-review/export?format=csv"));
+  assert.ok(src.includes("/api/admin/data-review/export?format=jsonl"));
+  assert.ok(src.includes("DECISIONS_NOT_APPLIED_NOTICE"));
+  assert.ok(src.includes("ReviewProgressCard"));
+  assert.ok(src.includes("DEFAULT_DECISION_FILTER"));
+});
+
+check("data-review detail page shows the not-applied warning", () => {
+  const src = readSource("src/app/admin/(dash)/data-review/[id]/page.tsx");
+  assert.ok(src.includes("DECISIONS_NOT_APPLIED_NOTICE"));
+});
+
+check("not-applied notice copy is explicit and path-free", () => {
+  assert.ok(DECISIONS_NOT_APPLIED_NOTICE.toLowerCase().includes("ei muuda"));
+  assert.ok(DECISIONS_NOT_APPLIED_NOTICE.toLowerCase().includes("avalik"));
+});
+
+check("missing-bundle notice exposes generate + validate commands without leaking paths", () => {
+  const src = readSource("src/app/admin/(dash)/_components/MissingBundleNotice.tsx");
+  assert.ok(src.includes("BUNDLE_GENERATE_COMMAND"));
+  assert.ok(src.includes("BUNDLE_VALIDATE_COMMAND"));
+  assert.equal(
+    BUNDLE_GENERATE_COMMAND,
+    "npm run data:bundle -- --input-dir=data/import --out=data/import/bundles/koda_data_bundle_v1",
+  );
+  assert.equal(
+    BUNDLE_VALIDATE_COMMAND,
+    "npm run data:validate-bundle -- --bundle=data/import/bundles/koda_data_bundle_v1",
+  );
+  for (const command of [BUNDLE_GENERATE_COMMAND, BUNDLE_VALIDATE_COMMAND]) {
+    assert.ok(!command.includes("C:\\"));
+    assert.ok(!command.includes("/Users/"));
+  }
+});
+
+check("admin area stays protected: (dash) layout guards + admin APIs require admin", () => {
+  const layout = readSource("src/app/admin/(dash)/layout.tsx");
+  assert.ok(layout.includes("isAdmin"), "(dash) layout must check isAdmin");
+  assert.ok(layout.includes('redirect("/admin/login")'), "(dash) layout must redirect unauthenticated users");
+  for (const route of [
+    "src/app/api/admin/data-review/[id]/route.ts",
+    "src/app/api/admin/data-review/export/route.ts",
+    "src/app/api/admin/site-texts/route.ts",
+  ]) {
+    assert.ok(readSource(route).includes("requireAdmin"), `${route} must call requireAdmin`);
+  }
+});
+
+check("bundle-dependent admin pages render the friendly missing-bundle notice", () => {
+  for (const page of [
+    "src/app/admin/(dash)/data-bundle/page.tsx",
+    "src/app/admin/(dash)/data-review/page.tsx",
+    "src/app/admin/(dash)/content-items/page.tsx",
+    "src/app/admin/(dash)/taxonomy/page.tsx",
+  ]) {
+    assert.ok(readSource(page).includes("MissingBundleNotice"), `${page} is missing the friendly notice`);
+  }
 });
 
 const syntheticContent: ContentBundleItem[] = [

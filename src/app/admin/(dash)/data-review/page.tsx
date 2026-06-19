@@ -1,16 +1,21 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import {
+  computeReviewProgress,
   filterReviewCandidates,
   readReviewCandidates,
   stringValue,
   tagValues,
   uniqueValues,
 } from "@/lib/admin-bundle";
+import { DECISIONS_NOT_APPLIED_NOTICE } from "@/lib/admin-review-ui";
+import MissingBundleNotice from "../_components/MissingBundleNotice";
+import ReviewProgressCard from "../_components/ReviewProgressCard";
 
 export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 50;
+const DEFAULT_DECISION_FILTER = "undecided";
 
 type Params = {
   q?: string;
@@ -46,9 +51,8 @@ export default async function AdminDataReviewPage({ searchParams }: { searchPara
     return (
       <>
         <h1>Andmeülevaatus</h1>
-        <div className="card notice">
-          <p>{bundle.error}</p>
-        </div>
+        <ReviewProgressCard progress={null} />
+        <MissingBundleNotice error={bundle.error} />
       </>
     );
   }
@@ -57,10 +61,16 @@ export default async function AdminDataReviewPage({ searchParams }: { searchPara
     select: { candidateId: true, decision: true, reviewerName: true, updatedAt: true },
   });
   const decisionByCandidateId = new Map(decisions.map((row) => [row.candidateId, row.decision]));
+  const progress = computeReviewProgress(
+    bundle.data.map((row) => row.candidateId),
+    decisionByCandidateId,
+  );
+  const decisionFilter = params.decision ?? DEFAULT_DECISION_FILTER;
   const { rows, pagination } = filterReviewCandidates(
     bundle.data,
     {
       ...params,
+      decision: decisionFilter,
       page: parseInt(params.leht || "1", 10) || 1,
       pageSize: PAGE_SIZE,
     },
@@ -76,7 +86,16 @@ export default async function AdminDataReviewPage({ searchParams }: { searchPara
 
   return (
     <>
-      <h1>Andmeülevaatus ({pagination.total})</h1>
+      <h1>Andmeülevaatus ({progress.total})</h1>
+
+      <div className="card notice">
+        <p style={{ margin: 0 }}>
+          <strong>{DECISIONS_NOT_APPLIED_NOTICE}</strong>
+        </p>
+      </div>
+
+      <ReviewProgressCard progress={progress} />
+
       <div className="card">
         <p className="section-sub">
           Need on taksonoomia ja kategooria soovitused andmepaketist. Otsuse salvestamine ei muuda avalikku sisu.
@@ -85,24 +104,24 @@ export default async function AdminDataReviewPage({ searchParams }: { searchPara
           <Link href="/admin/data-bundle" className="btn btn-secondary btn-small">
             Andmepaketi staatus
           </Link>
-          <Link href="/api/admin/data-review/export?format=csv" className="btn btn-secondary btn-small">
-            Ekspordi CSV
-          </Link>
-          <Link href="/api/admin/data-review/export?format=jsonl" className="btn btn-secondary btn-small">
-            Ekspordi JSONL
-          </Link>
+          <a href="/api/admin/data-review/export?format=csv" className="btn btn-small">
+            Ekspordi otsused (CSV)
+          </a>
+          <a href="/api/admin/data-review/export?format=jsonl" className="btn btn-small">
+            Ekspordi otsused (JSONL)
+          </a>
         </div>
       </div>
 
       <form method="get" className="card form-grid">
         <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 10 }}>
           <input name="q" type="text" placeholder="Otsi pealkirja, URL-i või ID järgi..." defaultValue={params.q || ""} />
-          <select name="decision" defaultValue={params.decision || "all"}>
-            <option value="all">Kõik otsused</option>
+          <select name="decision" defaultValue={decisionFilter}>
             <option value="undecided">Otsustamata</option>
             <option value="approved">Kinnitatud</option>
             <option value="rejected">Tagasi lükatud</option>
             <option value="needs_review">Vajab ülevaatust</option>
+            <option value="all">Kõik otsused</option>
           </select>
           <select name="confidence" defaultValue={params.confidence || ""}>
             <option value="">Kõik kindlused</option>

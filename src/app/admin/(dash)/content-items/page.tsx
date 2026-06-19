@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { filterContentItems, readContentItems, stringValue, uniqueValues } from "@/lib/admin-bundle";
+import MissingBundleNotice from "../_components/MissingBundleNotice";
 
 export const dynamic = "force-dynamic";
 
@@ -39,9 +40,7 @@ export default async function AdminContentItemsPage({ searchParams }: { searchPa
     return (
       <>
         <h1>Paketis olevad sisuread</h1>
-        <div className="card notice">
-          <p>{bundle.error}</p>
-        </div>
+        <MissingBundleNotice error={bundle.error} />
       </>
     );
   }
@@ -174,6 +173,13 @@ export default async function AdminContentItemsPage({ searchParams }: { searchPa
               </td>
             </tr>
           ))}
+          {rows.length === 0 && (
+            <tr>
+              <td colSpan={5} className="muted">
+                Sobivaid sisuridu ei leitud.
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
 

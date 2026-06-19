@@ -1,5 +1,8 @@
 import Link from "next/link";
-import { readBundleOverview, stringValue } from "@/lib/admin-bundle";
+import { prisma } from "@/lib/db";
+import { computeReviewProgress, readBundleOverview, readReviewCandidates, stringValue } from "@/lib/admin-bundle";
+import MissingBundleNotice from "../_components/MissingBundleNotice";
+import ReviewProgressCard from "../_components/ReviewProgressCard";
 
 export const dynamic = "force-dynamic";
 
@@ -15,10 +18,20 @@ export default async function AdminDataBundlePage() {
     return (
       <>
         <h1>Andmepakett</h1>
-        <div className="card notice">
-          <p>{result.error}</p>
-        </div>
+        <ReviewProgressCard progress={null} />
+        <MissingBundleNotice error={result.error} />
       </>
+    );
+  }
+
+  const candidates = readReviewCandidates();
+  let progress = null;
+  if (candidates.ok) {
+    const decisions = await prisma.dataReviewDecision.findMany({ select: { candidateId: true, decision: true } });
+    const decisionByCandidateId = new Map(decisions.map((row) => [row.candidateId, row.decision]));
+    progress = computeReviewProgress(
+      candidates.data.map((row) => row.candidateId),
+      decisionByCandidateId,
     );
   }
 
@@ -42,6 +55,8 @@ export default async function AdminDataBundlePage() {
           <span className="flag priority">genereeritud {stringValue(manifest.generated_timestamp) || "teadmata"}</span>
         </div>
       </div>
+
+      <ReviewProgressCard progress={progress} />
 
       <section className="card">
         <h2 style={{ marginTop: 0 }}>Põhinäitajad</h2>
