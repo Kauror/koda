@@ -112,12 +112,48 @@ export function bundleFriendlyError(missingFiles = missingBundleFiles()): string
   return `Andmepakett ei ole valmis. Puuduvad failid: ${missingFiles.join(", ")}.`;
 }
 
+/** Friendly (path-free) error for a corrupt/unreadable bundle file. */
+export function bundleParseError(fileName: string): string {
+  return `Andmepaketi faili "${fileName}" ei õnnestunud lugeda (vigane või rikutud sisu).`;
+}
+
+/**
+ * Read the bundle after confirming every required file exists, turning any
+ * JSON/JSONL parse failure into a friendly BundleReadResult error instead of an
+ * unhandled exception (which would 500 the admin pages). Never leaks file paths.
+ */
+function guardedBundleRead<T>(read: () => T): BundleReadResult<T> {
+  const missing = missingBundleFiles();
+  if (missing.length > 0) {
+    return { ok: false, error: bundleFriendlyError(missing), missingFiles: missing };
+  }
+  try {
+    return { ok: true, data: read(), warnings: [] };
+  } catch (error) {
+    const fileName = error instanceof BundleFileError ? error.fileName : "andmepakett";
+    return { ok: false, error: bundleParseError(fileName), missingFiles: [] };
+  }
+}
+
+/** Carries the offending file name so guardedBundleRead can report it path-free. */
+class BundleFileError extends Error {
+  constructor(public fileName: string, cause: unknown) {
+    super(`Failed to read bundle file: ${fileName}`);
+    this.cause = cause;
+  }
+}
+
 export function readBundleJson<T extends JsonRecord>(fileName: string): T {
   const filePath = bundlePath(fileName);
   const stat = statSync(filePath);
   const cached = cache.get(filePath);
   if (cached && cached.mtimeMs === stat.mtimeMs) return cached.value as T;
-  const parsed = JSON.parse(readFileSync(filePath, "utf8")) as T;
+  let parsed: T;
+  try {
+    parsed = JSON.parse(readFileSync(filePath, "utf8")) as T;
+  } catch (error) {
+    throw new BundleFileError(fileName, error);
+  }
   cache.set(filePath, { mtimeMs: stat.mtimeMs, value: parsed });
   return parsed;
 }
@@ -128,46 +164,35 @@ export function readBundleJsonl<T extends JsonRecord>(fileName: string): T[] {
   const cached = cache.get(filePath);
   if (cached && cached.mtimeMs === stat.mtimeMs) return cached.value as T[];
   const text = readFileSync(filePath, "utf8").trim();
-  const parsed = text ? text.split(/\r?\n/).map((line) => JSON.parse(line) as T) : [];
+  let parsed: T[];
+  try {
+    parsed = text ? text.split(/\r?\n/).map((line) => JSON.parse(line) as T) : [];
+  } catch (error) {
+    throw new BundleFileError(fileName, error);
+  }
   cache.set(filePath, { mtimeMs: stat.mtimeMs, value: parsed });
   return parsed;
 }
 
 export function readBundleOverview(): BundleReadResult<BundleOverview> {
-  const missing = missingBundleFiles();
-  if (missing.length > 0) {
-    return { ok: false, error: bundleFriendlyError(missing), missingFiles: missing };
-  }
-
-  return {
-    ok: true,
-    warnings: [],
-    data: {
-      manifest: readBundleJson<JsonRecord>("manifest.json"),
-      qaReport: readBundleJson<JsonRecord>("qa_report.json"),
-      files: REQUIRED_BUNDLE_FILES.map((fileName) => {
-        const path = bundlePath(fileName);
-        return { fileName, exists: existsSync(path), sizeBytes: existsSync(path) ? statSync(path).size : null };
-      }),
-    },
-  };
+  return guardedBundleRead(() => ({
+    manifest: readBundleJson<JsonRecord>("manifest.json"),
+    qaReport: readBundleJson<JsonRecord>("qa_report.json"),
+    files: REQUIRED_BUNDLE_FILES.map((fileName) => {
+      const path = bundlePath(fileName);
+      return { fileName, exists: existsSync(path), sizeBytes: existsSync(path) ? statSync(path).size : null };
+    }),
+  }));
 }
 
 export function readReviewCandidates(): BundleReadResult<ReviewCandidate[]> {
-  const missing = missingBundleFiles();
-  if (missing.length > 0) {
-    return { ok: false, error: bundleFriendlyError(missing), missingFiles: missing };
-  }
-  const rows = readBundleJsonl<JsonRecord>("review_candidates.jsonl").map(normalizeReviewCandidate);
-  return { ok: true, data: rows, warnings: [] };
+  return guardedBundleRead(() =>
+    readBundleJsonl<JsonRecord>("review_candidates.jsonl").map(normalizeReviewCandidate),
+  );
 }
 
 export function readContentItems(): BundleReadResult<ContentBundleItem[]> {
-  const missing = missingBundleFiles();
-  if (missing.length > 0) {
-    return { ok: false, error: bundleFriendlyError(missing), missingFiles: missing };
-  }
-  return { ok: true, data: readBundleJsonl<ContentBundleItem>("content_items.jsonl"), warnings: [] };
+  return guardedBundleRead(() => readBundleJsonl<ContentBundleItem>("content_items.jsonl"));
 }
 
 export function readTaxonomyBundle(): BundleReadResult<{
@@ -175,19 +200,11 @@ export function readTaxonomyBundle(): BundleReadResult<{
   taxonomyRules: JsonRecord;
   tagDictionary: JsonRecord;
 }> {
-  const missing = missingBundleFiles();
-  if (missing.length > 0) {
-    return { ok: false, error: bundleFriendlyError(missing), missingFiles: missing };
-  }
-  return {
-    ok: true,
-    warnings: [],
-    data: {
-      taxonomy: readBundleJson<JsonRecord>("taxonomy.json"),
-      taxonomyRules: readBundleJson<JsonRecord>("taxonomy_rules.json"),
-      tagDictionary: readBundleJson<JsonRecord>("tag_dictionary.json"),
-    },
-  };
+  return guardedBundleRead(() => ({
+    taxonomy: readBundleJson<JsonRecord>("taxonomy.json"),
+    taxonomyRules: readBundleJson<JsonRecord>("taxonomy_rules.json"),
+    tagDictionary: readBundleJson<JsonRecord>("tag_dictionary.json"),
+  }));
 }
 
 export function findReviewCandidate(id: string): BundleReadResult<ReviewCandidate | null> {

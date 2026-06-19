@@ -28,7 +28,10 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-koda}:${POSTGRES_PASSWORD:-koda_password}@postgres:5432/${POSTGRES_DB:-koda}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
-      CRAWLER_ENABLED: ${CRAWLER_ENABLED:-true}
+      # Legacy crawler is opt-in only (the v1 merge-ready workbooks are the
+      # source of truth). Keep this false unless deliberately running a local
+      # legacy crawl with `npm run crawl -- --legacy-ok`.
+      CRAWLER_ENABLED: ${CRAWLER_ENABLED:-false}
       CRAWLER_MAX_PAGES: ${CRAWLER_MAX_PAGES:-5}
       CRAWLER_FETCH_BODY: ${CRAWLER_FETCH_BODY:-true}
       CRAWLER_MAX_BODY_FETCHES: ${CRAWLER_MAX_BODY_FETCHES:-100}

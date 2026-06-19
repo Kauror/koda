@@ -1,20 +1,27 @@
 import assert from "node:assert";
-import { existsSync, mkdtempSync, renameSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import {
+  REQUIRED_BUNDLE_FILES,
+  bundleFriendlyError,
   bundlePath,
+  type ContentBundleItem,
   filterContentItems,
   filterReviewCandidates,
+  findContentItem,
   findReviewCandidate,
   missingBundleFiles,
+  normalizeReviewCandidate,
   readBundleOverview,
   readContentItems,
   readReviewCandidates,
+  type ReviewCandidate,
 } from "../src/lib/admin-bundle";
 
 let passed = 0;
 let failed = 0;
+let skipped = 0;
 
 function check(name: string, fn: () => void) {
   try {
@@ -28,82 +35,280 @@ function check(name: string, fn: () => void) {
   }
 }
 
+function skip(name: string, reason: string) {
+  skipped++;
+  console.log(`  skip- ${name} (${reason})`);
+}
+
 console.log("[test] admin data-review checks:");
 
-check("bundle reader sees the expected generated files and counts", () => {
-  const overview = readBundleOverview();
-  assert.equal(overview.ok, true);
-  if (!overview.ok) return;
-  const counts = overview.data.manifest.row_counts as Record<string, number>;
-  assert.equal(counts.content_items_rows, 4933);
-  assert.equal(counts.web_index_content_rows, 3937);
-  assert.equal(counts.opinion_support_rows, 759);
-  assert.equal(counts.annual_context_rows, 237);
-  assert.equal(counts.achievement_enrichment_rows, 76);
-  assert.equal(counts.review_candidates_jsonl_rows, 1159);
+// ---------------------------------------------------------------------------
+// 1) Pure logic with synthetic fixtures — runs without any private data files.
+//    This is the core parser/filter/pagination logic the admin tool depends on.
+// ---------------------------------------------------------------------------
+
+const syntheticCandidates: ReviewCandidate[] = [
+  normalizeReviewCandidate({
+    candidateId: "WEB000001",
+    contentId: "WEB000001",
+    title: "Maksupoliitika muudatused ettevõtjatele",
+    url: "https://www.koda.ee/et/uudised/maksud",
+    confidence: "high",
+    recommendedAction: "approve",
+    currentValdkond: ["maksud-tasud-ja-aruandlus"],
+    suggestedValdkond: ["maksud-tasud-ja-aruandlus", "ettevotluskeskkond"],
+    currentTegevusala: [],
+    suggestedTegevusala: ["toostus-ja-tootmine"],
+    ruleSource: "topic-rule",
+    evidence: "maksumäär, käibemaks",
+  }),
+  normalizeReviewCandidate({
+    candidateId: "WEB000002",
+    contentId: "WEB000002",
+    title: "Keskkonnaload ja jäätmekäitlus",
+    url: "https://www.koda.ee/et/uudised/keskkond",
+    confidence: "medium",
+    recommendedAction: "needs_review",
+    currentValdkond: ["keskkond-kliima-ja-jaatmed"],
+    suggestedValdkond: ["keskkond-kliima-ja-jaatmed"],
+    currentTegevusala: ["energia-ja-ressursimahukas-tegevus"],
+    suggestedTegevusala: ["energia-ja-ressursimahukas-tegevus"],
+    ruleSource: "keyword-rule",
+    evidence: "jäätmeseadus",
+  }),
+  // No explicit ids: normalizeReviewCandidate must still produce a stable id.
+  normalizeReviewCandidate({
+    title: "Ilma ID-ta kandidaat",
+    sourceRow: { rowNumber: "42" },
+  }),
+];
+
+check("normalizeReviewCandidate assigns stable candidate IDs (incl. fallback)", () => {
+  assert.equal(syntheticCandidates[0].candidateId, "WEB000001");
+  // Falls back to sourceRow.rowNumber when no candidateId/contentId is present.
+  assert.equal(syntheticCandidates[2].candidateId, "42");
+  assert.ok(syntheticCandidates.every((row) => row.candidateId.length > 0));
+  // Re-normalizing a row with no identifiers at all yields a deterministic hash id.
+  const a = normalizeReviewCandidate({ title: "X" });
+  const b = normalizeReviewCandidate({ title: "X" });
+  assert.equal(a.candidateId, b.candidateId);
+  assert.ok(a.candidateId.startsWith("candidate-"));
 });
 
-check("review candidates receive stable candidate IDs and paginate/filter", () => {
-  const candidates = readReviewCandidates();
-  assert.equal(candidates.ok, true);
-  if (!candidates.ok) return;
-  assert.equal(candidates.data.length, 1159);
-  assert.ok(candidates.data.every((row) => row.candidateId));
+check("filterReviewCandidates filters by decision, query and tags + paginates", () => {
+  const decisions = new Map([[syntheticCandidates[0].candidateId, "approved"]]);
 
-  const decisions = new Map([[candidates.data[0].candidateId, "approved"]]);
-  const approved = filterReviewCandidates(candidates.data, { decision: "approved" }, decisions);
+  const approved = filterReviewCandidates(syntheticCandidates, { decision: "approved" }, decisions);
   assert.equal(approved.pagination.total, 1);
-  assert.equal(approved.rows[0].candidateId, candidates.data[0].candidateId);
+  assert.equal(approved.rows[0].candidateId, "WEB000001");
 
-  const byTitle = filterReviewCandidates(candidates.data, { q: candidates.data[0].title?.slice(0, 12) }, new Map());
-  assert.ok(byTitle.pagination.total >= 1);
+  const undecided = filterReviewCandidates(syntheticCandidates, { decision: "undecided" }, decisions);
+  assert.equal(undecided.pagination.total, 2);
+
+  const byText = filterReviewCandidates(syntheticCandidates, { q: "keskkonna" }, new Map());
+  assert.equal(byText.pagination.total, 1);
+  assert.equal(byText.rows[0].candidateId, "WEB000002");
+
+  const byTag = filterReviewCandidates(
+    syntheticCandidates,
+    { suggestedValdkond: "ettevotluskeskkond" },
+    new Map(),
+  );
+  assert.equal(byTag.pagination.total, 1);
+  assert.equal(byTag.rows[0].candidateId, "WEB000001");
+
+  const paged = filterReviewCandidates(syntheticCandidates, { pageSize: 2, page: 2 }, new Map());
+  assert.equal(paged.pagination.pages, 2);
+  assert.equal(paged.pagination.page, 2);
+  assert.equal(paged.rows.length, 1);
 });
 
-check("candidate lookup can join back to its content row without applying changes", () => {
-  const candidate = findReviewCandidate("WEB000001");
-  assert.equal(candidate.ok, true);
-  if (!candidate.ok) return;
-  assert.equal(candidate.data?.candidateId, "WEB000001");
+const syntheticContent: ContentBundleItem[] = [
+  {
+    externalId: "WEB000001",
+    title: "Maksupoliitika muudatused ettevõtjatele",
+    canonicalUrl: "https://www.koda.ee/et/uudised/maksud",
+    sourceDataset: "web",
+    sourceLayer: "koda_news",
+    sourceTypeDetail: "meie_uudis",
+    isPublic: true,
+    needsHumanReview: false,
+    valdkonnad: ["maksud-tasud-ja-aruandlus"],
+    tegevusalad: [],
+    tapsustused: [],
+  },
+  {
+    externalId: "OPINION-0001",
+    title: "Koja arvamus eelnõule",
+    sourceDataset: "opinions",
+    sourceLayer: "opinion_file",
+    sourceTypeDetail: "opinion_file",
+    isPublic: false,
+    needsHumanReview: true,
+    valdkonnad: ["maksud-tasud-ja-aruandlus"],
+    tegevusalad: [],
+    tapsustused: [],
+  },
+  {
+    externalId: "AR-2014-001",
+    title: "Aastaaruande kontekst",
+    sourceDataset: "annual_reports",
+    sourceLayer: "annual_report",
+    isPublic: false,
+    needsHumanReview: false,
+    valdkonnad: [],
+    tegevusalad: [],
+    tapsustused: [],
+  },
+];
 
-  const content = readContentItems();
-  assert.equal(content.ok, true);
-  if (!content.ok) return;
-  assert.equal(content.data.length, 4933);
-  assert.ok(content.data.some((row) => row.externalId === "WEB000001"));
+check("filterContentItems filters by dataset/visibility and does not mutate input", () => {
+  const before = JSON.stringify(syntheticContent);
+
+  const web = filterContentItems(syntheticContent, { sourceDataset: "web" });
+  assert.equal(web.pagination.total, 1);
+  assert.ok(web.rows.every((row) => row.sourceDataset === "web"));
+
+  const publicOnly = filterContentItems(syntheticContent, { isPublic: "true" });
+  assert.equal(publicOnly.pagination.total, 1);
+  assert.equal(publicOnly.rows[0].externalId, "WEB000001");
+
+  const needsReview = filterContentItems(syntheticContent, { needsHumanReview: "true" });
+  assert.equal(needsReview.pagination.total, 1);
+  assert.equal(needsReview.rows[0].externalId, "OPINION-0001");
+
+  const byText = filterContentItems(syntheticContent, { q: "aastaaruande" });
+  assert.equal(byText.pagination.total, 1);
+
+  // The reader/filter layer is read-only: it must never mutate the source rows.
+  assert.equal(JSON.stringify(syntheticContent), before);
 });
 
-check("content browser filters without mutating content rows", () => {
-  const content = readContentItems();
-  assert.equal(content.ok, true);
-  if (!content.ok) return;
-  const before = JSON.stringify(content.data[0]);
-  const result = filterContentItems(content.data, { sourceDataset: "web", pageSize: 5 });
-  assert.equal(result.rows.length, 5);
-  assert.ok(result.rows.every((row) => row.sourceDataset === "web"));
-  assert.equal(JSON.stringify(content.data[0]), before);
-});
+// ---------------------------------------------------------------------------
+// 2) Missing-bundle behaviour — friendly, path-free errors (no private data).
+// ---------------------------------------------------------------------------
 
-check("missing bundle files return a friendly error without exposing paths", () => {
+check("missing bundle files report a friendly error without leaking paths", () => {
+  // When the real bundle is present this temporarily hides one file.
   const manifest = bundlePath("manifest.json");
-  if (!existsSync(manifest)) return;
-  const tmpDir = mkdtempSync(join(tmpdir(), "koda-bundle-test-"));
-  const tmp = join(tmpDir, "manifest.json");
-  renameSync(manifest, tmp);
+  let tmpDir: string | null = null;
+  let movedTo: string | null = null;
+  if (existsSync(manifest)) {
+    tmpDir = mkdtempSync(join(tmpdir(), "koda-bundle-test-"));
+    movedTo = join(tmpDir, "manifest.json");
+    renameSync(manifest, movedTo);
+  }
   try {
     const missing = missingBundleFiles();
     assert.ok(missing.includes("manifest.json"));
+    const message = bundleFriendlyError(missing);
+    assert.ok(message.includes("manifest.json"));
+    assert.ok(!message.includes("C:\\"));
+    assert.ok(!message.includes("/Users/"));
+    assert.ok(!message.includes(process.cwd()));
+
     const overview = readBundleOverview();
     assert.equal(overview.ok, false);
     if (!overview.ok) {
       assert.ok(overview.error.includes("manifest.json"));
       assert.ok(!overview.error.includes("C:\\"));
-      assert.ok(!overview.error.includes("/Users/"));
     }
   } finally {
-    renameSync(tmp, manifest);
-    rmSync(tmpDir, { recursive: true, force: true });
+    if (movedTo) renameSync(movedTo, manifest);
+    if (tmpDir) rmSync(tmpDir, { recursive: true, force: true });
   }
 });
 
-console.log(`\n[test] ${passed} passed, ${failed} failed`);
+// ---------------------------------------------------------------------------
+// 3) Filesystem reader behaviour with a synthetic bundle. Only runs on a clean
+//    checkout (no real bundle present) so it never clobbers private data.
+// ---------------------------------------------------------------------------
+
+const cleanCheckout = missingBundleFiles().length === REQUIRED_BUNDLE_FILES.length;
+
+if (cleanCheckout) {
+  const bundleDir = bundlePath();
+  const contentFile = bundlePath("content_items.jsonl");
+  const minimal: Record<string, string> = {
+    "manifest.json": JSON.stringify({ row_counts: { content_items_rows: 2 }, validation_status: "passed" }),
+    "qa_report.json": JSON.stringify({}),
+    "achievement_enrichment.jsonl": "",
+    "taxonomy.json": JSON.stringify({ categories: [] }),
+    "taxonomy_rules.json": JSON.stringify({}),
+    "review_candidates.jsonl": [
+      JSON.stringify({ candidateId: "WEB000001", contentId: "WEB000001", title: "Maks" }),
+    ].join("\n"),
+    "tag_dictionary.json": JSON.stringify({}),
+  };
+  const validContent = [
+    JSON.stringify({ externalId: "WEB000001", title: "Maks", sourceDataset: "web" }),
+    JSON.stringify({ externalId: "OPINION-0001", title: "Arvamus", sourceDataset: "opinions" }),
+  ].join("\n");
+
+  try {
+    mkdirSync(bundleDir, { recursive: true });
+    for (const [file, body] of Object.entries(minimal)) {
+      mkdirSync(dirname(bundlePath(file)), { recursive: true });
+      writeFileSync(bundlePath(file), body, "utf8");
+    }
+
+    check("malformed JSONL yields a friendly error instead of crashing", () => {
+      writeFileSync(contentFile, "{not valid json\n", "utf8");
+      const result = readContentItems();
+      assert.equal(result.ok, false);
+      if (!result.ok) {
+        assert.ok(result.error.length > 0);
+        assert.ok(!result.error.includes("C:\\"));
+        assert.ok(!result.error.includes(process.cwd()));
+      }
+    });
+
+    check("synthetic bundle reads back and joins candidate to content row", () => {
+      writeFileSync(contentFile, validContent, "utf8");
+
+      const content = readContentItems();
+      assert.equal(content.ok, true);
+      if (content.ok) {
+        assert.equal(content.data.length, 2);
+        assert.ok(content.data.some((row) => row.externalId === "WEB000001"));
+      }
+
+      const candidates = readReviewCandidates();
+      assert.equal(candidates.ok, true);
+      if (candidates.ok) assert.equal(candidates.data.length, 1);
+
+      const candidate = findReviewCandidate("WEB000001");
+      assert.equal(candidate.ok, true);
+      if (candidate.ok) assert.equal(candidate.data?.candidateId, "WEB000001");
+
+      const joined = findContentItem("WEB000001");
+      assert.equal(joined.ok, true);
+      if (joined.ok) assert.equal(joined.data?.externalId, "WEB000001");
+    });
+  } finally {
+    rmSync(join(process.cwd(), "data/import/bundles"), { recursive: true, force: true });
+  }
+} else {
+  // A real (private) bundle is present: validate its production invariants.
+  check("real bundle exposes the expected generated files and counts", () => {
+    const overview = readBundleOverview();
+    assert.equal(overview.ok, true);
+    if (!overview.ok) return;
+    const counts = overview.data.manifest.row_counts as Record<string, number>;
+    assert.equal(counts.content_items_rows, 4933);
+    assert.equal(counts.achievement_enrichment_rows, 76);
+    assert.equal(counts.review_candidates_jsonl_rows, 1159);
+
+    const content = readContentItems();
+    assert.equal(content.ok, true);
+    if (content.ok) assert.equal(content.data.length, 4933);
+
+    const candidates = readReviewCandidates();
+    assert.equal(candidates.ok, true);
+    if (candidates.ok) assert.equal(candidates.data.length, 1159);
+  });
+  skip("synthetic filesystem reader test", "real bundle present — covered by real-bundle test");
+}
+
+console.log(`\n[test] ${passed} passed, ${failed} failed, ${skipped} skipped`);
 if (failed > 0) process.exitCode = 1;

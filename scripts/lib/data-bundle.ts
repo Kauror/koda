@@ -1,7 +1,16 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { relative, resolve } from "node:path";
 import * as XLSX from "xlsx";
+
+/**
+ * Path recorded in generated manifests. Relative to cwd (with forward slashes)
+ * so the bundle is deterministic across machines and never embeds absolute
+ * local/server paths.
+ */
+function manifestPath(absolutePath: string): string {
+  return relative(process.cwd(), absolutePath).split("\\").join("/");
+}
 
 export type JsonValue =
   | string
@@ -126,7 +135,7 @@ export function getSourceFileStatus(
     return {
       logical_name: logicalName,
       file_name: fileName,
-      path,
+      path: manifestPath(path),
       exists: false,
       size_bytes: null,
       sha256: null,
@@ -143,7 +152,7 @@ export function getSourceFileStatus(
   return {
     logical_name: logicalName,
     file_name: fileName,
-    path,
+    path: manifestPath(path),
     exists: true,
     size_bytes: statSync(path).size,
     sha256: sha256File(path),

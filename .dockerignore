@@ -8,8 +8,10 @@ README.md
 Dockerfile
 docker-compose.yml
 
-# Never bake local import data, generated reports or the local PGlite dev DB
-# into the image — import files are provided via a volume/bind mount at runtime.
+# Never bake local import data, generated reports, generated bundles or the
+# local PGlite dev DB into the image — these are provided via a volume/bind
+# mount at runtime, not shipped in the image.
 data/import/*.xlsx
 data/import/reports/
+data/import/bundles/
 .pglite/
