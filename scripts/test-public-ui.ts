@@ -128,6 +128,17 @@ check("homepage does not show example keyword shortcuts", () => {
   assert.ok(!source.includes("Näiteks:"));
 });
 
+check("homepage keeps filter groups when database options are unavailable", () => {
+  const source = readFileSync("src/app/page.tsx", "utf8");
+  assert.ok(source.includes("FALLBACK_FILTER_OPTIONS"));
+  assert.ok(source.includes("withFallbackOptions"));
+  assert.ok(source.includes("filterOptions"));
+  assert.ok(source.includes("Tööstus ja tootmine"));
+  assert.ok(source.includes("Maksud, tasud ja aruandlus"));
+  assert.ok(source.includes("Kasutame välistööjõudu"));
+  assert.ok(!source.includes("using empty filter list"));
+});
+
 check("detail page hides front-facing outcome status metadata", () => {
   const source = readFileSync("src/app/sisu/[id]/page.tsx", "utf8");
   assert.ok(source.includes("Veel samal teemal"));
