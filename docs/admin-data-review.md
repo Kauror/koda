@@ -91,9 +91,34 @@ bundle is missing the counters render as unavailable (`—`).
 
 `/admin/data-review` defaults to the **undecided** filter so still-to-review
 candidates appear first. The decision filter offers: Undecided (default), Approved,
-Rejected, Needs review, All. Even under **All**, undecided rows are sorted ahead of
-already-decided rows. Already-reviewed candidates are never hidden — they remain
-reachable through the filter options.
+Rejected, Needs review, All. Already-reviewed candidates are never hidden — they
+remain reachable through the filter options.
+
+### Date filtering & newest-first sorting
+
+Reviewers verify the **newest** material first, then move backwards.
+
+- **Default sort is newest-first** on both `/admin/data-review` and
+  `/admin/content-items`. Sort options on the review list: *Newest first*
+  (default), *Oldest first*, *Highest confidence first*, *Undecided + newest first*.
+- **Date filters:** `dateFrom`, `dateTo`, `year`, plus quick presets (This year,
+  Last 12 / 24 months, the last three calendar years, All years). Filters and sort
+  are preserved in the URL, e.g.
+  `?decision=undecided&year=2025&sort=newest` or `?dateFrom=2025-01-01&dateTo=2025-12-31`.
+  (`decisionStatus` is accepted as an alias of `decision`.)
+- **Where dates come from:** content items carry a normalized `date`
+  ("YYYY-MM-DD"), with `year`/`reportYear` as fallbacks (see
+  `src/lib/admin-dates.ts`). Review candidates have no own date, so each is joined
+  to its content item (`contentId` → `externalId`) to resolve a sortable date.
+- **Missing / invalid dates** are extracted safely (never crash). They show as
+  **"Kuupäev puudub"** and always sort **last**. With **no** date filter active they
+  remain visible; when a date filter **is** active they are excluded. Use the **All
+  years** preset (or clear the filters) to see everything again.
+- `/admin/data-bundle` shows a **date-coverage** summary (content + candidate
+  counts per year, newest/oldest date, missing-date count) to confirm the bundle
+  includes the expected latest material.
+- `/admin/taxonomy` is intentionally left rule-focused (no per-tag date coverage)
+  to keep it read-only and fast.
 
 ### Export buttons
 
@@ -113,6 +138,17 @@ Both `/admin/data-review` and `/admin/data-review/[id]` show a prominent notice:
 public content or live categories automatically.*) Saving a decision only writes a
 `DataReviewDecision` row — it never edits `ContentItem`, the generated bundle, or
 the source workbooks.
+
+## Recommended review workflow
+
+1. Start with **undecided + newest first** (the default view).
+2. Review the **current year** first (use the *This year* / current-year preset).
+3. Move **backwards year by year** (last year, the year before, …). Older items
+   — e.g. from 2016 — are often less relevant for current public use.
+4. Mark older uncertain rows as **needs review** rather than approving blindly.
+
+Use `/admin/data-bundle`'s date-coverage table to confirm the newest material is
+actually present before starting.
 
 ## Missing Bundle Files
 

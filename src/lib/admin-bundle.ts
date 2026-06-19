@@ -1,7 +1,20 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
+import {
+  type DateFilter,
+  type ItemDate,
+  UNKNOWN_DATE,
+  compareItemDate,
+  extractItemDate,
+  matchesDateFilter,
+} from "./admin-dates";
 
 export const DATA_BUNDLE_DIR = "data/import/bundles/koda_data_bundle_v1";
+
+/** Sort modes shared by the review and content browsers. */
+export type AdminSortMode = "newest" | "oldest" | "confidence" | "undecided_newest";
+
+const CONFIDENCE_RANK: Record<string, number> = { high: 3, medium: 2, low: 1 };
 
 export const REQUIRED_BUNDLE_FILES = [
   "manifest.json",
@@ -101,6 +114,9 @@ export type ContentBundleItem = JsonRecord & {
   isPublic?: boolean;
   needsHumanReview?: boolean;
   publicPriority?: string | null;
+  date?: string | null;
+  year?: number | null;
+  reportYear?: number | null;
   valdkonnad?: string[];
   tegevusalad?: string[];
   tapsustused?: string[];
@@ -121,6 +137,10 @@ export type CandidateFilters = {
   suggestedValdkond?: string;
   currentTegevusala?: string;
   suggestedTegevusala?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  year?: number;
+  sort?: AdminSortMode;
   page?: number;
   pageSize?: number;
 };
@@ -134,6 +154,10 @@ export type ContentFilters = {
   importStatus?: string;
   isPublic?: string;
   needsHumanReview?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  year?: number;
+  sort?: "newest" | "oldest";
   page?: number;
   pageSize?: number;
 };
@@ -261,12 +285,21 @@ export function findContentItem(externalId: string): BundleReadResult<ContentBun
   return { ok: true, warnings: [], data: rows.data.find((row) => row.externalId === externalId) ?? null };
 }
 
+function dateFilterFrom(filters: { dateFrom?: string; dateTo?: string; year?: number }): DateFilter {
+  return { dateFrom: filters.dateFrom, dateTo: filters.dateTo, year: filters.year ?? null };
+}
+
 export function filterReviewCandidates(
   rows: ReviewCandidate[],
   filters: CandidateFilters,
   decisionByCandidateId: Map<string, string>,
+  /** Resolved date per candidateId (joined from the content item). Defaults to unknown. */
+  dateByCandidateId?: Map<string, ItemDate>,
 ): { rows: ReviewCandidate[]; pagination: Pagination } {
   const q = normalize(filters.q);
+  const dateFilter = dateFilterFrom(filters);
+  const dateOf = (row: ReviewCandidate): ItemDate => dateByCandidateId?.get(row.candidateId) ?? UNKNOWN_DATE;
+
   const filtered = rows.filter((row) => {
     const decision = decisionByCandidateId.get(row.candidateId) ?? "undecided";
     if (filters.decision && filters.decision !== "all" && decision !== filters.decision) return false;
@@ -276,20 +309,32 @@ export function filterReviewCandidates(
     if (filters.suggestedValdkond && !includesValue(row.suggestedValdkond, filters.suggestedValdkond)) return false;
     if (filters.currentTegevusala && !includesValue(row.currentTegevusala, filters.currentTegevusala)) return false;
     if (filters.suggestedTegevusala && !includesValue(row.suggestedTegevusala, filters.suggestedTegevusala)) return false;
+    if (!matchesDateFilter(dateOf(row), dateFilter)) return false;
     if (!q) return true;
     return [row.candidateId, row.contentId, row.title, row.url, row.evidence, row.reviewNote]
       .map((value) => normalize(stringValue(value)))
       .some((value) => value.includes(q));
   });
-  // Undecided-first by default: still-to-review candidates surface above
-  // already-decided ones. Array.sort is stable, so bundle order is preserved
-  // within each group, and the explicit decision filters above are unaffected.
+
+  const sort = filters.sort ?? "newest";
+  const isUndecided = (row: ReviewCandidate) => !decisionByCandidateId.has(row.candidateId);
+  // Stable sort: keep original (bundle) order as the final tie-breaker.
   const ordered = filtered
     .map((row, index) => ({ row, index }))
     .sort((a, b) => {
-      const aDecided = decisionByCandidateId.has(a.row.candidateId) ? 1 : 0;
-      const bDecided = decisionByCandidateId.has(b.row.candidateId) ? 1 : 0;
-      return aDecided - bDecided || a.index - b.index;
+      if (sort === "confidence") {
+        const byConf =
+          (CONFIDENCE_RANK[b.row.confidence ?? ""] ?? 0) - (CONFIDENCE_RANK[a.row.confidence ?? ""] ?? 0);
+        if (byConf !== 0) return byConf;
+        return compareItemDate(dateOf(a.row), dateOf(b.row), "newest") || a.index - b.index;
+      }
+      if (sort === "undecided_newest") {
+        const byDecision = Number(isUndecided(b.row)) - Number(isUndecided(a.row));
+        if (byDecision !== 0) return byDecision;
+        return compareItemDate(dateOf(a.row), dateOf(b.row), "newest") || a.index - b.index;
+      }
+      const byDate = compareItemDate(dateOf(a.row), dateOf(b.row), sort === "oldest" ? "oldest" : "newest");
+      return byDate || a.index - b.index;
     })
     .map((entry) => entry.row);
   return paginate(ordered, filters.page, filters.pageSize);
@@ -300,6 +345,8 @@ export function filterContentItems(
   filters: ContentFilters,
 ): { rows: ContentBundleItem[]; pagination: Pagination } {
   const q = normalize(filters.q);
+  const dateFilter = dateFilterFrom(filters);
+
   const filtered = rows.filter((row) => {
     if (filters.sourceDataset && row.sourceDataset !== filters.sourceDataset) return false;
     if (filters.sourceLayer && row.sourceLayer !== filters.sourceLayer) return false;
@@ -310,12 +357,41 @@ export function filterContentItems(
     if (filters.isPublic === "false" && row.isPublic !== false) return false;
     if (filters.needsHumanReview === "true" && row.needsHumanReview !== true) return false;
     if (filters.needsHumanReview === "false" && row.needsHumanReview !== false) return false;
+    if (!matchesDateFilter(extractItemDate(row), dateFilter)) return false;
     if (!q) return true;
     return [row.externalId, row.title, row.displayTitle, row.canonicalUrl, row.sourceUrl]
       .map((value) => normalize(stringValue(value)))
       .some((value) => value.includes(q));
   });
-  return paginate(filtered, filters.page, filters.pageSize);
+
+  const sort = filters.sort ?? "newest";
+  const ordered = filtered
+    .map((row, index) => ({ row, index }))
+    .sort((a, b) => compareItemDate(extractItemDate(a.row), extractItemDate(b.row), sort) || a.index - b.index);
+  return paginate(ordered.map((entry) => entry.row), filters.page, filters.pageSize);
+}
+
+/**
+ * Resolve a sortable date per review candidate by joining `contentId` to the
+ * content item's externalId. Candidates with no matching/dated content item are
+ * simply absent (treated as unknown-date downstream).
+ */
+export function buildCandidateDateMap(
+  candidates: ReviewCandidate[],
+  contentItems: ContentBundleItem[],
+): Map<string, ItemDate> {
+  const byExternalId = new Map<string, ItemDate>();
+  for (const item of contentItems) {
+    if (!item.externalId) continue;
+    const date = extractItemDate(item);
+    if (date.hasDate) byExternalId.set(item.externalId, date);
+  }
+  const map = new Map<string, ItemDate>();
+  for (const candidate of candidates) {
+    const date = candidate.contentId ? byExternalId.get(candidate.contentId) : undefined;
+    if (date) map.set(candidate.candidateId, date);
+  }
+  return map;
 }
 
 export function uniqueValues<T extends JsonRecord>(rows: T[], key: keyof T): string[] {

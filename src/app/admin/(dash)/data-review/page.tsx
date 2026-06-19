@@ -1,13 +1,17 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import {
+  type AdminSortMode,
+  buildCandidateDateMap,
   computeReviewProgress,
   filterReviewCandidates,
+  readContentItems,
   readReviewCandidates,
   stringValue,
   tagValues,
   uniqueValues,
 } from "@/lib/admin-bundle";
+import { UNKNOWN_DATE, formatItemDate } from "@/lib/admin-dates";
 import { DECISIONS_NOT_APPLIED_NOTICE } from "@/lib/admin-review-ui";
 import MissingBundleNotice from "../_components/MissingBundleNotice";
 import ReviewProgressCard from "../_components/ReviewProgressCard";
@@ -16,18 +20,35 @@ export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 50;
 const DEFAULT_DECISION_FILTER = "undecided";
+const SORT_OPTIONS: { value: AdminSortMode; label: string }[] = [
+  { value: "newest", label: "Uuemad enne" },
+  { value: "oldest", label: "Vanemad enne" },
+  { value: "confidence", label: "Suurim kindlus enne" },
+  { value: "undecided_newest", label: "Otsustamata + uuemad enne" },
+];
 
 type Params = {
   q?: string;
   decision?: string;
+  decisionStatus?: string;
   confidence?: string;
   recommendedAction?: string;
   currentValdkond?: string;
   suggestedValdkond?: string;
   currentTegevusala?: string;
   suggestedTegevusala?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  year?: string;
+  sort?: string;
   leht?: string;
 };
+
+function isoDaysAgo(months: number): string {
+  const d = new Date();
+  d.setMonth(d.getMonth() - months);
+  return d.toISOString().slice(0, 10);
+}
 
 function chips(values?: string[]): string {
   return values && values.length > 0 ? values.join(", ") : "—";
@@ -65,16 +86,28 @@ export default async function AdminDataReviewPage({ searchParams }: { searchPara
     bundle.data.map((row) => row.candidateId),
     decisionByCandidateId,
   );
-  const decisionFilter = params.decision ?? DEFAULT_DECISION_FILTER;
+
+  // Resolve a sortable date per candidate by joining to its content item.
+  const contentBundle = readContentItems();
+  const dateByCandidateId = contentBundle.ok
+    ? buildCandidateDateMap(bundle.data, contentBundle.data)
+    : new Map();
+
+  const decisionFilter = params.decision ?? params.decisionStatus ?? DEFAULT_DECISION_FILTER;
+  const sort = (SORT_OPTIONS.find((o) => o.value === params.sort)?.value ?? "newest") as AdminSortMode;
+  const thisYear = new Date().getFullYear();
   const { rows, pagination } = filterReviewCandidates(
     bundle.data,
     {
       ...params,
       decision: decisionFilter,
+      year: params.year ? parseInt(params.year, 10) || undefined : undefined,
+      sort,
       page: parseInt(params.leht || "1", 10) || 1,
       pageSize: PAGE_SIZE,
     },
     decisionByCandidateId,
+    dateByCandidateId,
   );
 
   const confidenceOptions = uniqueValues(bundle.data, "confidence");
@@ -174,6 +207,30 @@ export default async function AdminDataReviewPage({ searchParams }: { searchPara
             ))}
           </select>
         </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
+          <label className="field-label small">
+            Alates
+            <input name="dateFrom" type="date" defaultValue={params.dateFrom || ""} />
+          </label>
+          <label className="field-label small">
+            Kuni
+            <input name="dateTo" type="date" defaultValue={params.dateTo || ""} />
+          </label>
+          <label className="field-label small">
+            Aasta
+            <input name="year" type="number" placeholder="nt 2025" defaultValue={params.year || ""} />
+          </label>
+          <label className="field-label small">
+            Järjestus
+            <select name="sort" defaultValue={sort}>
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
         <div>
           <button type="submit" className="btn btn-small">
             Filtreeri
@@ -184,10 +241,36 @@ export default async function AdminDataReviewPage({ searchParams }: { searchPara
         </div>
       </form>
 
+      <div className="card-links" style={{ marginBottom: 16 }}>
+        <span className="muted small">Kiirvalik:</span>
+        <Link href={hrefFor({ ...params, year: String(thisYear), dateFrom: undefined, dateTo: undefined }, 1)} className="tag">
+          See aasta
+        </Link>
+        <Link href={hrefFor({ ...params, year: undefined, dateFrom: isoDaysAgo(12), dateTo: undefined }, 1)} className="tag">
+          Viimased 12 kuud
+        </Link>
+        <Link href={hrefFor({ ...params, year: undefined, dateFrom: isoDaysAgo(24), dateTo: undefined }, 1)} className="tag">
+          Viimased 24 kuud
+        </Link>
+        {[thisYear, thisYear - 1, thisYear - 2].map((y) => (
+          <Link
+            key={y}
+            href={hrefFor({ ...params, year: String(y), dateFrom: undefined, dateTo: undefined }, 1)}
+            className="tag"
+          >
+            {y}
+          </Link>
+        ))}
+        <Link href={hrefFor({ ...params, year: undefined, dateFrom: undefined, dateTo: undefined }, 1)} className="tag">
+          Kõik aastad
+        </Link>
+      </div>
+
       <table className="admin-table">
         <thead>
           <tr>
             <th>Kandidaat</th>
+            <th>Kuupäev</th>
             <th>Soovitus</th>
             <th>Praegune</th>
             <th>Soovitatud</th>
@@ -209,6 +292,7 @@ export default async function AdminDataReviewPage({ searchParams }: { searchPara
                     </div>
                   )}
                 </td>
+                <td className="small">{formatItemDate(dateByCandidateId.get(row.candidateId) ?? UNKNOWN_DATE)}</td>
                 <td>
                   <span className="tag accent">{row.recommendedAction || "—"}</span>
                   <div className="muted small">Kindlus: {row.confidence || "—"}</div>
@@ -239,7 +323,7 @@ export default async function AdminDataReviewPage({ searchParams }: { searchPara
           })}
           {rows.length === 0 && (
             <tr>
-              <td colSpan={6} className="muted">
+              <td colSpan={7} className="muted">
                 Sobivaid kandidaate ei leitud.
               </td>
             </tr>

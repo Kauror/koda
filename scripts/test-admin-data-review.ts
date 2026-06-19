@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   REQUIRED_BUNDLE_FILES,
+  buildCandidateDateMap,
   bundleFriendlyError,
   bundlePath,
   computeReviewProgress,
@@ -19,6 +20,12 @@ import {
   readReviewCandidates,
   type ReviewCandidate,
 } from "../src/lib/admin-bundle";
+import {
+  NO_DATE_LABEL,
+  extractItemDate,
+  formatItemDate,
+  matchesDateFilter,
+} from "../src/lib/admin-dates";
 import {
   BUNDLE_GENERATE_COMMAND,
   BUNDLE_VALIDATE_COMMAND,
@@ -131,7 +138,7 @@ check("filterReviewCandidates filters by decision, query and tags + paginates", 
   assert.equal(paged.rows.length, 1);
 });
 
-check("review list defaults to undecided and sorts undecided first under 'all'", () => {
+check("undecided filter hides decided rows; undecided_newest sort ranks undecided first", () => {
   const decisions = new Map([["WEB000001", "approved"]]);
 
   // Default (undecided) filter hides already-decided candidates.
@@ -139,8 +146,12 @@ check("review list defaults to undecided and sorts undecided first under 'all'",
   assert.equal(undecidedOnly.pagination.total, 2);
   assert.ok(undecidedOnly.rows.every((row) => !decisions.has(row.candidateId)));
 
-  // "all" keeps every row but undecided ones must rank ahead of decided ones.
-  const all = filterReviewCandidates(syntheticCandidates, { decision: "all" }, decisions);
+  // "all" + undecided_newest keeps every row but ranks undecided ahead of decided.
+  const all = filterReviewCandidates(
+    syntheticCandidates,
+    { decision: "all", sort: "undecided_newest" },
+    decisions,
+  );
   assert.equal(all.pagination.total, 3);
   const decidedFlags = all.rows.map((row) => decisions.has(row.candidateId));
   const firstDecided = decidedFlags.indexOf(true);
@@ -175,6 +186,114 @@ check("computeReviewProgress counts decisions and percentage", () => {
 });
 
 // ---------------------------------------------------------------------------
+// 1a) Date extraction, filtering and newest-first sorting (date workflow).
+// ---------------------------------------------------------------------------
+
+check("extractItemDate handles full dates, year-only, invalid and missing", () => {
+  const full = extractItemDate({ date: "2024-09-01" });
+  assert.equal(full.hasDate, true);
+  assert.equal(full.yearOnly, false);
+  assert.equal(full.year, 2024);
+  assert.equal(full.iso, "2024-09-01");
+  assert.ok(full.sortKey && full.sortKey > 0);
+
+  const yearStr = extractItemDate({ date: "2016" });
+  assert.equal(yearStr.hasDate, true);
+  assert.equal(yearStr.yearOnly, true);
+  assert.equal(yearStr.year, 2016);
+
+  const yearField = extractItemDate({ date: null, year: 2018 });
+  assert.equal(yearField.hasDate, true);
+  assert.equal(yearField.year, 2018);
+
+  for (const bad of [{ date: "not-a-date" }, { date: "2024-13-99" }, {}, { date: null, year: null }]) {
+    const d = extractItemDate(bad);
+    assert.equal(d.hasDate, false);
+    assert.equal(d.sortKey, null);
+    assert.equal(formatItemDate(d), NO_DATE_LABEL);
+  }
+});
+
+check("matchesDateFilter: inactive passes all; active excludes unknown dates", () => {
+  const known = extractItemDate({ date: "2025-06-15" });
+  const unknown = extractItemDate({});
+  assert.equal(matchesDateFilter(known, {}), true);
+  assert.equal(matchesDateFilter(unknown, {}), true); // no filter → unknown kept
+  assert.equal(matchesDateFilter(unknown, { year: 2025 }), false); // filter active → unknown dropped
+  assert.equal(matchesDateFilter(known, { year: 2025 }), true);
+  assert.equal(matchesDateFilter(known, { year: 2024 }), false);
+  assert.equal(matchesDateFilter(known, { dateFrom: "2025-01-01", dateTo: "2025-12-31" }), true);
+  assert.equal(matchesDateFilter(known, { dateFrom: "2025-07-01" }), false);
+  assert.equal(matchesDateFilter(known, { dateTo: "2025-05-31" }), false);
+});
+
+const datedCandidates: ReviewCandidate[] = [
+  normalizeReviewCandidate({ candidateId: "C2016", contentId: "C2016", title: "Vana asi" }),
+  normalizeReviewCandidate({ candidateId: "C2024", contentId: "C2024", title: "Uuem asi" }),
+  normalizeReviewCandidate({ candidateId: "C2025", contentId: "C2025", title: "Uusim asi" }),
+  normalizeReviewCandidate({ candidateId: "CXX", contentId: "CXX", title: "Kuupäevata" }),
+];
+const datedContent: ContentBundleItem[] = [
+  { externalId: "C2016", title: "Vana asi", date: "2016-05-01" },
+  { externalId: "C2024", title: "Uuem asi", date: "2024-03-10" },
+  { externalId: "C2025", title: "Uusim asi", date: "2025-11-20" },
+  { externalId: "CXX", title: "Kuupäevata" }, // no date
+];
+const candidateDates = buildCandidateDateMap(datedCandidates, datedContent);
+
+check("buildCandidateDateMap joins candidates to content dates", () => {
+  assert.equal(candidateDates.get("C2025")?.year, 2025);
+  assert.equal(candidateDates.get("C2016")?.year, 2016);
+  assert.equal(candidateDates.has("CXX"), false); // no usable date → absent
+});
+
+check("review candidates sort newest-first by default (unknown dates last)", () => {
+  const { rows } = filterReviewCandidates(datedCandidates, {}, new Map(), candidateDates);
+  assert.deepEqual(
+    rows.map((r) => r.candidateId),
+    ["C2025", "C2024", "C2016", "CXX"]
+  );
+});
+
+check("review candidates sort oldest-first on request (unknown dates last)", () => {
+  const { rows } = filterReviewCandidates(datedCandidates, { sort: "oldest" }, new Map(), candidateDates);
+  assert.deepEqual(
+    rows.map((r) => r.candidateId),
+    ["C2016", "C2024", "C2025", "CXX"]
+  );
+});
+
+check("review candidate year filter keeps only that year and drops unknown dates", () => {
+  const { rows } = filterReviewCandidates(datedCandidates, { year: 2025 }, new Map(), candidateDates);
+  assert.deepEqual(rows.map((r) => r.candidateId), ["C2025"]);
+});
+
+check("review candidate dateFrom/dateTo filter works", () => {
+  const { rows } = filterReviewCandidates(
+    datedCandidates,
+    { dateFrom: "2024-01-01", dateTo: "2024-12-31" },
+    new Map(),
+    candidateDates
+  );
+  assert.deepEqual(rows.map((r) => r.candidateId), ["C2024"]);
+});
+
+check("content item browser filters by year and sorts newest-first", () => {
+  const newest = filterContentItems(datedContent, {});
+  assert.deepEqual(
+    newest.rows.map((r) => r.externalId),
+    ["C2025", "C2024", "C2016", "CXX"]
+  );
+  const only2016 = filterContentItems(datedContent, { year: 2016 });
+  assert.deepEqual(only2016.rows.map((r) => r.externalId), ["C2016"]);
+  const oldest = filterContentItems(datedContent, { sort: "oldest" });
+  assert.deepEqual(
+    oldest.rows.map((r) => r.externalId),
+    ["C2016", "C2024", "C2025", "CXX"]
+  );
+});
+
+// ---------------------------------------------------------------------------
 // 1b) Admin UI wiring — assert the page sources expose the required affordances
 //     (links, warnings, export buttons, friendly missing-bundle commands).
 // ---------------------------------------------------------------------------
@@ -201,9 +320,29 @@ check("data-review page shows progress, export buttons and the not-applied warni
   assert.ok(src.includes("DEFAULT_DECISION_FILTER"));
 });
 
-check("data-review detail page shows the not-applied warning", () => {
+check("data-review page exposes date filters, presets and sort", () => {
+  const src = readSource("src/app/admin/(dash)/data-review/page.tsx");
+  assert.ok(src.includes('name="dateFrom"'));
+  assert.ok(src.includes('name="dateTo"'));
+  assert.ok(src.includes('name="year"'));
+  assert.ok(src.includes('name="sort"'));
+  assert.ok(src.includes("Kõik aastad")); // "all years" preset
+  assert.ok(src.includes("Kuupäev")); // date column header
+});
+
+check("content-items page exposes date filters, sort and a date column", () => {
+  const src = readSource("src/app/admin/(dash)/content-items/page.tsx");
+  assert.ok(src.includes('name="dateFrom"'));
+  assert.ok(src.includes('name="dateTo"'));
+  assert.ok(src.includes('name="year"'));
+  assert.ok(src.includes('name="sort"'));
+  assert.ok(src.includes("formatItemDate"));
+});
+
+check("data-review detail page shows the not-applied warning and item date", () => {
   const src = readSource("src/app/admin/(dash)/data-review/[id]/page.tsx");
   assert.ok(src.includes("DECISIONS_NOT_APPLIED_NOTICE"));
+  assert.ok(src.includes("formatItemDate"));
 });
 
 check("not-applied notice copy is explicit and path-free", () => {

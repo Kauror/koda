@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { filterContentItems, readContentItems, stringValue, uniqueValues } from "@/lib/admin-bundle";
+import { extractItemDate, formatItemDate } from "@/lib/admin-dates";
 import MissingBundleNotice from "../_components/MissingBundleNotice";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +16,10 @@ type Params = {
   importStatus?: string;
   isPublic?: string;
   needsHumanReview?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  year?: string;
+  sort?: string;
   leht?: string;
 };
 
@@ -45,8 +50,11 @@ export default async function AdminContentItemsPage({ searchParams }: { searchPa
     );
   }
 
+  const sort = params.sort === "oldest" ? "oldest" : "newest";
   const { rows, pagination } = filterContentItems(bundle.data, {
     ...params,
+    year: params.year ? parseInt(params.year, 10) || undefined : undefined,
+    sort,
     page: parseInt(params.leht || "1", 10) || 1,
     pageSize: PAGE_SIZE,
   });
@@ -116,6 +124,27 @@ export default async function AdminContentItemsPage({ searchParams }: { searchPa
             <option value="false">needsHumanReview=false</option>
           </select>
         </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
+          <label className="field-label small">
+            Alates
+            <input name="dateFrom" type="date" defaultValue={params.dateFrom || ""} />
+          </label>
+          <label className="field-label small">
+            Kuni
+            <input name="dateTo" type="date" defaultValue={params.dateTo || ""} />
+          </label>
+          <label className="field-label small">
+            Aasta
+            <input name="year" type="number" placeholder="nt 2025" defaultValue={params.year || ""} />
+          </label>
+          <label className="field-label small">
+            Järjestus
+            <select name="sort" defaultValue={sort}>
+              <option value="newest">Uuemad enne</option>
+              <option value="oldest">Vanemad enne</option>
+            </select>
+          </label>
+        </div>
         <div>
           <button type="submit" className="btn btn-small">
             Filtreeri
@@ -130,6 +159,7 @@ export default async function AdminContentItemsPage({ searchParams }: { searchPa
         <thead>
           <tr>
             <th>Rida</th>
+            <th>Kuupäev</th>
             <th>Allikas</th>
             <th>Olek</th>
             <th>Sildid</th>
@@ -143,6 +173,7 @@ export default async function AdminContentItemsPage({ searchParams }: { searchPa
                 <strong>{row.displayTitle || row.title || row.externalId}</strong>
                 <div className="muted small">{row.externalId}</div>
               </td>
+              <td className="small">{formatItemDate(extractItemDate(row))}</td>
               <td>
                 <div>{row.sourceDataset || "—"}</div>
                 <div className="muted small">{row.sourceLayer || "—"}</div>
@@ -175,7 +206,7 @@ export default async function AdminContentItemsPage({ searchParams }: { searchPa
           ))}
           {rows.length === 0 && (
             <tr>
-              <td colSpan={5} className="muted">
+              <td colSpan={6} className="muted">
                 Sobivaid sisuridu ei leitud.
               </td>
             </tr>

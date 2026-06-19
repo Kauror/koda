@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { findContentItem, findReviewCandidate, stringValue } from "@/lib/admin-bundle";
 import { DECISIONS_NOT_APPLIED_NOTICE } from "@/lib/admin-review-ui";
+import { UNKNOWN_DATE, extractItemDate, formatItemDate } from "@/lib/admin-dates";
 import { extractLawMentions } from "@/lib/law-match";
 
 export const dynamic = "force-dynamic";
@@ -40,6 +41,10 @@ export default async function AdminDataReviewDetail({ params }: { params: Promis
   ]);
   const contentItem = contentResult?.ok ? contentResult.data : null;
 
+  const itemDate = contentItem
+    ? extractItemDate({ date: stringValue(contentItem.date), year: contentItem.year, reportYear: contentItem.reportYear })
+    : UNKNOWN_DATE;
+
   const detectedLaws = extractLawMentions({
     title: candidate.title,
     displayTitle: contentItem ? stringValue(contentItem.displayTitle) : null,
@@ -67,7 +72,14 @@ export default async function AdminDataReviewDetail({ params }: { params: Promis
       </p>
       <h1>{candidate.title || candidate.candidateId}</h1>
       <p className="section-sub">
-        Kandidaat: {candidate.candidateId} · otsus: {decision?.decision ?? "undecided"}
+        Kuupäev: <strong>{formatItemDate(itemDate)}</strong> · kandidaat: {candidate.candidateId} · otsus:{" "}
+        {decision?.decision ?? "undecided"}
+        {contentItem && (
+          <>
+            {" "}
+            · allikas: {stringValue(contentItem.sourceDataset) || "—"} / {stringValue(contentItem.sourceLayer) || "—"}
+          </>
+        )}
       </p>
 
       <div className="card notice">

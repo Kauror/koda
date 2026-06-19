@@ -1,6 +1,14 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { computeReviewProgress, readBundleOverview, readReviewCandidates, stringValue } from "@/lib/admin-bundle";
+import {
+  buildCandidateDateMap,
+  computeReviewProgress,
+  readBundleOverview,
+  readContentItems,
+  readReviewCandidates,
+  stringValue,
+} from "@/lib/admin-bundle";
+import { extractItemDate, formatItemDate, type ItemDate } from "@/lib/admin-dates";
 import MissingBundleNotice from "../_components/MissingBundleNotice";
 import ReviewProgressCard from "../_components/ReviewProgressCard";
 
@@ -9,6 +17,51 @@ export const dynamic = "force-dynamic";
 function countAt(rowCounts: unknown, key: string): string {
   if (!rowCounts || typeof rowCounts !== "object") return "0";
   return stringValue((rowCounts as Record<string, unknown>)[key]) || "0";
+}
+
+type DateCoverage = {
+  byYear: { year: number; content: number; candidates: number }[];
+  newest: ItemDate | null;
+  oldest: ItemDate | null;
+  missing: number;
+};
+
+function buildDateCoverage(): DateCoverage | null {
+  const content = readContentItems();
+  if (!content.ok) return null;
+  const candidates = readReviewCandidates();
+  const candidateDates = candidates.ok ? buildCandidateDateMap(candidates.data, content.data) : new Map<string, ItemDate>();
+
+  const perYear = new Map<number, { content: number; candidates: number }>();
+  let newest: ItemDate | null = null;
+  let oldest: ItemDate | null = null;
+  let missing = 0;
+  const bump = (year: number, key: "content" | "candidates") => {
+    const entry = perYear.get(year) ?? { content: 0, candidates: 0 };
+    entry[key]++;
+    perYear.set(year, entry);
+  };
+
+  for (const item of content.data) {
+    const d = extractItemDate(item);
+    if (!d.hasDate || d.year == null) {
+      missing++;
+      continue;
+    }
+    bump(d.year, "content");
+    if (d.sortKey != null) {
+      if (!newest || (newest.sortKey ?? 0) < d.sortKey) newest = d;
+      if (!oldest || (oldest.sortKey ?? 0) > d.sortKey) oldest = d;
+    }
+  }
+  for (const d of candidateDates.values()) {
+    if (d.year != null) bump(d.year, "candidates");
+  }
+
+  const byYear = [...perYear.entries()]
+    .map(([year, counts]) => ({ year, ...counts }))
+    .sort((a, b) => b.year - a.year);
+  return { byYear, newest, oldest, missing };
 }
 
 export default async function AdminDataBundlePage() {
@@ -35,6 +88,8 @@ export default async function AdminDataBundlePage() {
     );
   }
 
+  const coverage = buildDateCoverage();
+
   const { manifest, qaReport, files } = result.data;
   const rowCounts = manifest.row_counts;
   const validationStatus = stringValue(manifest.validation_status || qaReport.validation_status);
@@ -57,6 +112,45 @@ export default async function AdminDataBundlePage() {
       </div>
 
       <ReviewProgressCard progress={progress} />
+
+      {coverage && (
+        <section className="card">
+          <h2 style={{ marginTop: 0 }}>Kuupäevade kate</h2>
+          <p className="section-sub">
+            Aitab kontrollida, kas pakett sisaldab oodatud uusimat materjali. Uusimad aastad eespool.
+          </p>
+          <div className="status-flags" style={{ marginBottom: 12 }}>
+            <span className="flag evergreen">Uusim: {coverage.newest ? formatItemDate(coverage.newest) : "—"}</span>
+            <span className="flag down">Vanim: {coverage.oldest ? formatItemDate(coverage.oldest) : "—"}</span>
+            <span className="flag priority">Kuupäevata sisuridu: {coverage.missing}</span>
+          </div>
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Aasta</th>
+                <th>Sisuridu</th>
+                <th>Ülevaatuse kandidaate</th>
+              </tr>
+            </thead>
+            <tbody>
+              {coverage.byYear.map((row) => (
+                <tr key={row.year}>
+                  <td>{row.year}</td>
+                  <td>{row.content}</td>
+                  <td>{row.candidates}</td>
+                </tr>
+              ))}
+              {coverage.byYear.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="muted">
+                    Kuupäevadega sisuridu ei leitud.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </section>
+      )}
 
       <section className="card">
         <h2 style={{ marginTop: 0 }}>Põhinäitajad</h2>
