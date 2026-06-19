@@ -47,17 +47,13 @@ function Card({
         <Link href={detailHref}>{card.title}</Link>
       </h3>
       {card.summary && <p className="item-excerpt small">{card.summary}</p>}
-      {!compact && (card.valdkonnad.length > 0 || card.tegevusalad.length > 0) && (
+      {!compact && card.laws.length > 0 && (
         <div className="card-tags">
-          {card.valdkonnad.slice(0, 3).map((tag) => (
-            <span key={`v-${tag.slug}`} className="tag">
-              {tag.name}
-            </span>
-          ))}
-          {card.tegevusalad.slice(0, 2).map((tag) => (
-            <span key={`s-${tag.slug}`} className="tag tag-muted">
-              {tag.name}
-            </span>
+          <span className="card-tags-label">Seotud õigusaktid:</span>
+          {card.laws.map((law) => (
+            <Link key={law.slug} href={`/seadused/${law.slug}`} className="tag tag-law">
+              {law.canonicalName}
+            </Link>
           ))}
         </div>
       )}

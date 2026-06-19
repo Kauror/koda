@@ -7,7 +7,7 @@
 import { Prisma, TagType } from "@prisma/client";
 import { prisma } from "./db";
 import { isPublicSearchEligible } from "./eligibility";
-import { detectLaw, lawMentionForSlug } from "./law-match";
+import { detectLaw, extractLawMentions, lawMentionForSlug } from "./law-match";
 import { compactText, getCleanPublicExcerpt, publicSourceUrl, publicTitle, sourceCtaLabel } from "./content-display";
 import {
   type Candidate,
@@ -161,6 +161,8 @@ export type ResultCard = {
   badges: string[];
   valdkonnad: { slug: string; name: string }[];
   tegevusalad: { slug: string; name: string }[];
+  /** Confirmed legal acts (õigusaktid) mentioned by this row; link to /seadused/[slug]. */
+  laws: { slug: string; canonicalName: string }[];
   evidence: EvidenceHint;
   score: number;
 };
@@ -267,6 +269,9 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
     badges: buildBadges(s.c),
     valdkonnad: s.c.valdkonnad,
     tegevusalad: s.c.tegevusalad,
+    laws: extractLawMentions(s.c)
+      .filter((m) => m.confidence !== "low")
+      .map((m) => ({ slug: m.slug, canonicalName: m.canonicalName })),
     evidence: evidence.get(s.c.id) ?? { annualContext: false, relatedOpinions: 0 },
     score: s.total,
   });

@@ -238,5 +238,17 @@ check("legacy crawler requires explicit opt-in before running", () => {
   assert.ok(envExample.includes("CRAWLER_ENABLED=false"));
 });
 
+check("result cards show linked law tags, not generic topic/sector chips", () => {
+  const source = readFileSync("src/app/tulemused/page.tsx", "utf8");
+  assert.ok(source.includes("card.laws"));
+  assert.ok(source.includes("tag-law"));
+  assert.ok(source.includes("/seadused/"));
+  assert.ok(source.includes("Seotud õigusaktid"));
+  // The old generic valdkond/tegevusala chip rendering is gone from the card.
+  assert.ok(!source.includes("card.valdkonnad.slice"));
+  assert.ok(!source.includes("card.tegevusalad.slice"));
+  assert.ok(!source.includes("tag tag-muted"));
+});
+
 console.log(`\n[test] ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exitCode = 1;
