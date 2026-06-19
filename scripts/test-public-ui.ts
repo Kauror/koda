@@ -80,27 +80,48 @@ check("teema ajalugu uses contextual CTA labels, not generic allikas wording", (
   assert.ok(!source.includes("Vaata allikat"));
 });
 
-check("results page shows two achievements before the expand control", () => {
+check("results page uses compact expandable sections", () => {
   const source = readFileSync("src/app/tulemused/page.tsx", "utf8");
-  assert.ok(source.includes("cards.slice(0, 2)"));
-  assert.ok(source.includes("Näita veel töövõite"));
+  assert.ok(source.includes("const visibleLimit = compactAchievements ? 2 : initialVisibleCount ?? cards.length"));
+  assert.ok(source.includes("Näita rohkem"));
   assert.ok(source.includes("hiddenCards.map"));
+  assert.ok(source.includes("initialVisibleCount={5}"));
 });
 
 check("results page separates news/progress from opinions", () => {
   const source = readFileSync("src/app/tulemused/page.tsx", "utf8");
-  assert.ok(source.includes("Koja seisukohad ja arvamused"));
-  assert.ok(source.includes("Uudised ja arengud"));
+  assert.ok(source.includes("Koja seisukohad"));
+  assert.ok(source.includes("Koja uudised"));
+  assert.ok(source.includes("Veel samal teemal"));
   assert.ok(source.includes("results.news"));
   assert.ok(source.includes("valdkondadeüleseid tulemusi"));
   assert.ok(!source.includes("Vaata allikat"));
+  assert.ok(!source.includes("Koja avalikud seisukohad, ettepanekud ja hoiatused."));
+  assert.ok(!source.includes("Koda.ee uudised, praktilised muutused ja teema edenemise vahekokkuvõtted."));
+  assert.ok(!source.includes("Aastaaruannete kontekst ja koja pikem töö samadel teemadel."));
 });
 
-check("results page distinguishes matched totals from capped displayed totals", () => {
+check("results page does not show capped total copy", () => {
   const source = readFileSync("src/app/tulemused/page.tsx", "utf8");
-  assert.ok(source.includes("totalMatchedBeforeCaps"));
-  assert.ok(source.includes("totalDisplayed"));
-  assert.ok(source.includes("Kuvame neist"));
+  assert.ok(!source.includes("results-count-line"));
+  assert.ok(!source.includes("Kuvame neist"));
+});
+
+check("search form requires a concrete sector and hides removed type filters", () => {
+  const source = readFileSync("src/app/SearchForm.tsx", "utf8");
+  assert.ok(source.includes('const RESULT_TYPES = ["toovoit", "arvamus", "uudis"] as const'));
+  assert.ok(source.includes("tegevusala.length === 0"));
+  assert.ok(source.includes("isGenericSectorOption"));
+  assert.ok(!source.includes("Esialgne täiendav filter"));
+  assert.ok(!source.includes("Aastaaruanne"));
+  assert.ok(!source.includes("Taust"));
+});
+
+check("detail page hides front-facing outcome status metadata", () => {
+  const source = readFileSync("src/app/sisu/[id]/page.tsx", "utf8");
+  assert.ok(source.includes("Veel samal teemal"));
+  assert.ok(!source.includes("<dt>Tulemus</dt>"));
+  assert.ok(!source.includes("{item.outcomeLabel &&"));
 });
 
 check("legacy crawler requires explicit opt-in before running", () => {

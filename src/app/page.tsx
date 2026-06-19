@@ -61,7 +61,9 @@ export default async function HomePage() {
         <section className="section">
           <div className="container-narrow">
             <h2 className="section-heading">{texts["homepage.topics.title"]}</h2>
-            <p className="section-intro">{texts["homepage.topics.description"]}</p>
+            {texts["homepage.topics.description"] && (
+              <p className="section-intro">{texts["homepage.topics.description"]}</p>
+            )}
             <div className="theme-links">
               {options.valdkonnad.map((t) => (
                 <Link

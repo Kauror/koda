@@ -379,12 +379,6 @@ export function compareRankedCandidates(a: RankedCandidate, b: RankedCandidate):
 // Badges
 // ---------------------------------------------------------------------------
 
-const OUTCOME_BADGE: Record<string, string> = {
-  achieved: "Saavutatud",
-  partially_achieved: "Osaliselt saavutatud",
-  ongoing: "Käsil",
-};
-
 const TYPE_BADGE: Record<ResultType, string> = {
   toovoit: "Töövõit",
   arvamus: "Arvamus",
@@ -421,13 +415,6 @@ export function rankRelatedOpinions(parent: Candidate, opinions: Candidate[], ca
 }
 
 export function buildBadges(c: Candidate): string[] {
-  const badges: string[] = [];
   const t = primaryType(c);
-  badges.push(TYPE_BADGE[t]);
-  if (c.outcomeStatus && OUTCOME_BADGE[c.outcomeStatus] && t !== "toovoit") {
-    badges.push(OUTCOME_BADGE[c.outcomeStatus]);
-  } else if (t === "toovoit" && c.outcomeStatus === "partially_achieved") {
-    badges.push(OUTCOME_BADGE.partially_achieved);
-  }
-  return badges;
+  return [TYPE_BADGE[t]];
 }

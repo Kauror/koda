@@ -14,7 +14,7 @@ export const SITE_TEXT_DEFAULTS = [
   },
   {
     key: "homepage.hero.title",
-    valueEt: "Mida on koda sinu ettevõtte jaoks teinud ja öelnud?",
+    valueEt: "Mida koda sinu ettevõtte heaks teeb",
     description: "Avalehe põhipealkiri.",
     group: "homepage.hero",
   },
@@ -45,7 +45,7 @@ export const SITE_TEXT_DEFAULTS = [
   },
   {
     key: "homepage.topics.description",
-    valueEt: "Ei taha otsida? Vaata koja tööd ühe teema kaupa.",
+    valueEt: "",
     description: "Teemade sirvimise ploki lühikirjeldus.",
     group: "homepage.topics",
   },
@@ -84,6 +84,7 @@ export const SITE_TEXT_DEFAULTS_BY_KEY = new Map<string, SiteTextDefault>(
 
 const LEGACY_SITE_TEXT_VALUES = new Map<string, string>([
   ["homepage.hero.eyebrow", "Allikapõhine ülevaade koja tööst"],
+  ["homepage.hero.title", "Mida on koda sinu ettevõtte jaoks teinud ja öelnud?"],
   [
     "homepage.hero.lead",
     "Allikapõhine ülevaade sellest, mida Eesti Kaubandus-Tööstuskoda on ettevõtjate huvide kaitseks teinud ja öelnud. Otsi konkreetseid töövõite, koja seisukohti ja teemade tausta - kõik viidetega algallikatele.",
@@ -92,6 +93,7 @@ const LEGACY_SITE_TEXT_VALUES = new Map<string, string>([
     "homepage.hero.note",
     "See ei ole vestlusrobot ega uudistearhiiv. Tulemused põhinevad koja avalikel materjalidel ja indekseeritud allikatel.",
   ],
+  ["homepage.topics.description", "Ei taha otsida? Vaata koja tööd ühe teema kaupa."],
 ]);
 
 export function defaultSiteTextMap(): SiteTextMap {

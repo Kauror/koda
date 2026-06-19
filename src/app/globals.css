@@ -307,6 +307,13 @@ legend,
   margin: -2px 0 12px;
 }
 
+.field-error {
+  color: var(--color-danger);
+  font-size: 0.85rem;
+  font-weight: 700;
+  margin: 8px 0 0;
+}
+
 .option-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));

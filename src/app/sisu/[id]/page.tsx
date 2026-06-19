@@ -23,7 +23,7 @@ function TopicHistory({ rows }: { rows: EvidenceRow[] }) {
   if (rows.length === 0) return null;
   return (
     <section className="card">
-      <h2>Teema ajalugu</h2>
+      <h2>Veel samal teemal</h2>
       <ul className="evidence-list">
         {rows.map((row) => (
           <li key={row.id}>
@@ -69,12 +69,6 @@ function AchievementDetail({ item }: { item: ContentDetail }) {
             <>
               <dt>Valdkond</dt>
               <dd>{field}</dd>
-            </>
-          )}
-          {(item.enrichment?.outcome || item.outcomeLabel) && (
-            <>
-              <dt>Tulemus</dt>
-              <dd>{item.enrichment?.outcome || item.outcomeLabel}</dd>
             </>
           )}
           {impact && (
@@ -166,7 +160,6 @@ export default async function ContentDetailPage({
             ) : (
               <span className="badge">{item.sourceLabel}</span>
             )}
-            {item.outcomeLabel && <span className="badge">{item.outcomeLabel}</span>}
             {formatDate(item.date) && <span className="badge-date">{formatDate(item.date)}</span>}
             {!item.date && item.reportYear && <span className="badge-date">{item.reportYear}</span>}
           </p>

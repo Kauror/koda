@@ -87,24 +87,27 @@ function Section({
   sessionId,
   fromQuery,
   compactAchievements = false,
+  initialVisibleCount,
 }: {
   title: string;
-  sub: string;
+  sub?: string;
   cards: ResultCard[];
   sessionId: string | null;
   fromQuery: string;
   compactAchievements?: boolean;
+  initialVisibleCount?: number;
 }) {
   if (cards.length === 0) return null;
-  const visibleCards = compactAchievements ? cards.slice(0, 2) : cards;
-  const hiddenCards = compactAchievements ? cards.slice(2) : [];
+  const visibleLimit = compactAchievements ? 2 : initialVisibleCount ?? cards.length;
+  const visibleCards = cards.slice(0, visibleLimit);
+  const hiddenCards = cards.slice(visibleLimit);
 
   return (
     <section className="results-section">
       <h2>
         {title} <span className="result-count">({cards.length})</span>
       </h2>
-      <p className="section-sub">{sub}</p>
+      {sub && <p className="section-sub">{sub}</p>}
       {visibleCards.map((card) => (
         <Card
           key={card.id}
@@ -116,9 +119,15 @@ function Section({
       ))}
       {hiddenCards.length > 0 && (
         <details className="results-more">
-          <summary>Näita veel töövõite ({hiddenCards.length})</summary>
+          <summary>Näita rohkem ({hiddenCards.length})</summary>
           {hiddenCards.map((card) => (
-            <Card key={card.id} card={card} sessionId={sessionId} fromQuery={fromQuery} compact />
+            <Card
+              key={card.id}
+              card={card}
+              sessionId={sessionId}
+              fromQuery={fromQuery}
+              compact={compactAchievements}
+            />
           ))}
         </details>
       )}
@@ -154,7 +163,6 @@ export default async function ResultsPage({
 
   const [results, options] = await Promise.all([search(query), getFilterOptions()]);
   const hasResults = results.totalDisplayed > 0;
-  const hasCappedResults = results.totalMatchedBeforeCaps > results.totalDisplayed;
 
   const nameOf = (opts: { slug: string; name: string }[], slug: string) =>
     opts.find((option) => option.slug === slug)?.name ?? slug;
@@ -206,14 +214,6 @@ export default async function ResultsPage({
       </div>
 
       <div className="container results-body">
-        {hasResults && (
-          <p className="results-count-line">
-            {hasCappedResults
-              ? `Leidsime ${results.totalMatchedBeforeCaps} sobivat tulemust. Kuvame neist ${results.totalDisplayed} kõige asjakohasemat.`
-              : `Leidsime ${results.totalDisplayed} sobivat tulemust.`}
-          </p>
-        )}
-
         {results.includesRelatedSectorMatches && (
           <div className="card notice" style={{ marginTop: 16 }}>
             <p>Näitan ka valdkondadeüleseid tulemusi, mis on valitud tegevusalaga seotud.</p>
@@ -274,25 +274,25 @@ export default async function ResultsPage({
           compactAchievements
         />
         <Section
-          title="Koja seisukohad ja arvamused"
-          sub="Koja avalikud seisukohad, ettepanekud ja hoiatused."
+          title="Koja seisukohad"
           cards={results.positions}
           sessionId={sessionId}
           fromQuery={fromQuery}
+          initialVisibleCount={5}
         />
         <Section
-          title="Uudised ja arengud"
-          sub="Koda.ee uudised, praktilised muutused ja teema edenemise vahekokkuvõtted."
+          title="Koja uudised"
           cards={results.news}
           sessionId={sessionId}
           fromQuery={fromQuery}
+          initialVisibleCount={5}
         />
         <Section
-          title="Taust ja teema ajalugu"
-          sub="Aastaaruannete kontekst ja koja pikem töö samadel teemadel."
+          title="Veel samal teemal"
           cards={results.context}
           sessionId={sessionId}
           fromQuery={fromQuery}
+          initialVisibleCount={5}
         />
 
         {hasResults && (

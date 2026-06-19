@@ -4,16 +4,24 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import type { FilterOptions } from "@/lib/search";
 
-const RESULT_TYPES = ["toovoit", "arvamus", "uudis", "aastaaruanne", "kontekst"] as const;
+const RESULT_TYPES = ["toovoit", "arvamus", "uudis"] as const;
 type ResultType = (typeof RESULT_TYPES)[number];
 
 const RESULT_TYPE_LABELS: Record<ResultType, string> = {
   toovoit: "Töövõit",
   arvamus: "Arvamus",
   uudis: "Uudis",
-  aastaaruanne: "Aastaaruanne",
-  kontekst: "Taust",
 };
+
+function isGenericSectorOption(option: { slug: string; name: string }): boolean {
+  const text = `${option.slug} ${option.name}`.toLocaleLowerCase("et-EE");
+  return (
+    text.includes("kõik tegevusalad") ||
+    text.includes("koik-tegevusalad") ||
+    text.includes("valdkondadeülene") ||
+    text.includes("valdkondadeulene")
+  );
+}
 
 function ChipGroup({
   options,
@@ -52,12 +60,19 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
+  const tegevusalaOptions = options.tegevusalad.filter((option) => !isGenericSectorOption(option));
+  const tegevusalaSlugs = new Set(tegevusalaOptions.map((option) => option.slug));
 
   const [q, setQ] = useState<string>(params.get("q") || "");
-  const [tegevusala, setTegevusala] = useState<string[]>(listParam("tegevusala"));
+  const [tegevusala, setTegevusala] = useState<string[]>(
+    listParam("tegevusala").filter((slug) => tegevusalaSlugs.has(slug))
+  );
   const [valdkond, setValdkond] = useState<string[]>(listParam("valdkond"));
   const [tapsustus, setTapsustus] = useState<string[]>(listParam("tapsustus"));
-  const [type, setType] = useState<string[]>(listParam("type"));
+  const [type, setType] = useState<string[]>(
+    listParam("type").filter((slug) => RESULT_TYPES.includes(slug as ResultType))
+  );
+  const [showSectorError, setShowSectorError] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(
     listParam("valdkond").length > 0 || listParam("tapsustus").length > 0 || listParam("type").length > 0
   );
@@ -71,7 +86,7 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
   const activeFilters: { key: string; label: string; remove: () => void }[] = [
     ...tegevusala.map((s) => ({
       key: `t-${s}`,
-      label: nameOf(options.tegevusalad, s),
+      label: nameOf(tegevusalaOptions, s),
       remove: () => setTegevusala((v) => v.filter((x) => x !== s)),
     })),
     ...valdkond.map((s) => ({
@@ -93,6 +108,10 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (tegevusalaOptions.length > 0 && tegevusala.length === 0) {
+      setShowSectorError(true);
+      return;
+    }
     const p = new URLSearchParams();
     if (q.trim()) p.set("q", q.trim());
     if (tegevusala.length) p.set("tegevusala", tegevusala.join(","));
@@ -104,15 +123,25 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
 
   return (
     <form onSubmit={submit} className="card search-form">
-      {options.tegevusalad.length > 0 && (
-        <fieldset className="search-sector">
+      {tegevusalaOptions.length > 0 && (
+        <fieldset className="search-sector" aria-describedby="tegevusala-hint tegevusala-error">
           <legend>Tegevusala</legend>
-          <p className="field-hint">Valikuline. Aitab esile tõsta sinu valdkonnale olulisemat.</p>
+          <p className="field-hint" id="tegevusala-hint">
+            Vali vähemalt üks tegevusala.
+          </p>
           <ChipGroup
-            options={options.tegevusalad}
+            options={tegevusalaOptions}
             selected={tegevusala}
-            onToggle={toggle(tegevusala, setTegevusala)}
+            onToggle={(slug) => {
+              setShowSectorError(false);
+              toggle(tegevusala, setTegevusala)(slug);
+            }}
           />
+          {showSectorError && (
+            <p className="field-error" id="tegevusala-error" role="alert">
+              Palun vali tegevusala.
+            </p>
+          )}
         </fieldset>
       )}
 
@@ -137,7 +166,7 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
           </button>
         </div>
         <p className="field-hint">
-          Tegevusala ega filtri valimine ei ole kohustuslik - ainuüksi märksõnast või teemast piisab.
+          Alusta tegevusalast ja lisa soovi korral märksõna või teema.
         </p>
       </div>
 
@@ -179,9 +208,6 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
           {options.tapsustused.length > 0 && (
             <fieldset>
               <legend>Ettevõtte olukord / täpsustus</legend>
-              <p className="field-hint">
-                Esialgne täiendav filter - kasutame seda kergelt ega piira sellega tulemusi.
-              </p>
               <ChipGroup
                 options={options.tapsustused}
                 selected={tapsustus}
