@@ -23,6 +23,7 @@
     "search:test": "tsx scripts/test-search.ts",
     "public-ui:test": "tsx scripts/test-public-ui.ts",
     "site-texts:test": "tsx scripts/test-site-texts.ts",
+    "admin-review:test": "tsx scripts/test-admin-data-review.ts",
     "import:verify-db": "tsx scripts/verify-db.ts",
     "db:setup:pglite": "tsx scripts/db-setup-pglite.ts",
     "prisma:generate": "prisma generate",

@@ -265,6 +265,37 @@ model SiteText {
   @@index([group])
 }
 
+/// Online admin review decisions for local data-bundle taxonomy suggestions.
+/// These rows are review notes/proposals only: saving a decision must never
+/// update ContentItem taxonomy, generated bundle JSONL, or source Excel files.
+model DataReviewDecision {
+  id                String  @id @default(cuid())
+  candidateId       String  @unique
+  contentExternalId String?
+  contentTitle      String?
+  contentUrl        String?
+  decision          String
+
+  approvedValdkonnad     Json?
+  approvedTegevusalad    Json?
+  approvedTapsustused    Json?
+  approvedPublicPriority Int?
+  approvedSectorWeight   Float?
+  approvedTopicWeight    Float?
+  approvedGeneralWeight  Float?
+
+  reviewerName        String?
+  reviewerNote        String?
+  sourceCandidateJson Json
+  reviewedAt          DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([decision])
+  @@index([contentExternalId])
+  @@index([reviewedAt])
+}
+
 /// Evidence graph linking a public result to its supporting opinions, annual
 /// context, topic history, duplicate/canonical rows and achievement enrichment.
 model ContentEvidenceLink {

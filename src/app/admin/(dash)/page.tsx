@@ -4,13 +4,14 @@ import { prisma } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 export default async function AdminDashboard() {
-  const [contentCount, hiddenCount, untaggedCount, topicCount, tagCount, sessionCount, clickCount, recentSessions] =
+  const [contentCount, hiddenCount, untaggedCount, topicCount, tagCount, decisionCount, sessionCount, clickCount, recentSessions] =
     await Promise.all([
       prisma.contentItem.count(),
       prisma.contentItem.count({ where: { isHidden: true } }),
       prisma.contentItem.count({ where: { tags: { none: {} }, isHidden: false } }),
       prisma.topicGroup.count(),
       prisma.tag.count(),
+      prisma.dataReviewDecision.count(),
       prisma.searchSession.count(),
       prisma.searchResultClick.count(),
       prisma.searchSession.findMany({ orderBy: { createdAt: "desc" }, take: 10 }),
@@ -50,6 +51,15 @@ export default async function AdminDashboard() {
               </td>
               <td>
                 <Link href="/admin/tags">Halda →</Link>
+              </td>
+            </tr>
+            <tr>
+              <td>Andmeülevaatuse otsuseid</td>
+              <td>
+                <strong>{decisionCount}</strong>
+              </td>
+              <td>
+                <Link href="/admin/data-review">Vaata →</Link>
               </td>
             </tr>
             <tr>
