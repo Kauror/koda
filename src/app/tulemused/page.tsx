@@ -286,21 +286,21 @@ export default async function ResultsPage({
           cards={results.positions}
           sessionId={sessionId}
           fromQuery={fromQuery}
-          initialVisibleCount={5}
+          initialVisibleCount={2}
         />
         <Section
           title="Koja uudised"
           cards={results.news}
           sessionId={sessionId}
           fromQuery={fromQuery}
-          initialVisibleCount={5}
+          initialVisibleCount={2}
         />
         <Section
           title="Veel samal teemal"
           cards={results.context}
           sessionId={sessionId}
           fromQuery={fromQuery}
-          initialVisibleCount={5}
+          initialVisibleCount={2}
         />
 
         {hasResults && (

@@ -163,7 +163,9 @@ check("results page uses compact expandable sections", () => {
   assert.ok(source.includes("const visibleLimit = compactAchievements ? 2 : initialVisibleCount ?? cards.length"));
   assert.ok(source.includes("Näita rohkem"));
   assert.ok(source.includes("hiddenCards.map"));
-  assert.ok(source.includes("initialVisibleCount={5}"));
+  // Positions/news/context show 2 before "Näita rohkem" to keep the page short.
+  assert.ok(source.includes("initialVisibleCount={2}"));
+  assert.ok(!source.includes("initialVisibleCount={5}"));
 });
 
 check("results page separates news/progress from opinions", () => {

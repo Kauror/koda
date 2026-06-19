@@ -140,12 +140,11 @@ export default async function HomePage() {
               Teenused
             </a>
           </div>
-        </div>
-      </section>
-
-      <section className="section" aria-label="Koja kokkuvõte">
-        <div className="container-narrow">
-          <p className="section-intro">{texts["homepage.footerNote"]}</p>
+          {texts["homepage.footerNote"] && (
+            <p className="section-intro" style={{ marginTop: 20, marginBottom: 0 }}>
+              {texts["homepage.footerNote"]}
+            </p>
+          )}
         </div>
       </section>
 
