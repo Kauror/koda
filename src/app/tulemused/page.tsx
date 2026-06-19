@@ -214,6 +214,18 @@ export default async function ResultsPage({
       </div>
 
       <div className="container results-body">
+        {results.recognizedLaw && (
+          <div className="card notice" style={{ marginTop: 16 }}>
+            <p style={{ margin: 0 }}>
+              Tuvastasime õigusakti{" "}
+              <Link href={`/seadused/${results.recognizedLaw.slug}`}>
+                <strong>{results.recognizedLaw.canonicalName}</strong>
+              </Link>
+              . Näitame koja seotud tööd ja seisukohti, uuemad eespool.
+            </p>
+          </div>
+        )}
+
         {results.includesRelatedSectorMatches && (
           <div className="card notice" style={{ marginTop: 16 }}>
             <p>Näitan ka valdkondadeüleseid tulemusi, mis on valitud tegevusalaga seotud.</p>

@@ -32,6 +32,12 @@ import {
 } from "../src/lib/search-core";
 import { outcomeLabel, sourceLabel } from "../src/lib/labels";
 import { sourceCtaLabel } from "../src/lib/content-display";
+import {
+  detectLaw,
+  extractLawMentions,
+  lawMentionForSlug,
+  rankLawContent,
+} from "../src/lib/law-match";
 
 let passed = 0;
 let failed = 0;
@@ -577,6 +583,106 @@ check("outcome labels are Estonian", () => {
   assert.equal(outcomeLabel("ongoing"), "Töös");
   assert.equal(outcomeLabel("opposed"), "Koda oli vastu");
   assert.equal(outcomeLabel("outcome_unknown"), null);
+});
+
+// ---- Law / õigusakt search (Step 9) ----
+check("exact law name is recognized", () => {
+  const hit = detectLaw("Jäätmeseadus");
+  assert.ok(hit);
+  assert.equal(hit!.law.slug, "jaatmeseadus");
+  assert.equal(hit!.mention.matchType, "exact_name");
+  assert.equal(hit!.mention.confidence, "high");
+});
+
+check("inflected law name is recognized as high confidence", () => {
+  for (const q of ["jäätmeseaduse muudatus", "uus jäätmeseadusega seotud ettepanek", "Pakendiseaduse eelnõu"]) {
+    const hit = detectLaw(q);
+    assert.ok(hit, `expected a law for "${q}"`);
+    assert.equal(hit!.mention.confidence, "high");
+    assert.equal(hit!.mention.matchType, "inflected_name");
+  }
+  assert.equal(detectLaw("jäätmeseaduse")!.law.slug, "jaatmeseadus");
+});
+
+check("multi-word law name matches with trailing inflection", () => {
+  assert.equal(detectLaw("töölepingu seadus")!.law.slug, "toolepingu-seadus");
+  assert.equal(detectLaw("töölepingu seaduse muudatus")!.law.slug, "toolepingu-seadus");
+});
+
+check("aliases are recognized (medium)", () => {
+  const a = detectLaw("andmekaitseseadus");
+  assert.equal(a!.law.slug, "isikuandmete-kaitse-seadus");
+  assert.equal(a!.mention.matchType, "alias");
+  const b = detectLaw("töölepinguseaduse järgi"); // no-space alias, inflected
+  assert.equal(b!.law.slug, "toolepingu-seadus");
+  assert.equal(b!.mention.matchType, "alias");
+});
+
+check("abbreviations are recognized case-insensitively (medium)", () => {
+  for (const q of ["KMS", "kms"]) {
+    const hit = detectLaw(q);
+    assert.equal(hit!.law.slug, "kaibemaksuseadus");
+    assert.equal(hit!.mention.matchType, "abbreviation");
+    assert.equal(hit!.mention.confidence, "medium");
+  }
+  // Too-short abbreviations are not matched (avoids "LS"/"ÄS" noise).
+  assert.equal(detectLaw("ls"), null);
+});
+
+check("broad everyday words never become a confirmed law match", () => {
+  for (const broad of ["jäätmed", "pakend", "maks", "maksud", "töö", "töötajad", "ettevõte"]) {
+    assert.equal(detectLaw(broad), null, `"${broad}" must not be recognized as a law`);
+    const mentions = extractLawMentions({ title: broad });
+    assert.ok(
+      mentions.every((m) => m.confidence !== "high"),
+      `"${broad}" must not produce a high-confidence law match`
+    );
+  }
+});
+
+check("weak topical keywords are low confidence and never trigger recognition", () => {
+  const mentions = extractLawMentions({ title: "Uus jäätmekäitlus piirkonnas" });
+  const jaatme = mentions.find((m) => m.slug === "jaatmeseadus");
+  assert.ok(jaatme);
+  assert.equal(jaatme!.matchType, "weak_keyword");
+  assert.equal(jaatme!.confidence, "low");
+  // Weak keyword alone does not recognize the law for search.
+  assert.equal(detectLaw("jäätmekäitlus"), null);
+  assert.equal(detectLaw("tarbijakaitse"), null);
+});
+
+check("missing/invalid text never crashes the matcher", () => {
+  assert.deepEqual(extractLawMentions({}), []);
+  assert.deepEqual(extractLawMentions({ title: null, summary: undefined, bodyText: null }), []);
+  assert.equal(lawMentionForSlug({}, "jaatmeseadus"), null);
+  assert.equal(detectLaw(null), null);
+  assert.equal(detectLaw(undefined), null);
+  assert.equal(detectLaw(""), null);
+  assert.equal(detectLaw("   "), null);
+});
+
+check("content rows are matched to a law incl. inflected mentions", () => {
+  const related = cand({ id: "a", title: "Jäätmeseaduse muudatus jõustus" });
+  const unrelated = cand({ id: "b", title: "Maksupoliitika ülevaade" });
+  assert.ok(lawMentionForSlug(related, "jaatmeseadus"));
+  assert.equal(lawMentionForSlug(unrelated, "jaatmeseadus"), null);
+});
+
+check("searching a law finds related content, newest-first", () => {
+  const older = cand({ id: "old", title: "Jäätmeseaduse esimene ettepanek", date: new Date("2019-03-01") });
+  const newer = cand({ id: "new", title: "Jäätmeseaduse uus muudatus", date: new Date("2024-09-01") });
+  const unrelated = cand({ id: "u", title: "Energia hind tõuseb", date: new Date("2025-01-01") });
+  const ranked = rankLawContent([older, unrelated, newer], "jaatmeseadus");
+  assert.deepEqual(ranked.map((c) => c.id), ["new", "old"]);
+});
+
+check("a confirmed law match satisfies the free-text filter (inflected query)", () => {
+  const c = cand({ title: "Jäätmeseadus" });
+  const q: SearchQuery = { ...EMPTY, q: "jäätmeseaduse" };
+  const s = scoreCandidate(c, q);
+  assert.equal(s.text, 0); // literal scorer misses the inflected query
+  assert.equal(passesActiveFilters(q, s, c), false);
+  assert.equal(passesActiveFilters(q, s, c, { lawMatch: true }), true);
 });
 
 console.log(`\n[test] ${passed} passed, ${failed} failed`);

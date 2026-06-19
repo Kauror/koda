@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { findContentItem, findReviewCandidate, stringValue } from "@/lib/admin-bundle";
 import { DECISIONS_NOT_APPLIED_NOTICE } from "@/lib/admin-review-ui";
+import { extractLawMentions } from "@/lib/law-match";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +39,14 @@ export default async function AdminDataReviewDetail({ params }: { params: Promis
     candidate.contentId ? Promise.resolve(findContentItem(candidate.contentId)) : Promise.resolve(null),
   ]);
   const contentItem = contentResult?.ok ? contentResult.data : null;
+
+  const detectedLaws = extractLawMentions({
+    title: candidate.title,
+    displayTitle: contentItem ? stringValue(contentItem.displayTitle) : null,
+    summary: (contentItem ? stringValue(contentItem.summary) : "") || candidate.evidence || null,
+    companyRelevance: contentItem ? stringValue(contentItem.companyRelevance) : null,
+    excerpt: candidate.reviewNote || null,
+  });
 
   const approvedValdkonnad = Array.isArray(decision?.approvedValdkonnad)
     ? (decision?.approvedValdkonnad as string[])
@@ -123,6 +132,27 @@ export default async function AdminDataReviewDetail({ params }: { params: Promis
           <p className="muted">Sobivat sisurida ei leitud content_items.jsonl failist.</p>
         )}
       </div>
+
+      {detectedLaws.length > 0 && (
+        <div className="card">
+          <h2 style={{ marginTop: 0 }}>Tuvastatud õigusaktid</h2>
+          <p className="section-sub">
+            Automaatselt tuvastatud seadusviited. Nõrgad vasted on soovitused, mitte kinnitatud sildid.
+          </p>
+          <div className="status-flags">
+            {detectedLaws.map((law) => (
+              <span
+                key={law.slug}
+                className={`flag ${law.confidence === "low" ? "priority" : "evergreen"}`}
+                title={`${law.matchType} · ${law.confidence} · "${law.matchedText}"`}
+              >
+                {law.canonicalName}
+                {law.confidence === "low" ? " (nõrk)" : ""}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <h2 style={{ marginTop: 0 }}>Praegused ja soovitatud sildid</h2>

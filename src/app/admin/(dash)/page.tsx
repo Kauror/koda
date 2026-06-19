@@ -29,6 +29,11 @@ const ADMIN_TOOLS: { href: string; title: string; description: string }[] = [
     title: "Taksonoomia",
     description: "Vaata taksonoomiat ja klassifitseerimisreegleid.",
   },
+  {
+    href: "/admin/laws",
+    title: "Õigusaktid",
+    description: "Vaata õigusaktide sõnastikku ja seotud sisu loendureid.",
+  },
 ];
 
 export default async function AdminDashboard() {

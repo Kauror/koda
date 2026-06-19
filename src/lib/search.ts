@@ -7,6 +7,7 @@
 import { Prisma, TagType } from "@prisma/client";
 import { prisma } from "./db";
 import { isPublicSearchEligible } from "./eligibility";
+import { detectLaw, lawMentionForSlug } from "./law-match";
 import { compactText, getCleanPublicExcerpt, publicSourceUrl, publicTitle, sourceCtaLabel } from "./content-display";
 import {
   type Candidate,
@@ -30,6 +31,20 @@ export { parseSearchParams };
 export type { SearchQuery };
 
 const GROUP_CAPS: Record<ResultKind, number> = { toovoit: 12, arvamus: 15, uudis: 12, kontekst: 10 };
+
+/** Small bump so confirmed law content beats incidental text hits on tie dates. */
+const LAW_MATCH_BOOST = 30;
+
+/** A legal act recognized from the free-text query (drives law-aware search). */
+export type RecognizedLaw = {
+  slug: string;
+  canonicalName: string;
+  abbreviation: string | null;
+  aliases: string[];
+  relatedValdkond: string[];
+  matchType: string;
+  confidence: string;
+};
 
 // ---------------------------------------------------------------------------
 // Candidate loading
@@ -162,6 +177,8 @@ export type SearchResults = {
   totalDisplayed: number;
   groupCounts: ResultGroupCounts;
   includesRelatedSectorMatches: boolean;
+  /** Set when the query was recognized as a legal act (law-aware, newest-first). */
+  recognizedLaw: RecognizedLaw | null;
 };
 
 /** Drop duplicate/canonical rows so the same content is not shown twice. */
@@ -197,19 +214,32 @@ function dedupe(scored: { c: Candidate; total: number }[]): { c: Candidate; tota
   });
 }
 
+/** Newest-first ordering used for law-aware results (date wins, score breaks ties). */
+function compareByDateThenScore(a: { c: Candidate; total: number }, b: { c: Candidate; total: number }): number {
+  const ad = a.c.date?.getTime() ?? 0;
+  const bd = b.c.date?.getTime() ?? 0;
+  if (ad !== bd) return bd - ad;
+  return b.total - a.total;
+}
+
 export async function search(query: SearchQuery): Promise<SearchResults> {
   const candidates = await fetchEligibleCandidates();
   const empty = isEmptyQuery(query);
+  const recognized = detectLaw(query.q);
 
-  // Score + filter.
+  // Score + filter. A confirmed law match satisfies the free-text requirement
+  // (catching inflected mentions the literal scorer misses) and gets a small
+  // bump; other active filters still apply.
   const scored: { c: Candidate; total: number }[] = [];
   for (const c of candidates) {
     const s = scoreCandidate(c, query);
-    if (!empty && !passesActiveFilters(query, s, c)) continue;
-    scored.push({ c, total: s.total });
+    const lawMatch = recognized ? lawMentionForSlug(c, recognized.law.slug, "medium") !== null : false;
+    if (!empty && !passesActiveFilters(query, s, c, { lawMatch })) continue;
+    scored.push({ c, total: s.total + (lawMatch ? LAW_MATCH_BOOST : 0) });
   }
 
-  const deduped = dedupe(scored).sort(compareRankedCandidates);
+  // Law-aware searches surface the newest related content first.
+  const deduped = dedupe(scored).sort(recognized ? compareByDateThenScore : compareRankedCandidates);
 
   const grouped = groupRankedCandidates(deduped, GROUP_CAPS);
   const groups = grouped.displayedGroups;
@@ -252,6 +282,17 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
     totalDisplayed: grouped.totalDisplayed,
     groupCounts: grouped.groupCounts,
     includesRelatedSectorMatches,
+    recognizedLaw: recognized
+      ? {
+          slug: recognized.law.slug,
+          canonicalName: recognized.law.canonicalName,
+          abbreviation: recognized.law.abbreviation ?? null,
+          aliases: recognized.law.aliases ?? [],
+          relatedValdkond: recognized.law.relatedValdkond ?? [],
+          matchType: recognized.mention.matchType,
+          confidence: recognized.mention.confidence,
+        }
+      : null,
   };
 }
 

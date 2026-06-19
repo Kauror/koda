@@ -285,9 +285,19 @@ export function scoreCandidate(c: Candidate, q: SearchQuery): ScoreBreakdown {
 /**
  * Does the candidate satisfy all active filters? AND across active constraints.
  * `tapsustus` is never required (provisional), it only boosts.
+ *
+ * `opts.lawMatch` lets a confirmed legal-act match satisfy the free-text
+ * requirement: a row that mentions the recognized law (possibly only in an
+ * inflected form the literal text scorer missed) still qualifies. All other
+ * active filters (valdkond/tegevusala/type) must still pass.
  */
-export function passesActiveFilters(q: SearchQuery, s: ScoreBreakdown, c: Candidate): boolean {
-  if (q.q && s.text === 0) return false;
+export function passesActiveFilters(
+  q: SearchQuery,
+  s: ScoreBreakdown,
+  c: Candidate,
+  opts?: { lawMatch?: boolean }
+): boolean {
+  if (q.q && s.text === 0 && !opts?.lawMatch) return false;
   if (q.valdkond.length && s.valdkondMatches === 0) return false;
   if (q.tegevusala.length && s.tegevusalaMatches === 0 && s.sectorFallbackMatches === 0) {
     return false;
