@@ -20,6 +20,11 @@ const ADMIN_TOOLS: { href: string; title: string; description: string }[] = [
     description: "Kinnita või lükka tagasi soovitatud kategooria- ja tegevusalamuudatused.",
   },
   {
+    href: "/admin/ingestion",
+    title: "Ingestion",
+    description: "Koda.ee live ingestion — review newly fetched public pages before they become part of the main content set.",
+  },
+  {
     href: "/admin/content-items",
     title: "Sisuread",
     description: "Sirvi genereeritud paketi sisuridu (read-only).",

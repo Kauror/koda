@@ -347,3 +347,65 @@ model AchievementEnrichment {
 
   contentItem ContentItem @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
 }
+
+/// One run of the Koda.ee live ingestion. Created only in staging mode; dry-run
+/// writes nothing. Ingestion never mutates ContentItem and never publishes.
+model IngestionRun {
+  id              String    @id @default(cuid())
+  source          String // koda_ee
+  mode            String // dry_run | staging
+  status          String    @default("started") // started | completed | failed
+  startedAt       DateTime  @default(now())
+  finishedAt      DateTime?
+  pagesDiscovered Int       @default(0)
+  pagesFetched    Int       @default(0)
+  itemsCreated    Int       @default(0)
+  itemsUpdated    Int       @default(0)
+  itemsSkipped    Int       @default(0)
+  itemsFailed     Int       @default(0)
+  errorSummary    String?
+  createdAt       DateTime  @default(now())
+
+  stagingItems IngestionStagingItem[]
+
+  @@index([source])
+  @@index([status])
+  @@index([startedAt])
+}
+
+/// A single fetched/parsed public Koda.ee page held in the review staging layer.
+/// Never public, never written into ContentItem by ingestion. `matchedContentItemId`
+/// is a soft reference (no FK) so it can never block or cascade onto ContentItem.
+model IngestionStagingItem {
+  id                       String    @id @default(cuid())
+  runId                    String?
+  source                   String // koda_ee
+  canonicalUrl             String
+  urlHash                  String    @unique // sha256(canonicalUrl) — safe unique key
+  contentHash              String?
+  title                    String?
+  summary                  String?
+  bodyText                 String?
+  publishedAt              DateTime?
+  detectedSourceType       String? // news | opinion | achievement | event | other
+  detectedValdkonnad       Json?
+  detectedTegevusalad      Json?
+  detectedTapsustused      Json?
+  detectedLaws             Json?
+  classificationConfidence String? // high | medium | low
+  reviewStatus             String    @default("new") // new | matched_existing | needs_review | approved | rejected | ignored
+  matchedContentItemId     String?
+  rawMetadata              Json?
+  fetchStatus              String? // ok | failed
+  errorMessage             String?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  run IngestionRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
+
+  @@index([reviewStatus])
+  @@index([detectedSourceType])
+  @@index([publishedAt])
+  @@index([runId])
+  @@index([canonicalUrl])
+}

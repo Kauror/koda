@@ -28,6 +28,11 @@ export function contentHash(title: string, body: string | null | undefined): str
   return createHash("sha256").update(normalized).digest("hex");
 }
 
+/** Stable hash of a (canonical) URL — used as a safe unique key for staging rows. */
+export function urlHash(url: string): string {
+  return createHash("sha256").update(url.trim().toLowerCase()).digest("hex");
+}
+
 export function normalizeTitle(title: string): string {
   return title
     .toLowerCase()
