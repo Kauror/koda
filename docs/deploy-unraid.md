@@ -37,7 +37,8 @@ committed to git. None of those are in the image or the repo.
 | Merge-ready import files + reports | `/mnt/user/appdata/koda/import` | `/app/data/import` |
 | PostgreSQL data | Docker named volume `pgdata` (or a host path, see below) | `/var/lib/postgresql/data` |
 
-- Put the four `.xlsx` files directly in `/mnt/user/appdata/koda/import/`.
+- Put the three `.xlsx` files plus taxonomy `.txt` directly in
+  `/mnt/user/appdata/koda/import/`.
 - QA reports are written by the import to
   `/mnt/user/appdata/koda/import/reports/` (same mount).
 - **Excel files are never committed to git and never baked into the image** —
@@ -46,10 +47,10 @@ committed to git. None of those are in the image or the repo.
 Required files in the import folder:
 
 ```
-koda_web_index_v1_merge_ready.xlsx
-koda_opinions_v1_merge_ready.xlsx
-koda_annual_reports_v1_merge_ready.xlsx
-koda_toovoidud_enrichment_v1_merge_ready.xlsx
+koda_web_content_v0_9_4_cleaned.xlsx
+koda_opinions_v0_9_1.xlsx
+koda_toovoidud_enrichment_v0_9_1.xlsx
+koda_taxonomy_rules_v0_9_1.txt
 ```
 
 ---
@@ -129,17 +130,19 @@ Reports appear on the host at `/mnt/user/appdata/koda/import/reports/`:
 
 | Metric | Expected |
 | --- | --- |
-| web rows | 3937 |
+| web rows | 3804 |
 | opinion rows | 759 |
-| annual rows | 237 |
-| **total content** | **4933** (not 5009) |
-| content rows from enrichment file | 0 |
-| canonical achievements | 76 |
-| achievement enrichment | 76/76 matched |
-| public rows | 803 |
-| hidden / supporting | 4130 |
-| public opinion rows | 0 |
-| review / do_not_import / admin_only rows public | 0 |
+| toovoidud rows | 97 |
+| **total content** | **4660** |
+| web public rows | 1530 |
+| opinion public rows | 432 |
+| toovoidud public rows | 72 |
+| web support-only rows | 1951 |
+| staging-only rows | 573 |
+| held toovoidud rows | 25 |
+| approved public relations | 95 |
+| candidate links public | 0 |
+| review / numeric-review / support / staging / held rows public | 0 |
 
 ---
 
@@ -184,8 +187,8 @@ After `docker compose up -d` and the import:
 - [ ] `npm run import:validate` → PASS
 - [ ] `npm run import:merge-ready` → import OK
 - [ ] `npm run import:verify-db` → 17/17 invariants pass
-- [ ] total content = **4933**, achievements = **76**, enrichment = **76**
-- [ ] public opinion count = **0**; review/do_not_import/admin_only not public
+- [ ] total content = **4660**, toovoidud = **97**, public toovoidud = **72**
+- [ ] public opinion count = **432**; review/support/staging/held rows not public
 - [ ] `docker compose exec app npm run build` succeeds (already built in image)
 
 ---
@@ -217,7 +220,7 @@ docker compose logs -f postgres
 git pull
 docker compose build           # rebuild image (re-generates Prisma client + Next build)
 docker compose up -d           # recreate containers; entrypoint runs migrate deploy
-docker compose exec app npm run import:merge-ready   # re-run if data/schema changed (idempotent)
+docker compose exec app npm run import:merge-ready   # replacement import after backup
 docker compose exec app npm run import:verify-db
 ```
 

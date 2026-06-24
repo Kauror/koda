@@ -20,8 +20,11 @@ next-env.d.ts
 # Local merge-ready import source files and generated QA reports (kept out of git).
 # See data/import/README.md for what goes here.
 data/import/*.xlsx
+data/import/*.txt
 data/import/reports/
 data/import/bundles/
+data/import/backups/
+data/archive/
 
 # Local PGlite verification database (machines without Docker/Postgres).
 .pglite/

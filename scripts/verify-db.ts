@@ -1,11 +1,5 @@
 /**
- * DB-backed verification of the merge-ready import.
- *
- *   npm run import:verify-db                 # against DATABASE_URL
- *   KODA_DB_DRIVER=pglite npm run import:verify-db   # against local PGlite
- *
- * Queries the database after an import and reports counts + invariants. Exits
- * non-zero if any core invariant is violated, so it can gate CI / a release.
+ * DB-backed verification of the structured v0.9.4 replacement import.
  */
 import { loadEnv } from "./env";
 import { makePrismaClient, usingPglite } from "./lib/prisma-client";
@@ -30,49 +24,39 @@ async function main() {
   const { prisma, close } = await makePrismaClient();
 
   try {
-    // --- Counts by source dataset ---
-    const [web, opinions, annual, mergeTotal, crawlerOrSeed] = await Promise.all([
+    const [web, opinions, toovoidud, total] = await Promise.all([
       prisma.contentItem.count({ where: { sourceDataset: "web" } }),
       prisma.contentItem.count({ where: { sourceDataset: "opinions" } }),
-      prisma.contentItem.count({ where: { sourceDataset: "annual_reports" } }),
-      prisma.contentItem.count({ where: { sourceDataset: { not: null } } }),
-      prisma.contentItem.count({ where: { sourceDataset: null } }),
+      prisma.contentItem.count({ where: { sourceDataset: "toovoidud" } }),
+      prisma.contentItem.count(),
     ]);
-
-    const [publicCount, hiddenCount] = await Promise.all([
-      prisma.contentItem.count({ where: { sourceDataset: { not: null }, isPublic: true } }),
-      prisma.contentItem.count({ where: { sourceDataset: { not: null }, isPublic: false } }),
-    ]);
-
-    const achievements = await prisma.contentItem.count({ where: { sourceTypeDetail: "toovoit" } });
-    const enrichment = await prisma.achievementEnrichment.count();
-
     const publicByDataset = {
       web: await prisma.contentItem.count({ where: { sourceDataset: "web", isPublic: true } }),
       opinions: await prisma.contentItem.count({ where: { sourceDataset: "opinions", isPublic: true } }),
-      annual_reports: await prisma.contentItem.count({ where: { sourceDataset: "annual_reports", isPublic: true } }),
+      toovoidud: await prisma.contentItem.count({ where: { sourceDataset: "toovoidud", isPublic: true } }),
     };
-
-    // --- Evidence links by type ---
+    const hiddenCount = await prisma.contentItem.count({ where: { isPublic: false } });
+    const achievements = await prisma.contentItem.count({ where: { sourceDataset: "toovoidud", sourceTypeDetail: "toovoit" } });
+    const enrichment = await prisma.achievementEnrichment.count();
     const links = await prisma.contentEvidenceLink.groupBy({ by: ["linkType"], _count: { _all: true } });
     const linkTotal = await prisma.contentEvidenceLink.count();
 
-    // --- Safety gates ---
     const reviewAndPublic = await prisma.contentItem.count({ where: { needsHumanReview: true, isPublic: true } });
-    const doNotImportPublic = await prisma.contentItem.count({ where: { importStatus: "do_not_import_yet", isPublic: true } });
-    const adminOnlyPublic = await prisma.contentItem.count({ where: { publicDisplayStatus: "admin_only", isPublic: true } });
-    const hideReviewPublic = await prisma.contentItem.count({ where: { publicDisplayStatus: "hide_or_review", isPublic: true } });
-    const publicOpinions = publicByDataset.opinions;
+    const numericReviewPublic = await prisma.contentItem.count({ where: { numericClaimNeedsReview: true, isPublic: true } });
+    const supportPublic = await prisma.contentItem.count({ where: { importAction: "import_support_only", isPublic: true } });
+    const stagingPublic = await prisma.contentItem.count({ where: { importAction: "import_staging_only", isPublic: true } });
+    const doNotImportPublic = await prisma.contentItem.count({ where: { importAction: "do_not_import_public", isPublic: true } });
+    const heldPublic = await prisma.contentItem.count({ where: { importAction: "enrichment_hold", isPublic: true } });
+    const candidateLawTags = await prisma.contentItem.count({ where: { lawTagsCandidate: { not: null } } });
+    const publicLawTags = await prisma.contentItem.count({ where: { isPublic: true, lawSearchAllowed: true, lawTagsConfirmed: { not: null } } });
+    const supportOnly = await prisma.contentItem.count({ where: { sourceDataset: "web", importAction: "import_support_only" } });
+    const stagingOnly = await prisma.contentItem.count({ where: { importAction: "import_staging_only" } });
+    const webDoNotImport = await prisma.contentItem.count({ where: { sourceDataset: "web", importAction: "do_not_import_public" } });
+    const heldToovoidud = await prisma.contentItem.count({ where: { sourceDataset: "toovoidud", importAction: "enrichment_hold" } });
 
-    // --- Duplicate external IDs (raw, ignoring null) ---
     const dupExternal = await prisma.$queryRawUnsafe<{ externalId: string; n: bigint }[]>(
       `SELECT "externalId", COUNT(*) AS n FROM "ContentItem" WHERE "externalId" IS NOT NULL GROUP BY "externalId" HAVING COUNT(*) > 1`
     );
-    // --- Duplicate enrichment (per content item / per standalone id) ---
-    const dupEnrichByContent = await prisma.$queryRawUnsafe<{ contentItemId: string; n: bigint }[]>(
-      `SELECT "contentItemId", COUNT(*) AS n FROM "AchievementEnrichment" GROUP BY "contentItemId" HAVING COUNT(*) > 1`
-    );
-    // --- Orphans (FKs should prevent these; verify anyway) ---
     const orphanEnrich = await prisma.$queryRawUnsafe<{ n: bigint }[]>(
       `SELECT COUNT(*) AS n FROM "AchievementEnrichment" a LEFT JOIN "ContentItem" c ON a."contentItemId" = c.id WHERE c.id IS NULL`
     );
@@ -80,45 +64,46 @@ async function main() {
       `SELECT COUNT(*) AS n FROM "ContentEvidenceLink" l LEFT JOIN "ContentItem" f ON l."fromContentId" = f.id LEFT JOIN "ContentItem" t ON l."toContentId" = t.id WHERE f.id IS NULL OR t.id IS NULL`
     );
 
-    // --- Report ---
     console.log("\n=== ContentItem by sourceDataset ===");
-    console.log(`  web:            ${web}`);
-    console.log(`  opinions:       ${opinions}`);
-    console.log(`  annual_reports: ${annual}`);
-    console.log(`  merge-ready total: ${mergeTotal}`);
-    console.log(`  (crawler/seed rows, sourceDataset=null): ${crawlerOrSeed}`);
+    console.log(`  web:       ${web}`);
+    console.log(`  opinions:  ${opinions}`);
+    console.log(`  toovoidud: ${toovoidud}`);
+    console.log(`  total:     ${total}`);
 
     console.log("\n=== Visibility ===");
-    console.log(`  public: ${publicCount}  hidden/supporting: ${hiddenCount}`);
-    console.log(`  public by dataset: web=${publicByDataset.web} opinions=${publicByDataset.opinions} annual=${publicByDataset.annual_reports}`);
+    console.log(`  public by dataset: web=${publicByDataset.web} opinions=${publicByDataset.opinions} toovoidud=${publicByDataset.toovoidud}`);
+    console.log(`  hidden/support/staging/held: ${hiddenCount}`);
 
-    console.log("\n=== Achievements / enrichment ===");
-    console.log(`  canonical achievement rows: ${achievements}`);
-    console.log(`  achievement enrichment rows: ${enrichment}`);
-
-    console.log("\n=== Evidence links by type ===");
+    console.log("\n=== Links ===");
     if (links.length === 0) console.log("  (none)");
     for (const l of links) console.log(`  ${l.linkType}: ${l._count._all}`);
     console.log(`  total: ${linkTotal}`);
 
     console.log("\n=== Invariants ===");
-    invariant("web rows = 3937", web === EXPECTED_ROWS.web, `${web}`);
+    invariant("web rows = 3804", web === EXPECTED_ROWS.web, `${web}`);
     invariant("opinion rows = 759", opinions === EXPECTED_ROWS.opinions, `${opinions}`);
-    invariant("annual rows = 237", annual === EXPECTED_ROWS.annual_reports, `${annual}`);
-    invariant("merge-ready total = 4933 (not 5009)", mergeTotal === EXPECTED_ROWS.totalContentBeforeExclusions, `${mergeTotal}`);
-    invariant("canonical achievements = 76", achievements === EXPECTED_ROWS.canonicalAchievements, `${achievements}`);
-    invariant("achievement enrichment rows = 76", enrichment === EXPECTED_ROWS.enrichment, `${enrichment}`);
-    invariant("enrichment did not add content rows (total still 4933)", mergeTotal === EXPECTED_ROWS.totalContentBeforeExclusions);
+    invariant("toovoidud rows = 97", toovoidud === EXPECTED_ROWS.toovoidud, `${toovoidud}`);
+    invariant("total content rows = 4660", total === EXPECTED_ROWS.totalContentBeforeExclusions, `${total}`);
+    invariant("web public rows = 1530", publicByDataset.web === EXPECTED_ROWS.webPublic, `${publicByDataset.web}`);
+    invariant("opinion public rows = 432", publicByDataset.opinions === EXPECTED_ROWS.opinionsPublic, `${publicByDataset.opinions}`);
+    invariant("toovoidud public rows = 72", publicByDataset.toovoidud === EXPECTED_ROWS.toovoidudPublic, `${publicByDataset.toovoidud}`);
+    invariant("web support-only rows = 1951", supportOnly === EXPECTED_ROWS.webSupportOnly, `${supportOnly}`);
+    invariant("staging-only rows = 573", stagingOnly === EXPECTED_ROWS.webStagingOnly + EXPECTED_ROWS.opinionsStagingOnly, `${stagingOnly}`);
+    invariant("web do-not-import rows = 77", webDoNotImport === EXPECTED_ROWS.webDoNotImportPublic, `${webDoNotImport}`);
+    invariant("held toovoidud rows = 25", heldToovoidud === EXPECTED_ROWS.toovoidudHold, `${heldToovoidud}`);
+    invariant("toovoidud enrichment rows = 97", enrichment === EXPECTED_ROWS.toovoidud, `${enrichment}`);
+    invariant("achievement content rows = 97", achievements === EXPECTED_ROWS.toovoidud, `${achievements}`);
     invariant("no public row needs human review", reviewAndPublic === 0, `${reviewAndPublic}`);
-    invariant("no do_not_import_yet row is public", doNotImportPublic === 0, `${doNotImportPublic}`);
-    invariant("no admin_only row is public", adminOnlyPublic === 0, `${adminOnlyPublic}`);
-    invariant("no hide_or_review row is public", hideReviewPublic === 0, `${hideReviewPublic}`);
-    invariant("opinion rows are hidden/supporting (none public)", publicOpinions === 0, `${publicOpinions}`);
-    invariant("no duplicate external IDs", dupExternal.length === 0, `${dupExternal.length} dup group(s)`);
-    invariant("no duplicate enrichment per content item", dupEnrichByContent.length === 0, `${dupEnrichByContent.length}`);
+    invariant("no public row needs numeric review", numericReviewPublic === 0, `${numericReviewPublic}`);
+    invariant("no support-only row is public", supportPublic === 0, `${supportPublic}`);
+    invariant("no staging-only row is public", stagingPublic === 0, `${stagingPublic}`);
+    invariant("no do-not-import row is public", doNotImportPublic === 0, `${doNotImportPublic}`);
+    invariant("no held toovoidud row is public", heldPublic === 0, `${heldPublic}`);
+    invariant("confirmed public law tags are present", publicLawTags > 0, `${publicLawTags}`);
+    invariant("candidate law tags are stored but not filter tags", candidateLawTags > 0, `${candidateLawTags}`);
+    invariant("no duplicate external IDs", dupExternal.length === 0, `${dupExternal.length}`);
     invariant("no orphan enrichment rows", Number(orphanEnrich[0]?.n ?? 0) === 0);
     invariant("no orphan evidence links", Number(orphanLinks[0]?.n ?? 0) === 0);
-    invariant("public count > 0", publicCount > 0, `${publicCount}`);
 
     console.log(`\n[verify-db] ${passed} passed, ${failed} failed`);
     if (failed > 0) process.exitCode = 1;

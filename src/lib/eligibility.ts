@@ -17,7 +17,10 @@ export type EligibilityFields = {
   isPublic: boolean;
   isHidden: boolean;
   needsHumanReview: boolean;
+  numericClaimNeedsReview?: boolean;
   importStatus: string | null;
+  importAction?: string | null;
+  publicDisplayAllowed?: boolean | null;
   publicDisplayStatus: string | null;
   adminVisibilityOverride: boolean | null;
   sourceDataset: string | null;
@@ -43,12 +46,19 @@ export function isPublicSearchEligible(item: EligibilityFields): boolean {
   if (!item.isPublic) return false;
   if (item.isHidden) return false; // hidden / supporting-only
   if (item.needsHumanReview) return false;
+  if (item.numericClaimNeedsReview) return false;
+  if (item.publicDisplayAllowed === false) return false;
   if (item.importStatus === "do_not_import_yet") return false;
+  if (item.importAction === "import_support_only") return false;
+  if (item.importAction === "import_staging_only") return false;
+  if (item.importAction === "do_not_import_public") return false;
+  if (item.importAction === "enrichment_hold") return false;
   if (item.publicDisplayStatus === "admin_only") return false;
   if (item.publicDisplayStatus === "hide_or_review") return false;
-  // Opinion-file rows are supporting evidence by default; only surfaced when an
-  // admin explicitly overrides (handled above).
-  if (item.sourceDataset === "opinions") return false;
+  if (item.publicDisplayStatus === "review_required") return false;
+  if (item.publicDisplayStatus === "numeric_review_hold") return false;
+  if (item.publicDisplayStatus === "source_quality_hold") return false;
+  if (item.publicDisplayStatus === "blocked") return false;
 
   return true;
 }
@@ -56,6 +66,7 @@ export function isPublicSearchEligible(item: EligibilityFields): boolean {
 export type EvidenceFields = {
   extractionQuality: string | null;
   needsHumanReview: boolean;
+  numericClaimNeedsReview?: boolean;
   adminVisibilityOverride: boolean | null;
 };
 
@@ -71,6 +82,7 @@ export type EvidenceFields = {
 export function isEvidenceEligible(item: EvidenceFields): boolean {
   if (item.adminVisibilityOverride === false) return false;
   if (item.needsHumanReview) return false;
+  if (item.numericClaimNeedsReview) return false;
   if (item.extractionQuality === "failed" || item.extractionQuality === "weak") return false;
   return true;
 }

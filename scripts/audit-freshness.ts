@@ -43,8 +43,12 @@ type Row = {
   isPublic: boolean;
   isHidden: boolean;
   needsHumanReview: boolean;
+  numericClaimNeedsReview: boolean;
   importStatus: string | null;
+  importAction: string | null;
+  publicDisplayAllowed: boolean | null;
   publicDisplayStatus: string | null;
+  lawSearchAllowed: boolean;
   adminVisibilityOverride: boolean | null;
   tags: { tag: { type: string; slug: string; name: string } }[];
 };
@@ -139,6 +143,8 @@ function toCandidate(row: Row): Candidate {
     valdkonnad: byType("valdkond"),
     tegevusalad: byType("tegevusala"),
     tapsustused: byType("tapsustus"),
+    oigusaktid: byType("oigusakt"),
+    lawSearchAllowed: row.lawSearchAllowed,
   };
 }
 
@@ -229,8 +235,12 @@ async function main() {
       isPublic: true,
       isHidden: true,
       needsHumanReview: true,
+      numericClaimNeedsReview: true,
       importStatus: true,
+      importAction: true,
+      publicDisplayAllowed: true,
       publicDisplayStatus: true,
+      lawSearchAllowed: true,
       adminVisibilityOverride: true,
       tags: { select: { tag: { select: { type: true, slug: true, name: true } } } },
     },

@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider   = "prisma-client-js"
+  engineType = "client"
 }
 
 datasource db {
@@ -24,6 +25,7 @@ enum SourceDataset {
   web
   opinions
   annual_reports
+  toovoidud
 }
 
 enum TagType {
@@ -39,6 +41,7 @@ enum TagType {
   valdkond // topic     -> filter_valdkonnad_merge
   tegevusala // sector   -> filter_tegevusala_merge
   tapsustus // provisional detail -> filter_tapsustus_merge_provisional
+  oigusakt // confirmed law tags -> law_tags_confirmed
 }
 
 enum RelationType {
@@ -98,12 +101,18 @@ model ContentItem {
   // Status / gating fields (copied verbatim from the merge-ready workbook).
   importStatus        String? // import_status_merge
   publicDisplayStatus String? // public_display_merge
+  importAction        String? // v0.9.4 import_action / enrichment_public
+  publicDisplayAllowed Boolean? // v0.9.4 public_display_allowed
+  publicDisplayRole   String? // v0.9.4 public_display_role
   mergeReadiness      String? // merge_readiness
   mergeNotes          String? // merge_notes
   extractionQuality   String? // extraction_quality / text_extraction_quality
   needsHumanReview    Boolean @default(false) // needs_human_review_merge
+  numericClaimNeedsReview Boolean @default(false)
   reviewReason        String?
   publicPriority      String? // high | medium | low
+  sourceQualityFlag   String?
+  classificationConfidence String?
 
   // Derived operational visibility: true only when the row passes all the
   // conservative public gating rules. isHidden mirrors !isPublic so the
@@ -114,6 +123,15 @@ model ContentItem {
   primaryCategory     String? // primary_category / primary_category_merge
   secondaryCategories String? // secondary_categories
   topicGroupCandidate String? // topic_group_candidate
+  topicPrimary        String?
+  topicSecondary      String?
+  activityPrimary     String?
+  activitySecondary   String?
+  sectorScope         String?
+  situationTags       String?
+  lawTagsConfirmed    String?
+  lawTagsCandidate    String?
+  lawSearchAllowed    Boolean @default(false)
 
   // Duplicate / canonical linkage.
   canonicalContentId String? // canonical_content_id (external id of the canonical row)
@@ -159,6 +177,9 @@ model ContentItem {
   @@index([isPublic])
   @@index([sourceDataset])
   @@index([sourceLayer])
+  @@index([importAction])
+  @@index([publicDisplayAllowed])
+  @@index([lawSearchAllowed])
 }
 
 model TopicGroup {

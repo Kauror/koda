@@ -122,6 +122,8 @@ export type Candidate = {
   valdkonnad: TagRef[];
   tegevusalad: TagRef[];
   tapsustused: TagRef[];
+  oigusaktid: TagRef[];
+  lawSearchAllowed: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -186,6 +188,20 @@ function countTokens(haystack: string, tokens: string[]): number {
   return n;
 }
 
+function lawHaystack(c: Candidate): string {
+  return c.lawSearchAllowed ? normalizeTitle(c.oigusaktid.map((t) => t.name).join(" ")) : "";
+}
+
+function isConservativeLawQuery(qn: string): boolean {
+  return /\b(seadus|seadustik|määrus|maarus|direktiiv|regulatsioon)\b/u.test(qn) || qn.endsWith("seadus");
+}
+
+function matchesConfirmedLawQuery(c: Candidate, qn: string): boolean {
+  const hay = lawHaystack(c);
+  if (!hay || !qn) return false;
+  return hay.includes(qn);
+}
+
 function recencyBoost(date: Date | null): number {
   if (!date) return 0;
   const ageDays = (Date.now() - date.getTime()) / (1000 * 60 * 60 * 24);
@@ -213,6 +229,10 @@ export function scoreCandidate(c: Candidate, q: SearchQuery): ScoreBreakdown {
 
     const medHay = normalizeTitle([c.sourceEvidence, c.excerpt].filter(Boolean).join(" "));
     text += 5 * countTokens(medHay, tokens);
+
+    const lawHay = lawHaystack(c);
+    if (lawHay.includes(qn)) text += 70;
+    text += 16 * countTokens(lawHay, tokens);
 
     const bodyHay = normalizeTitle(c.bodyText || "");
     text += 2 * countTokens(bodyHay, tokens);
@@ -297,6 +317,8 @@ export function passesActiveFilters(
   c: Candidate,
   opts?: { lawMatch?: boolean }
 ): boolean {
+  const qn = normalizeTitle(q.q || "");
+  if (q.q && isConservativeLawQuery(qn) && !opts?.lawMatch && !matchesConfirmedLawQuery(c, qn)) return false;
   if (q.q && s.text === 0 && !opts?.lawMatch) return false;
   if (q.valdkond.length && s.valdkondMatches === 0) return false;
   if (q.tegevusala.length && s.tegevusalaMatches === 0 && s.sectorFallbackMatches === 0) {
