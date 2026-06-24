@@ -31,6 +31,7 @@ import {
   BUNDLE_VALIDATE_COMMAND,
   DECISIONS_NOT_APPLIED_NOTICE,
 } from "../src/lib/admin-review-ui";
+import { summarizeImportReport } from "../src/lib/admin-status";
 
 const readSource = (path: string) => readFileSync(path, "utf8");
 
@@ -379,6 +380,39 @@ check("admin area stays protected: (dash) layout guards + admin APIs require adm
   ]) {
     assert.ok(readSource(route).includes("requireAdmin"), `${route} must call requireAdmin`);
   }
+});
+
+check("summarizeImportReport: empty/garbage input is safely unavailable", () => {
+  assert.equal(summarizeImportReport(undefined).available, false);
+  assert.equal(summarizeImportReport({}).available, false);
+  assert.equal(summarizeImportReport("nope").available, false);
+});
+
+check("summarizeImportReport: maps fields, strips paths, flattens action counts", () => {
+  const s = summarizeImportReport({
+    timestamp: "2026-06-24T11:00:00Z",
+    kind: "structured-v0.9.4-import",
+    finalStatus: "PASS",
+    dryRun: false,
+    inputFiles: { web: "data/import/koda_web_content_v0_9_4_cleaned.xlsx", opinions: "/abs/secret/koda_opinions_v0_9_1.xlsx" },
+    totalContentImported: 4660,
+    publicRows: 2034,
+    hiddenOrSupportingRows: 2626,
+    actionCounts: { web: { import_public: 1530, import_support_only: 1951 }, toovoidud: { enrichment_public: 72 } },
+    linkCounts: { approved: 265, candidate: 288 },
+    backupPath: "C:/Users/x/data/backups/content-backup-2026.json",
+    errors: ["one problem", 42],
+  });
+  assert.equal(s.available, true);
+  assert.equal(s.finalStatus, "PASS");
+  assert.equal(s.totalImported, 4660);
+  assert.equal(s.publicRows, 2034);
+  // absolute path is reduced to a basename (no path leak)
+  assert.equal(s.inputFiles.find((f) => f.label === "opinions")?.file, "koda_opinions_v0_9_1.xlsx");
+  assert.equal(s.backupName, "content-backup-2026.json");
+  assert.ok(s.actionCounts.some((a) => a.dataset === "web" && a.action === "import_public" && a.count === 1530));
+  assert.ok(s.linkCounts.some((l) => l.label === "approved" && l.count === 265));
+  assert.deepEqual(s.errors, ["one problem"]); // non-string dropped
 });
 
 check("bundle-dependent admin pages render the friendly missing-bundle notice", () => {

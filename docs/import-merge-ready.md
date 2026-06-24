@@ -96,3 +96,22 @@ $env:KODA_DB_DRIVER='pglite'; npm run import:verify-db
 
 The import report records the backup path, row counts, public counts, held and
 staging counts, link counts, law-search counts, and validation errors.
+
+## Admin dataset status page (`/admin/status`)
+
+For launch safety, the protected admin page **`/admin/status`** surfaces which
+dataset is live and whether it imported cleanly. It combines two sources:
+
+- **Active package** — read from `data/import/reports/import-report.json`
+  (written by the importer): package kind/timestamp, input file names, final
+  PASS/FAIL status, imported/public/held row counts, link counts, per-dataset
+  `import_action` counts and any import errors. Absolute paths are reduced to
+  file names, so no server paths leak.
+- **Database now** — live counts queried at request time: total ContentItem
+  rows, public-by-gate (`publicDisplayAllowed=true` AND a public `import_action`),
+  numeric-review holds, law-search-allowed rows, breakdowns by `import_action`
+  and `sourceDataset`, and the last update time.
+
+Both halves degrade gracefully: a missing report shows a "run the import" hint,
+and an unavailable database shows a notice rather than crashing. The pure
+report-to-view mapping is covered by `npm run admin-review:test`.

@@ -180,8 +180,8 @@ async function integration() {
   const URL3 = "https://www.koda.ee/et/uudised/seotud-lugu";
   const htmlFor = (title: string, body: string) => `<html><body><h1>${title}</h1><time datetime="2025-10-16">16.10.2025</time><article>${body}</article></body></html>`;
   let pages: Record<string, string> = {
-    [URL1]: htmlFor("Esimene lugu", "Pikk sisu ettevõtjatele, esimene versioon, piisavalt pikk keha tekst."),
-    [URL2]: htmlFor("Jäätmeseaduse arvamus", "Koda esitas arvamuse jäätmeseaduse eelnõu kohta, pikk ja põhjalik tekst."),
+    [URL1]: htmlFor("Esimene lugu", "Pikk sisu ettevõtjatele, esimene versioon: piisavalt pikk kehatekst, et ületada parseri 80-tähemärgilist lävendit ja luua stabiilne sisu-räsi."),
+    [URL2]: htmlFor("Jäätmeseaduse arvamus", "Koda esitas arvamuse jäätmeseaduse eelnõu kohta, pikk ja põhjalik tekst ettevõtjatele, mis ületab kindlalt parseri kehateksti lävendi."),
   };
   const fetcher = async (url: string) => ({ ok: !!pages[url], status: pages[url] ? 200 : 404, html: pages[url] ?? null });
   const discoverFixed = (urls: string[]) => async () => urls;
@@ -255,7 +255,7 @@ async function integration() {
     });
 
     await check2("changed content updates the staging row and marks needs_review", async () => {
-      pages = { ...pages, [URL1]: htmlFor("Esimene lugu", "Hoopis uus sisu teine versioon, muudetud keha tekst pikalt.") };
+      pages = { ...pages, [URL1]: htmlFor("Esimene lugu", "Hoopis uus sisu, teine versioon: muudetud kehatekst, mis on samuti üle 80 tähemärgi pikk, nii et sisu-räsi kindlasti muutub.") };
       const summary = await runIngestion(prisma, { mode: "staging", discover: discoverFixed([URL1]), fetcher });
       assert.equal(summary.itemsUpdated, 1);
       assert.equal(await prisma.ingestionStagingItem.count(), 2);

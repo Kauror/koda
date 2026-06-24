@@ -18,6 +18,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <Link href="/admin/data-review">Andmeülevaatus</Link>
         <Link href="/admin/ingestion">Ingestion</Link>
         <Link href="/admin/laws">Õigusaktid</Link>
+        <Link href="/admin/status">Staatus</Link>
         <Link href="/admin/site-texts">Avalehe tekstid</Link>
         <Link href="/" target="_blank">
           Avalik vaade ↗

@@ -39,6 +39,11 @@ const ADMIN_TOOLS: { href: string; title: string; description: string }[] = [
     title: "Õigusaktid",
     description: "Vaata õigusaktide sõnastikku ja seotud sisu loendureid.",
   },
+  {
+    href: "/admin/status",
+    title: "Staatus",
+    description: "Aktiivse andmepaketi versioon, viimane import ja avalike/peidetud ridade arv — käivituseelne kontroll.",
+  },
 ];
 
 export default async function AdminDashboard() {
