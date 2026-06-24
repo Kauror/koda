@@ -38,6 +38,7 @@ import {
   lawMentionForSlug,
   rankLawContent,
 } from "../src/lib/law-match";
+import { splitTopics } from "./lib/merge-ready";
 
 let passed = 0;
 let failed = 0;
@@ -721,6 +722,29 @@ check("a confirmed law match satisfies the free-text filter (inflected query)", 
   assert.equal(s.text, 0); // literal scorer misses the inflected query
   assert.equal(passesActiveFilters(q, s, c), false);
   assert.equal(passesActiveFilters(q, s, c, { lawMatch: true }), true);
+});
+
+// ---- Topic splitting: repair ";"-corrupted compound names (filter doubling) ----
+check("splitTopics keeps real ';' separators but repairs ';'-for-',' corruption", () => {
+  // genuine multi-topic separators (next topic Capitalised) are preserved
+  assert.deepEqual(splitTopics("Bürokraatia ja halduskoormus; Maksud ja tasud"), [
+    "Bürokraatia ja halduskoormus",
+    "Maksud ja tasud",
+  ]);
+  assert.deepEqual(splitTopics("Digi, andmed, AI ja küberturvalisus; E-kaubandus ja tarbijakaitse"), [
+    "Digi, andmed, AI ja küberturvalisus",
+    "E-kaubandus ja tarbijakaitse",
+  ]);
+  // ';' before a lowercase word is an intra-name corruption → restored to ', '
+  assert.deepEqual(splitTopics("Eksport; rahvusvahelistumine ja toll"), ["Eksport, rahvusvahelistumine ja toll"]);
+  assert.deepEqual(splitTopics("Energia; elektrihind ja varustuskindlus"), ["Energia, elektrihind ja varustuskindlus"]);
+  assert.deepEqual(splitTopics("Alkohol; tubakas ja aktsiisikaubad"), ["Alkohol, tubakas ja aktsiisikaubad"]);
+  // mixed: corruption + a genuine following topic
+  assert.deepEqual(splitTopics("Eksport; rahvusvahelistumine ja toll; Euroopa Liidu poliitika ja õigus"), [
+    "Eksport, rahvusvahelistumine ja toll",
+    "Euroopa Liidu poliitika ja õigus",
+  ]);
+  assert.deepEqual(splitTopics(""), []);
 });
 
 console.log(`\n[test] ${passed} passed, ${failed} failed`);

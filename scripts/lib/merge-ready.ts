@@ -137,6 +137,28 @@ export function splitMulti(s: string): string[] {
     .filter(Boolean);
 }
 
+/**
+ * Split a topic/activity cell into canonical values.
+ *
+ * The package separates multiple topics with "; ". But a subset of source rows
+ * have a compound canonical topic name's internal comma corrupted into a
+ * semicolon — e.g. "Eksport; rahvusvahelistumine ja toll" instead of
+ * "Eksport, rahvusvahelistumine ja toll". Splitting naively on ";" fragments
+ * that one topic into two bogus filter entries (the doubled "Teema" list).
+ *
+ * Canonical Koda topic names are always Capitalised, so a ";" followed by a
+ * lowercase word is an intra-name corruption: restore it to ", " before
+ * splitting. A ";" before a Capitalised word is a genuine multi-topic separator
+ * and is left intact.
+ */
+export function splitTopics(s: string): string[] {
+  const repaired = s.replace(/;\s*(?=\p{Ll})/gu, ", ");
+  return repaired
+    .split(/[;|]/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+}
+
 function joinSearchText(values: Array<string | null | undefined>): string | null {
   const text = values
     .map((v) => v?.trim())
@@ -263,7 +285,9 @@ type StageInput = Omit<
 };
 
 function makeTaxonomy(primary: string | null, secondary: string | null): string[] {
-  return [...splitMulti(primary ?? ""), ...splitMulti(secondary ?? "")];
+  // Topics/activities are canonical names that may contain commas, so use the
+  // topic-aware splitter that repairs ";"-for-"," corruption (see splitTopics).
+  return [...new Set([...splitTopics(primary ?? ""), ...splitTopics(secondary ?? "")])];
 }
 
 function finalize(input: StageInput): StagedContent {
