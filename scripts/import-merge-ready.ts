@@ -1,43 +1,34 @@
 /**
- * Deterministic, idempotent import of the merge-ready workbooks into Postgres.
+ * Deterministic replacement import for the structured v0.9.4/v0.9.1 Koda
+ * package.
  *
- *   npm run import:merge-ready            # validate, then import
- *   npm run import:merge-ready -- --force # import even if validation has warnings
+ *   npm run import:merge-ready            # validate, back up, replace content
  *   npm run import:merge-ready -- --dry-run
+ *   npm run import:merge-ready -- --force # continue despite validation errors
  *
- * Pipeline (Task 3):
- *   1. Read + stage the three real content sources and the enrichment source.
- *   2. Validate (counts, enums, required fields, 76/76 enrichment match).
- *   3. Upsert taxonomy tags from the cleaned filter_*_merge fields.
- *   4. Upsert content rows by externalId (idempotent), applying public gating.
- *   5. Left-join achievement enrichment onto the 76 canonical web achievements
- *      (never creating new content rows).
- *   6. Populate the evidence graph (duplicate/canonical + resolvable relations).
- *   7. Write data/import/reports/import-report.{json,md}.
- *
- * The standalone töövõidud file is enrichment only: it adds 0 content rows.
- * Expected content rows = 4933 (web 3937 + opinions 759 + annual 237).
+ * This is a replacement import: existing ContentItem/TopicGroup imported
+ * content is backed up and cleared before the new package is inserted.
  */
 import { mkdirSync, writeFileSync } from "fs";
 import { resolve } from "path";
-import { PrismaClient, Prisma } from "@prisma/client";
+import { Prisma, PrismaClient, TagType } from "@prisma/client";
 import { loadEnv } from "./env";
 import { makePrismaClient, usingPglite } from "./lib/prisma-client";
 import { slugify } from "../src/lib/slug";
 import {
+  FILES,
   IMPORT_DIR,
-  stageAllContent,
-  stageEnrichment,
-  matchEnrichment,
+  activeInputFileName,
+  actionCounts,
   analyze,
+  stageAllContent,
+  stageLinks,
   type StagedContent,
-  type StagedEnrichment,
+  type StagedLink,
 } from "./lib/merge-ready";
 
 loadEnv();
 
-// Assigned in main() from makePrismaClient (native engine by default, PGlite
-// adapter when KODA_DB_DRIVER=pglite).
 let prisma: PrismaClient;
 let closeHandle: (() => Promise<void>) | null = null;
 
@@ -48,32 +39,12 @@ function log(msg: string) {
   console.log(`[import ${new Date().toISOString()}] ${msg}`);
 }
 
-// Taxonomy tag types backed by the merge fields.
-const TAXONOMY: { type: "valdkond" | "tegevusala" | "tapsustus"; pick: (s: StagedContent) => string[] }[] = [
+const TAXONOMY: { type: "valdkond" | "tegevusala" | "tapsustus" | "oigusakt"; pick: (s: StagedContent) => string[] }[] = [
   { type: "valdkond", pick: (s) => s.valdkonnad },
   { type: "tegevusala", pick: (s) => s.tegevusalad },
   { type: "tapsustus", pick: (s) => s.tapsustused },
+  { type: "oigusakt", pick: (s) => s.oigusaktid },
 ];
-
-async function upsertTaxonomy(all: StagedContent[]): Promise<Map<string, string>> {
-  // key `${type}::${value}` -> tagId
-  const map = new Map<string, string>();
-  for (const { type, pick } of TAXONOMY) {
-    const values = new Set<string>();
-    for (const s of all) for (const v of pick(s)) values.add(v);
-    log(`  taxonomy ${type}: ${values.size} distinct values`);
-    for (const name of values) {
-      const slug = slugify(name) || "x";
-      const tag = await prisma.tag.upsert({
-        where: { type_slug: { type, slug } },
-        create: { type, slug, name },
-        update: { name },
-      });
-      map.set(`${type}::${name}`, tag.id);
-    }
-  }
-  return map;
-}
 
 function toContentData(s: StagedContent): Prisma.ContentItemUncheckedCreateInput {
   return {
@@ -101,15 +72,30 @@ function toContentData(s: StagedContent): Prisma.ContentItemUncheckedCreateInput
     outcomeStatus: s.outcomeStatus,
     importStatus: s.importStatus,
     publicDisplayStatus: s.publicDisplayStatus,
+    importAction: s.importAction,
+    publicDisplayAllowed: s.publicDisplayAllowed,
+    publicDisplayRole: s.publicDisplayRole,
     mergeReadiness: s.mergeReadiness,
     mergeNotes: s.mergeNotes,
     extractionQuality: s.extractionQuality,
     needsHumanReview: s.needsHumanReview,
+    numericClaimNeedsReview: s.numericClaimNeedsReview,
     reviewReason: s.reviewReason,
     publicPriority: s.publicPriority,
+    sourceQualityFlag: s.sourceQualityFlag,
+    classificationConfidence: s.classificationConfidence,
     primaryCategory: s.primaryCategory,
     secondaryCategories: s.secondaryCategories,
     topicGroupCandidate: s.topicGroupCandidate,
+    topicPrimary: s.topicPrimary,
+    topicSecondary: s.topicSecondary,
+    activityPrimary: s.activityPrimary,
+    activitySecondary: s.activitySecondary,
+    sectorScope: s.sectorScope,
+    situationTags: s.situationTags,
+    lawTagsConfirmed: s.lawTagsConfirmed,
+    lawTagsCandidate: s.lawTagsCandidate,
+    lawSearchAllowed: s.lawSearchAllowed,
     canonicalContentId: s.canonicalContentId,
     duplicateStatus: s.duplicateStatus,
     isEvergreen: s.isEvergreen,
@@ -120,33 +106,82 @@ function toContentData(s: StagedContent): Prisma.ContentItemUncheckedCreateInput
   };
 }
 
-async function upsertContent(
+async function writeBackup(): Promise<{ path: string; counts: Record<string, number> }> {
+  const backupsDir = resolve(IMPORT_DIR, "backups");
+  mkdirSync(backupsDir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const path = resolve(backupsDir, `pre-v0-9-4-import-${stamp}.json`);
+
+  const [contentItems, topicGroups, tags, evidenceLinks, achievements] = await Promise.all([
+    prisma.contentItem.findMany({ include: { tags: true } }),
+    prisma.topicGroup.findMany({ include: { tags: true, contentItems: true } }),
+    prisma.tag.findMany(),
+    prisma.contentEvidenceLink.findMany(),
+    prisma.achievementEnrichment.findMany(),
+  ]);
+  const payload = {
+    timestamp: new Date().toISOString(),
+    kind: "pre-v0.9.4-content-backup",
+    counts: {
+      contentItems: contentItems.length,
+      topicGroups: topicGroups.length,
+      tags: tags.length,
+      evidenceLinks: evidenceLinks.length,
+      achievementEnrichments: achievements.length,
+    },
+    contentItems,
+    topicGroups,
+    tags,
+    evidenceLinks,
+    achievementEnrichments: achievements,
+  };
+  writeFileSync(path, JSON.stringify(payload, null, 2));
+  return { path, counts: payload.counts };
+}
+
+async function clearImportedContent() {
+  await prisma.contentEvidenceLink.deleteMany();
+  await prisma.achievementEnrichment.deleteMany();
+  await prisma.contentTopicGroup.deleteMany();
+  await prisma.topicGroupTag.deleteMany();
+  await prisma.topicGroup.deleteMany();
+  await prisma.contentTag.deleteMany();
+  await prisma.contentItem.deleteMany();
+  await prisma.tag.deleteMany({ where: { type: { in: [TagType.valdkond, TagType.tegevusala, TagType.tapsustus, TagType.oigusakt] } } });
+}
+
+async function upsertTaxonomy(all: StagedContent[]): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  for (const { type, pick } of TAXONOMY) {
+    const values = new Set<string>();
+    for (const s of all) for (const v of pick(s)) values.add(v);
+    log(`  taxonomy ${type}: ${values.size} distinct values`);
+    for (const name of values) {
+      const slug = slugify(name) || "x";
+      const tag = await prisma.tag.upsert({
+        where: { type_slug: { type, slug } },
+        create: { type, slug, name },
+        update: { name },
+      });
+      map.set(`${type}::${name}`, tag.id);
+    }
+  }
+  return map;
+}
+
+async function createContent(
   all: StagedContent[],
   tagMap: Map<string, string>
-): Promise<{ idByExternal: Map<string, string>; created: number; updated: number }> {
+): Promise<{ idByExternal: Map<string, string>; created: number }> {
   const idByExternal = new Map<string, string>();
   let created = 0;
-  let updated = 0;
   let i = 0;
-  for (const s of all) {
-    const data = toContentData(s);
-    const existing = await prisma.contentItem.findUnique({ where: { externalId: s.externalId }, select: { id: true } });
-    const item = await prisma.contentItem.upsert({
-      where: { externalId: s.externalId },
-      create: data,
-      // Importer owns these fields; admin-only fields (manualWeight, AI fields,
-      // topic-group membership) are never touched here.
-      update: data,
-    });
-    idByExternal.set(s.externalId, item.id);
-    if (existing) updated++;
-    else created++;
 
-    // Refresh the merge-taxonomy tags for this item (idempotent): remove the
-    // importer-owned tag types, then re-attach. Other tag types are preserved.
-    await prisma.contentTag.deleteMany({
-      where: { contentItemId: item.id, tag: { type: { in: ["valdkond", "tegevusala", "tapsustus"] } } },
-    });
+  for (const s of all) {
+    const item = await prisma.contentItem.create({ data: toContentData(s) });
+    idByExternal.set(s.externalId, item.id);
+    created++;
+
     const tagIds = new Set<string>();
     for (const { type, pick } of TAXONOMY) {
       for (const v of pick(s)) {
@@ -161,103 +196,92 @@ async function upsertContent(
       });
     }
 
-    if (++i % 500 === 0) log(`  ...upserted ${i}/${all.length}`);
+    if (s.isAchievement) {
+      await prisma.achievementEnrichment.create({
+        data: {
+          contentItemId: item.id,
+          standaloneAchievementId: s.externalId,
+          matchKey: s.titleKey,
+          matchPriority: s.matchedWebContentId ? "matched_web_content_id" : null,
+          enrichmentStatus: s.importAction,
+          rowMergeRole: s.importAction === "enrichment_public" ? "enrichment_public" : "enrichment_hold",
+          numericImpactStatement: s.sourceEvidence,
+          kodaRole: s.kodaPosition,
+          valueType: s.companyRelevance,
+          affectedCompanyTypes: s.companyRelevance,
+          regulatoryArea: s.topicPrimary,
+          primaryTopic: s.topicPrimary,
+          secondaryTopics: s.topicSecondary,
+          outcomeStatus: s.outcomeStatus,
+          confidence: s.classificationConfidence,
+          sourceEvidence: s.sourceEvidence,
+          indexNote: s.mergeNotes,
+        },
+      });
+    }
+
+    if (++i % 500 === 0) log(`  ...created ${i}/${all.length}`);
   }
-  return { idByExternal, created, updated };
+  return { idByExternal, created };
 }
 
-async function importEnrichment(
-  enrichment: StagedEnrichment[],
-  webAchievements: StagedContent[],
-  idByExternal: Map<string, string>
-): Promise<{ matched: number; failed: string[] }> {
-  const matches = matchEnrichment(enrichment, webAchievements);
-  const failed: string[] = [];
-  let matched = 0;
-  for (const m of matches) {
-    if (!m.matched || !m.contentExternalId) {
-      failed.push(m.enrichment.achievementTitle);
-      continue;
-    }
-    const contentItemId = idByExternal.get(m.contentExternalId);
-    if (!contentItemId) {
-      failed.push(m.enrichment.achievementTitle);
-      continue;
-    }
-    const e = m.enrichment;
-    const data = {
-      standaloneAchievementId: e.standaloneAchievementId,
-      matchKey: e.matchKey,
-      matchPriority: e.matchPriority,
-      enrichmentStatus: e.enrichmentStatus,
-      rowMergeRole: e.rowMergeRole,
-      numericImpactStatement: e.numericImpactStatement,
-      kodaRole: e.kodaRole,
-      valueType: e.valueType,
-      affectedCompanyTypes: e.affectedCompanyTypes,
-      affectedBusinessFunctions: e.affectedBusinessFunctions,
-      regulatoryArea: e.regulatoryArea,
-      primaryTopic: e.primaryTopic,
-      secondaryTopics: e.secondaryTopics,
-      outcomeStatus: e.outcomeStatus,
-      confidence: e.confidence,
-      sourceEvidence: e.sourceEvidence,
-      indexNote: e.indexNote,
-    };
-    await prisma.achievementEnrichment.upsert({
-      where: { contentItemId },
-      create: { contentItemId, ...data },
-      update: data,
-    });
-    matched++;
-  }
-  return { matched, failed };
+async function createLink(fromExt: string, toExt: string, type: "supporting_opinion" | "topic_history" | "duplicate_canonical", idByExternal: Map<string, string>, note?: string | null) {
+  const fromId = idByExternal.get(fromExt);
+  const toId = idByExternal.get(toExt);
+  if (!fromId || !toId || fromId === toId) return false;
+  await prisma.contentEvidenceLink.upsert({
+    where: { fromContentId_toContentId_linkType: { fromContentId: fromId, toContentId: toId, linkType: type } },
+    create: { fromContentId: fromId, toContentId: toId, linkType: type, note: note ?? undefined },
+    update: { note: note ?? undefined },
+  });
+  return true;
 }
 
-/** Deterministic evidence links: duplicate/canonical + resolvable related ids. */
 async function importEvidenceLinks(
   all: StagedContent[],
+  links: StagedLink[],
   idByExternal: Map<string, string>
-): Promise<number> {
-  let count = 0;
-  const link = async (fromExt: string, toExt: string, linkType: "duplicate_canonical" | "annual_context" | "topic_history" | "supporting_opinion", note?: string) => {
-    if (fromExt === toExt) return;
-    const fromId = idByExternal.get(fromExt);
-    const toId = idByExternal.get(toExt);
-    if (!fromId || !toId) return;
-    await prisma.contentEvidenceLink.upsert({
-      where: { fromContentId_toContentId_linkType: { fromContentId: fromId, toContentId: toId, linkType } },
-      create: { fromContentId: fromId, toContentId: toId, linkType, note },
-      update: { note },
-    });
-    count++;
-  };
+): Promise<{ approvedPublic: number; toovoitRelations: number; duplicateLinks: number }> {
+  let approvedPublic = 0;
+  let toovoitRelations = 0;
+  let duplicateLinks = 0;
+  const publicIds = new Set(all.filter((s) => s.isPublic).map((s) => s.externalId));
 
-  for (const s of all) {
-    // Duplicate -> canonical.
-    if (s.canonicalContentId && idByExternal.has(s.canonicalContentId)) {
-      await link(s.externalId, s.canonicalContentId, "duplicate_canonical", s.duplicateStatus ?? undefined);
+  for (const link of links) {
+    if (
+      !link.publicLinkAllowed ||
+      link.linkImportAction !== "import_public_relation" ||
+      !publicIds.has(link.webContentId) ||
+      !publicIds.has(link.opinionContentId)
+    ) {
+      continue;
     }
-    // Annual rows reference related content ids (topic history / context).
-    if (s.sourceDataset === "annual_reports" && s.canonicalContentId) {
-      for (const rel of s.canonicalContentId.split(/[;,\s]+/).filter(Boolean)) {
-        if (idByExternal.has(rel)) await link(rel, s.externalId, "annual_context");
-      }
+    if (await createLink(link.webContentId, link.opinionContentId, "supporting_opinion", idByExternal, link.evidence)) {
+      approvedPublic++;
     }
   }
-  return count;
+
+  for (const row of all) {
+    if (row.canonicalContentId && idByExternal.has(row.canonicalContentId)) {
+      if (await createLink(row.externalId, row.canonicalContentId, "duplicate_canonical", idByExternal, row.duplicateStatus)) duplicateLinks++;
+    }
+    if (row.sourceDataset === "toovoidud") {
+      if (row.matchedWebContentId && (await createLink(row.externalId, row.matchedWebContentId, "topic_history", idByExternal))) toovoitRelations++;
+      if (row.matchedOpinionContentId && (await createLink(row.externalId, row.matchedOpinionContentId, "supporting_opinion", idByExternal))) toovoitRelations++;
+    }
+  }
+
+  return { approvedPublic, toovoitRelations, duplicateLinks };
 }
 
 async function main() {
-  log(`Staging merge-ready workbooks from ${IMPORT_DIR}`);
+  log(`Staging structured package from ${IMPORT_DIR}`);
   const staged = await stageAllContent();
-  const enrichment = await stageEnrichment();
-  const webAchievements = staged.web.filter((s) => s.isAchievement);
-  const matches = matchEnrichment(enrichment, webAchievements);
-  const analysis = analyze(staged, enrichment, matches);
+  const links = await stageLinks();
+  const analysis = analyze(staged, links);
 
-  log(`Staged: web=${staged.web.length} opinions=${staged.opinions.length} annual=${staged.annual_reports.length} total=${staged.all.length}`);
-  log(`Enrichment: ${enrichment.length} rows, matched=${analysis.enrichment.matched}/${enrichment.length}`);
+  log(`Staged: web=${staged.web.length} opinions=${staged.opinions.length} toovoidud=${staged.toovoidud.length} total=${staged.all.length}`);
+  log(`Public: web=${analysis.perDataset.web.public} opinions=${analysis.perDataset.opinions.public} toovoidud=${analysis.perDataset.toovoidud.public}`);
 
   if (!analysis.ok) {
     console.error("[import] Validation errors:");
@@ -272,7 +296,15 @@ async function main() {
 
   if (DRY_RUN) {
     log("--dry-run: no database writes. Validation summary above.");
-    await writeReport(analysis, { created: 0, updated: 0, enrichmentMatched: 0, enrichmentFailed: [], evidenceLinks: 0, dbTotal: 0, dryRun: true });
+    await writeReport(analysis, {
+      dryRun: true,
+      backupPath: null,
+      backupCounts: {},
+      cleared: {},
+      created: 0,
+      evidenceLinks: { approvedPublic: 0, toovoitRelations: 0, duplicateLinks: 0 },
+      dbTotal: 0,
+    });
     return;
   }
 
@@ -281,50 +313,46 @@ async function main() {
   prisma = handle.prisma;
   closeHandle = handle.close;
 
+  log("Backing up existing content/import tables...");
+  const backup = await writeBackup();
+  log(`  backup: ${backup.path}`);
+
+  log("Replacing old imported content...");
+  await clearImportedContent();
+
   log("Upserting taxonomy tags...");
   const tagMap = await upsertTaxonomy(staged.all);
 
-  log("Upserting content rows (idempotent by externalId)...");
-  const { idByExternal, created, updated } = await upsertContent(staged.all, tagMap);
-  log(`  content: created=${created} updated=${updated}`);
+  log("Creating content rows...");
+  const { idByExternal, created } = await createContent(staged.all, tagMap);
+  log(`  content created=${created}`);
 
-  log("Enriching canonical achievements (no new content rows)...");
-  const enr = await importEnrichment(enrichment, webAchievements, idByExternal);
-  log(`  enrichment: matched=${enr.matched} failed=${enr.failed.length}`);
+  log("Linking approved public relations and achievement relations...");
+  const evidenceLinks = await importEvidenceLinks(staged.all, links.approved, idByExternal);
+  log(`  links: approvedPublic=${evidenceLinks.approvedPublic} toovoidudRelations=${evidenceLinks.toovoitRelations} duplicateLinks=${evidenceLinks.duplicateLinks}`);
 
-  log("Linking evidence graph...");
-  const evidenceLinks = await importEvidenceLinks(staged.all, idByExternal);
-  log(`  evidence links: ${evidenceLinks}`);
-
-  const dbTotal = await prisma.contentItem.count({ where: { sourceDataset: { not: null } } });
-  log(`  ContentItem rows from merge-ready datasets in DB: ${dbTotal}`);
-
+  const dbTotal = await prisma.contentItem.count();
   await writeReport(analysis, {
+    dryRun: false,
+    backupPath: backup.path,
+    backupCounts: backup.counts,
+    cleared: backup.counts,
     created,
-    updated,
-    enrichmentMatched: enr.matched,
-    enrichmentFailed: enr.failed,
     evidenceLinks,
     dbTotal,
-    dryRun: false,
   });
 
-  if (enr.failed.length > 0 && !FORCE) {
-    console.error(`[import] ${enr.failed.length} enrichment row(s) failed to match. See report.`);
-    process.exitCode = 1;
-    return;
-  }
   log("Done.");
 }
 
 type ImportResult = {
-  created: number;
-  updated: number;
-  enrichmentMatched: number;
-  enrichmentFailed: string[];
-  evidenceLinks: number;
-  dbTotal: number;
   dryRun: boolean;
+  backupPath: string | null;
+  backupCounts: Record<string, number>;
+  cleared: Record<string, number>;
+  created: number;
+  evidenceLinks: { approvedPublic: number; toovoitRelations: number; duplicateLinks: number };
+  dbTotal: number;
 };
 
 async function writeReport(analysis: ReturnType<typeof analyze>, r: ImportResult) {
@@ -333,96 +361,115 @@ async function writeReport(analysis: ReturnType<typeof analyze>, r: ImportResult
 
   const report = {
     timestamp: new Date().toISOString(),
-    kind: "import",
+    kind: "structured-v0.9.4-import",
     dryRun: r.dryRun,
     inputFiles: {
-      web: "data/import/koda_web_index_v1_merge_ready.xlsx",
-      opinions: "data/import/koda_opinions_v1_merge_ready.xlsx",
-      annual_reports: "data/import/koda_annual_reports_v1_merge_ready.xlsx",
-      enrichment: "data/import/koda_toovoidud_enrichment_v1_merge_ready.xlsx",
+      web: `data/import/${activeInputFileName(FILES.web)}`,
+      opinions: `data/import/${activeInputFileName(FILES.opinions)}`,
+      toovoidud: `data/import/${activeInputFileName(FILES.toovoidud)}`,
+      taxonomy: `data/import/${activeInputFileName(FILES.taxonomy)}`,
     },
     sheetsUsed: {
-      web: "web_merge_ready",
-      opinions: "opinions_merge_ready",
-      annual_reports: "annual_reports_merge_ready",
-      enrichment: "toovoidud_enrichment_ready",
+      web: "web_content_v0_9",
+      opinions: "opinions_v0_9",
+      toovoidud: "toovoidud_v0_9",
+      approvedLinks: "approved_links_v0_9",
+      candidateLinks: "candidate_links_v0_9",
     },
+    backupPath: r.backupPath,
+    backupCounts: r.backupCounts,
+    oldDataRemovalMethod: "Cleared ContentItem, TopicGroup, ContentTag, ContentEvidenceLink and AchievementEnrichment before inserting v0.9.4 rows.",
     rowCountsPerSource: analysis.rowCounts,
     totalContentStaged: analysis.totalContentStaged,
-    totalContentImported: r.dryRun ? 0 : r.created + r.updated,
-    contentRowsCreated: r.created,
-    contentRowsUpdated: r.updated,
-    dbContentRowsFromMergeReady: r.dbTotal,
-    excludedFromPublic: analysis.visibility.hiddenOrSupporting,
+    totalContentImported: r.created,
+    dbContentRowsAfterImport: r.dbTotal,
     publicRows: analysis.visibility.public,
-    hiddenOrReviewRows: analysis.visibility.hiddenOrSupporting,
-    needsReviewRows: analysis.visibility.needsReview,
-    doNotImportRows: analysis.visibility.doNotImport,
-    weakOrFailedExtractionRows: analysis.visibility.weakOrFailedExtraction,
-    opinionRowsImportedAsEvidence: analysis.perDataset.opinions?.total ?? 0,
-    annualRowsImported: analysis.perDataset.annual_reports?.total ?? 0,
-    canonicalAchievementRows: analysis.canonicalAchievements,
-    achievementEnrichmentRows: analysis.enrichment.rows,
-    enrichmentMatches: r.dryRun ? analysis.enrichment.matched : r.enrichmentMatched,
-    enrichmentFailures: r.dryRun ? analysis.enrichment.failedTitles : r.enrichmentFailed,
-    enrichmentContentRowsCreated: 0,
+    hiddenOrSupportingRows: analysis.visibility.hiddenOrSupporting,
+    actionCounts: {
+      web: actionCountsByName(analysis, "web"),
+      opinions: actionCountsByName(analysis, "opinions"),
+      toovoidud: actionCountsByName(analysis, "toovoidud"),
+    },
+    perDataset: analysis.perDataset,
+    linkCounts: analysis.links,
     evidenceLinksCreated: r.evidenceLinks,
-    duplicateContentHashGroups: analysis.duplicateContentHashGroups.length,
+    lawSearch: analysis.law,
+    taxonomyReference: analysis.taxonomyReference,
     invalidEnumValues: analysis.invalidEnumValues,
     missingRequiredFields: analysis.missingRequiredFields,
-    publicRowsWithReviewFlags: analysis.publicRowsWithReviewFlag,
-    perDataset: analysis.perDataset,
-    finalStatus: analysis.ok && analysis.enrichment.failed === 0 ? "PASS" : "FAIL",
+    publicRowsWithReviewFlag: analysis.publicRowsWithReviewFlag,
+    publicRowsWithNumericReviewFlag: analysis.publicRowsWithNumericReviewFlag,
+    publicSafetyBlockers: analysis.blockers,
+    duplicateContentHashGroups: analysis.duplicateContentHashGroups.length,
+    finalStatus: analysis.ok ? "PASS" : "FAIL",
     errors: analysis.errors,
   };
 
   writeFileSync(resolve(reportsDir, "import-report.json"), JSON.stringify(report, null, 2));
 
-  const md = `# Merge-ready import report
+  const md = `# Structured v0.9.4 import report
 
-- **Timestamp:** ${report.timestamp}
-- **Mode:** ${r.dryRun ? "dry-run (no DB writes)" : "import"}
-- **Final status:** ${report.finalStatus}
+- Timestamp: ${report.timestamp}
+- Mode: ${r.dryRun ? "dry-run (no DB writes)" : "replacement import"}
+- Final status: ${report.finalStatus}
+- Backup: ${report.backupPath ?? "(dry-run)"}
 
-## Row counts per source
-| Source | Staged | Expected |
-| --- | --- | --- |
-| web | ${analysis.rowCounts.web} | ${analysis.expected.web} |
-| opinions | ${analysis.rowCounts.opinions} | ${analysis.expected.opinions} |
-| annual_reports | ${analysis.rowCounts.annual_reports} | ${analysis.expected.annual_reports} |
-| enrichment (no content rows) | ${analysis.rowCounts.enrichment} | ${analysis.expected.enrichment} |
-| **Total content** | **${analysis.totalContentStaged}** | **${analysis.expected.totalContentBeforeExclusions}** |
+## Input files
+- ${report.inputFiles.web}
+- ${report.inputFiles.opinions}
+- ${report.inputFiles.toovoidud}
+- ${report.inputFiles.taxonomy}
 
-## Import
-- Content created: ${report.contentRowsCreated}
-- Content updated: ${report.contentRowsUpdated}
-- DB content rows from merge-ready: ${report.dbContentRowsFromMergeReady}
-- Public rows: ${report.publicRows}
-- Excluded from public (hidden/supporting): ${report.excludedFromPublic}
-- Needs-review rows: ${report.needsReviewRows}
-- do_not_import_yet rows: ${report.doNotImportRows}
-- Weak/failed extraction rows: ${report.weakOrFailedExtractionRows}
-- Opinion rows imported as supporting evidence: ${report.opinionRowsImportedAsEvidence}
-- Annual rows imported: ${report.annualRowsImported}
+## Row counts
+| Source | Staged | Public |
+| --- | ---: | ---: |
+| Web | ${analysis.rowCounts.web} | ${analysis.perDataset.web.public} |
+| Opinions | ${analysis.rowCounts.opinions} | ${analysis.perDataset.opinions.public} |
+| Toovoidud | ${analysis.rowCounts.toovoidud} | ${analysis.perDataset.toovoidud.public} |
+| Total content | ${analysis.totalContentStaged} | ${analysis.visibility.public} |
 
-## Achievement enrichment
-- Canonical achievement rows: ${report.canonicalAchievementRows}
-- Enrichment rows: ${report.achievementEnrichmentRows}
-- Matches: ${report.enrichmentMatches}
-- Failures: ${Array.isArray(report.enrichmentFailures) ? report.enrichmentFailures.length : report.enrichmentFailures}
-- **Content rows created from enrichment file: ${report.enrichmentContentRowsCreated}**
+## Held/support/staging
+- Web support-only: ${analysis.visibility.supportOnly}
+- Web do-not-import-public: ${analysis.visibility.doNotImportPublic}
+- Staging-only rows: ${analysis.visibility.stagingOnly}
+- Held toovoidud rows: ${analysis.visibility.heldToovoidud}
+- Review-required rows: ${analysis.visibility.needsReview}
+- Numeric-review rows: ${analysis.visibility.numericReview}
 
-## Data quality
-- Duplicate content-hash groups: ${report.duplicateContentHashGroups}
-- Invalid enum values: ${report.invalidEnumValues.length}
-- Missing required fields: ${report.missingRequiredFields.length}
-- Public rows still flagged for review: ${report.publicRowsWithReviewFlags.length}
-- Evidence links created: ${report.evidenceLinksCreated}
+## Links and law search
+- Approved public relations: ${analysis.links.approvedPublicEligible}
+- Approved admin/blocked relations: ${analysis.links.approvedAdminOrBlocked}
+- Candidate links admin-only: ${analysis.links.candidateAdminOnly}
+- Public rows with confirmed law tags: ${analysis.law.publicConfirmedLawTagRows}
+- Rows carrying candidate law tags (not public law filter tags): ${analysis.law.candidateLawTagRows}
 
-${analysis.errors.length ? "## Errors\n" + analysis.errors.map((e) => "- " + e).join("\n") : "_No errors._"}
+${analysis.errors.length ? "## Errors\n" + analysis.errors.map((e) => "- " + e).join("\n") : "_No validation errors._"}
 `;
   writeFileSync(resolve(reportsDir, "import-report.md"), md);
   log(`Wrote ${resolve(reportsDir, "import-report.json")} and import-report.md`);
+}
+
+function actionCountsByName(analysis: ReturnType<typeof analyze>, dataset: "web" | "opinions" | "toovoidud") {
+  // Reports are written from Analysis only; keep action counts there in a compact
+  // derived form by reusing the known expected splits.
+  if (dataset === "web") {
+    return {
+      import_public: analysis.perDataset.web.public,
+      import_support_only: analysis.visibility.supportOnly,
+      import_staging_only: analysis.rowCounts.web - analysis.perDataset.web.public - analysis.visibility.supportOnly - analysis.visibility.doNotImportPublic,
+      do_not_import_public: analysis.visibility.doNotImportPublic,
+    };
+  }
+  if (dataset === "opinions") {
+    return {
+      import_public: analysis.perDataset.opinions.public,
+      import_staging_only: analysis.rowCounts.opinions - analysis.perDataset.opinions.public,
+    };
+  }
+  return {
+    enrichment_public: analysis.perDataset.toovoidud.public,
+    enrichment_hold: analysis.visibility.heldToovoidud,
+  };
 }
 
 main()
@@ -431,7 +478,5 @@ main()
     process.exitCode = 1;
   })
   .finally(async () => {
-    // Disconnect best-effort; never let a disconnect error mask the run result
-    // (e.g. dry-run never opened a connection).
     if (closeHandle) await closeHandle().catch(() => {});
   });

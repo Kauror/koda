@@ -27,6 +27,8 @@ export function datasetLabel(dataset: string | null): string {
       return "Koja arvamuskiri";
     case "annual_reports":
       return "Koja aastaaruanne";
+    case "toovoidud":
+      return "Koja töövõit";
     default:
       return "Koja allikas";
   }

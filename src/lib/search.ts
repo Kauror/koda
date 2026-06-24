@@ -71,6 +71,8 @@ export function toCandidate(row: ContentWithTags): Candidate {
     valdkonnad: byType(TagType.valdkond),
     tegevusalad: byType(TagType.tegevusala),
     tapsustused: byType(TagType.tapsustus),
+    oigusaktid: byType(TagType.oigusakt),
+    lawSearchAllowed: row.lawSearchAllowed,
   };
 }
 

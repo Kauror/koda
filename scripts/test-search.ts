@@ -53,8 +53,11 @@ function elig(over: Partial<EligibilityFields> = {}): EligibilityFields {
     isPublic: true,
     isHidden: false,
     needsHumanReview: false,
-    importStatus: "import_public_candidate",
-    publicDisplayStatus: "main_result_candidate",
+    numericClaimNeedsReview: false,
+    importStatus: "import_public",
+    importAction: "import_public",
+    publicDisplayAllowed: true,
+    publicDisplayStatus: "public_candidate",
     adminVisibilityOverride: null,
     sourceDataset: "web",
     ...over,
@@ -92,6 +95,8 @@ function cand(over: Partial<Candidate> = {}): Candidate {
     valdkonnad: [],
     tegevusalad: [],
     tapsustused: [],
+    oigusaktid: [],
+    lawSearchAllowed: false,
     ...over,
   };
 }
@@ -105,14 +110,18 @@ console.log("[test] search-core checks:");
 check("eligible public web row passes", () => assert.equal(isPublicSearchEligible(elig()), true));
 check("review-needed rows are not public", () =>
   assert.equal(isPublicSearchEligible(elig({ needsHumanReview: true })), false));
-check("do_not_import_yet rows are not public", () =>
-  assert.equal(isPublicSearchEligible(elig({ importStatus: "do_not_import_yet" })), false));
+check("do_not_import_public rows are not public", () =>
+  assert.equal(isPublicSearchEligible(elig({ importAction: "do_not_import_public" })), false));
 check("admin_only rows are not public", () =>
   assert.equal(isPublicSearchEligible(elig({ publicDisplayStatus: "admin_only" })), false));
 check("hide_or_review rows are not public", () =>
   assert.equal(isPublicSearchEligible(elig({ publicDisplayStatus: "hide_or_review" })), false));
-check("opinion rows are not public by default", () =>
-  assert.equal(isPublicSearchEligible(elig({ sourceDataset: "opinions" })), false));
+check("public opinion rows pass under explicit v0.9.4 gates", () =>
+  assert.equal(isPublicSearchEligible(elig({ sourceDataset: "opinions" })), true));
+check("support-only rows are not public", () =>
+  assert.equal(isPublicSearchEligible(elig({ importAction: "import_support_only" })), false));
+check("numeric-review rows are not public", () =>
+  assert.equal(isPublicSearchEligible(elig({ numericClaimNeedsReview: true })), false));
 check("admin hidden override hides a row", () =>
   assert.equal(isPublicSearchEligible(elig({ adminVisibilityOverride: false })), false));
 check("admin visible override surfaces a supporting opinion", () =>
@@ -156,6 +165,36 @@ check("exact title match beats weak body match", () => {
   const titleHit = cand({ title: "Pakendimaks", contentHash: "a" });
   const bodyHit = cand({ title: "Midagi muud", bodyText: "tekst pakendimaks tekst", contentHash: "b" });
   assert.ok(scoreCandidate(titleHit, q).text > scoreCandidate(bodyHit, q).text);
+});
+
+check("confirmed law tags boost keyword search", () => {
+  const q: SearchQuery = { ...EMPTY, q: "Pakendiseadus" };
+  const lawHit = cand({
+    title: "Pakendi arutelu",
+    oigusaktid: [{ slug: "pakendiseadus", name: "Pakendiseadus" }],
+    lawSearchAllowed: true,
+  });
+  const candidateOnly = cand({
+    title: "Pakendi arutelu",
+    bodyText: "law_tags_candidate: Pakendiseadus",
+    lawSearchAllowed: false,
+  });
+  assert.ok(scoreCandidate(lawHit, q).text > scoreCandidate(candidateOnly, q).text);
+});
+check("law-looking queries require confirmed law tags", () => {
+  const q: SearchQuery = { ...EMPTY, q: "Töölepingu seadus" };
+  const confirmed = cand({
+    title: "Töölepingu muudatus",
+    oigusaktid: [{ slug: "toolepingu-seadus", name: "Töölepingu seadus" }],
+    lawSearchAllowed: true,
+  });
+  const bodyOnly = cand({
+    title: "Töölepingu uudis",
+    bodyText: "Töölepingu seadus on tekstis, kuid mitte kinnitatud seadusemärgendina.",
+    lawSearchAllowed: false,
+  });
+  assert.equal(passesActiveFilters(q, scoreCandidate(confirmed, q), confirmed), true);
+  assert.equal(passesActiveFilters(q, scoreCandidate(bodyOnly, q), bodyOnly), false);
 });
 
 check("topic match boosts results", () => {
@@ -516,7 +555,7 @@ check("parseSearchParams ignores unknown type values", () => {
 check("public item detail loads (eligible)", () => assert.equal(isPublicSearchEligible(elig()), true));
 check("hidden item direct URL returns not found", () =>
   assert.equal(isPublicSearchEligible(elig({ isHidden: true, isPublic: false })), false));
-check("opinion item direct URL returns not found by default", () =>
+check("hidden opinion item direct URL returns not found", () =>
   assert.equal(isPublicSearchEligible(elig({ sourceDataset: "opinions", isPublic: false })), false));
 check("admin hidden override blocks detail", () =>
   assert.equal(isPublicSearchEligible(elig({ adminVisibilityOverride: false })), false));
@@ -534,8 +573,7 @@ check("weak extraction not shown as evidence", () =>
   assert.equal(isEvidenceEligible(ev({ extractionQuality: "weak" })), false));
 check("admin-hidden row not shown as evidence", () =>
   assert.equal(isEvidenceEligible(ev({ adminVisibilityOverride: false })), false));
-check("opinion can be evidence even though not a public result", () => {
-  // opinions fail the public gate but pass the evidence gate (good extraction, no review)
+check("hidden opinion can still be evidence when safe", () => {
   assert.equal(isPublicSearchEligible(elig({ sourceDataset: "opinions", isPublic: false })), false);
   assert.equal(isEvidenceEligible(ev()), true);
 });

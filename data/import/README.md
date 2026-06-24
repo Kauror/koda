@@ -1,24 +1,24 @@
-# `data/import/` — merge-ready source files
+# `data/import/` - structured source files
 
-Put the four cleaned v1 merge-ready workbooks here (they are **git-ignored** –
-they are local source data, not committed):
+This folder is the active local import source for the Koda public search app.
+The workbooks themselves are git-ignored local data files, but their expected
+names and sheets are fixed by the importer.
 
 | File | Main sheet | Role | Expected rows |
-| --- | --- | --- | --- |
-| `koda_web_index_v1_merge_ready.xlsx` | `web_merge_ready` | content source | 3937 |
-| `koda_opinions_v1_merge_ready.xlsx` | `opinions_merge_ready` | content source (supporting evidence) | 759 |
-| `koda_annual_reports_v1_merge_ready.xlsx` | `annual_reports_merge_ready` | content source (context/history) | 237 |
-| `koda_toovoidud_enrichment_v1_merge_ready.xlsx` | `toovoidud_enrichment_ready` | **enrichment only** | 76 |
+| --- | --- | --- | ---: |
+| `koda_web_content_v0_9_4_cleaned.xlsx` | `web_content_v0_9` | web/news/opinion article content | 3804 |
+| `koda_opinions_v0_9_1.xlsx` | `opinions_v0_9` | formal opinion content | 759 |
+| `koda_toovoidud_enrichment_v0_9_1.xlsx` | `toovoidud_v0_9` | toovoidud value cards | 97 |
+| `koda_taxonomy_rules_v0_9_1.txt` | n/a | taxonomy reference only | n/a |
 
-- Total content rows before public exclusions = **4933** (3937 + 759 + 237).
-- The töövõidud file is **enrichment only** and creates **0** content rows.
-  If the import ever produces 5009 content rows, it wrongly appended this file.
+- Total content rows before public exclusions = **4660**.
+- Public gates come from `import_action` and `public_display_allowed`.
+- Candidate links stay admin/review-only and are not imported as public
+  relations.
+- Candidate law tags are stored as source metadata only; public law search uses
+  confirmed `law_tags_confirmed` tags.
+- Older v1 merge-ready workbooks are archived outside this active import folder
+  and should not be copied back for production/staging imports.
 
-All other sheets in each workbook (inspection / QA / rules_notes / review
-sheets) are **ignored** by the importer.
-
-Generated QA reports are written to `data/import/reports/` (also git-ignored):
-`validation-report.json`, `import-report.json`, `import-report.md`.
-
-See [`docs/import-merge-ready.md`](../../docs/import-merge-ready.md) for the
-full workflow.
+Generated reports are written to `data/import/reports/`; pre-replacement JSON
+backups are written to `data/import/backups/`. Both folders are git-ignored.
