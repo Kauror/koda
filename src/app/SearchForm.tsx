@@ -90,8 +90,14 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (tegevusalaOptions.length > 0 && tegevusala.length === 0) {
+    // Tegevusala is no longer mandatory: a search needs at least one filter, but
+    // the user may search by Teema / valdkond (or recipient) alone. Only block a
+    // completely empty search, and reveal the advanced section so the topic
+    // filter is visible when prompting.
+    const hasAnyFilter = tegevusala.length > 0 || valdkond.length > 0 || recipient.length > 0;
+    if (!hasAnyFilter) {
       setShowSectorError(true);
+      setShowAdvanced(true);
       return;
     }
     const p = new URLSearchParams();
@@ -107,7 +113,7 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
         <fieldset className="search-sector" aria-describedby="tegevusala-hint tegevusala-error">
           <legend>Tegevusala</legend>
           <p className="field-hint" id="tegevusala-hint">
-            Vali vähemalt üks tegevusala.
+            Vali üks või mitu tegevusala – või otsi hoopis teema järgi „Täpsemad valikud" alt.
           </p>
           <ChipGroup
             options={tegevusalaOptions}
@@ -119,7 +125,7 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
           />
           {showSectorError && (
             <p className="field-error" id="tegevusala-error" role="alert">
-              Palun vali tegevusala.
+              Palun vali vähemalt üks tegevusala või teema.
             </p>
           )}
         </fieldset>
@@ -155,7 +161,10 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
               <ChipGroup
                 options={options.valdkonnad}
                 selected={valdkond}
-                onToggle={toggle(valdkond, setValdkond)}
+                onToggle={(slug) => {
+                  setShowSectorError(false);
+                  toggle(valdkond, setValdkond)(slug);
+                }}
               />
             </fieldset>
           )}
@@ -169,7 +178,10 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
               <ChipGroup
                 options={options.recipients}
                 selected={recipient}
-                onToggle={toggle(recipient, setRecipient)}
+                onToggle={(slug) => {
+                  setShowSectorError(false);
+                  toggle(recipient, setRecipient)(slug);
+                }}
               />
             </fieldset>
           )}

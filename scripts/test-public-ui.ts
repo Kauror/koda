@@ -187,9 +187,12 @@ check("results page does not show capped total copy", () => {
   assert.ok(!source.includes("Kuvame neist"));
 });
 
-check("search form requires a concrete sector and hides removed type filters", () => {
+check("search form allows topic-only search (sector not mandatory) and hides removed type filters", () => {
   const source = readFileSync("src/app/SearchForm.tsx", "utf8");
-  assert.ok(source.includes("tegevusala.length === 0"));
+  // Sector is no longer mandatory: a search needs at least one filter, but the
+  // user may search by Teema / valdkond (or recipient) alone.
+  assert.ok(source.includes("hasAnyFilter"));
+  assert.ok(!source.includes("tegevusalaOptions.length > 0 && tegevusala.length === 0"));
   assert.ok(source.includes("isGenericSectorOption"));
   assert.ok(source.includes('type="submit"'));
   assert.ok(source.includes("Teema / valdkond"));
