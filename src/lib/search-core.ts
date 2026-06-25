@@ -9,7 +9,7 @@
  */
 import { normalizeTitle } from "./hash";
 import { publicSummary, publicTitle } from "./content-display";
-import { getSectorRelevance as getSectorRelevanceForScore, sectorMatchesSlug } from "./sector-relevance";
+import { getSectorRelevance as getSectorRelevanceForScore, hasGenericSectorTag, sectorMatchesSlug } from "./sector-relevance";
 
 export {
   getRelatedTopicsForSector,
@@ -124,6 +124,8 @@ export type Candidate = {
   tapsustused: TagRef[];
   oigusaktid: TagRef[];
   lawSearchAllowed: boolean;
+  /** Slug of activity_primary, so a primary match can rank above a secondary one. */
+  activityPrimarySlug: string | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -180,6 +182,8 @@ export type ScoreBreakdown = {
   sectorFallbackMatches: number;
   sectorRelatedTopicMatches: number;
   sectorKeywordMatches: number;
+  /** True when an active sector filter is satisfied via a cross-sector (valdkondadeülene) tag. */
+  crossSectorMatch: boolean;
 };
 
 function countTokens(haystack: string, tokens: string[]): number {
@@ -243,14 +247,25 @@ export function scoreCandidate(c: Candidate, q: SearchQuery): ScoreBreakdown {
   const valdkondMatches = c.valdkonnad.filter((t) => q.valdkond.includes(t.slug)).length;
   const tegevusalaMatches = c.tegevusalad.filter((t) => sectorMatchesSlug(t.slug, q.tegevusala)).length;
   const tapsustusMatches = c.tapsustused.filter((t) => q.tapsustus.includes(t.slug)).length;
+  const sectorActive = q.tegevusala.length > 0;
+  // Tier 1: activity_primary matches the selected sector exactly.
+  const primaryActivityMatch =
+    sectorActive && c.activityPrimarySlug != null && sectorMatchesSlug(c.activityPrimarySlug, q.tegevusala);
+  // Tier 3: a cross-sector ("Kõik tegevusalad / valdkondadeülene") tag applies to
+  // every sector, so it's included under any specific filter (ranked lowest).
+  const crossSectorMatch = sectorActive && tegevusalaMatches === 0 && hasGenericSectorTag(c);
+  // Conservative keyword/topic fallback only for rows with no sector + no cross-sector tag.
   const sectorRelevance =
-    tegevusalaMatches === 0
+    tegevusalaMatches === 0 && !crossSectorMatch
       ? getSectorRelevanceForScore(c, q.tegevusala)
       : { matches: 0, topicMatches: 0, keywordMatches: 0 };
 
   let filter = 0;
   filter += Math.min(valdkondMatches, 2) * 40; // topic: high, capped
-  filter += Math.min(tegevusalaMatches, 2) * 44; // exact sector: high, capped
+  // Sector tiers: primary exact > secondary/other exact > cross-sector fallback.
+  if (primaryActivityMatch) filter += 44; // tier 1: primary activity, strong
+  else if (tegevusalaMatches > 0) filter += 28; // tier 2: secondary/other exact, medium
+  else if (crossSectorMatch) filter += 10; // tier 3: cross-sector, lower
   filter += Math.min(sectorRelevance.topicMatches, 2) * 14; // related sector topic: medium
   filter += Math.min(sectorRelevance.matches, 1) * 6; // controlled sector fallback
   filter += Math.min(sectorRelevance.keywordMatches, 2) * 3; // keyword-only fallback: light
@@ -272,11 +287,12 @@ export function scoreCandidate(c: Candidate, q: SearchQuery): ScoreBreakdown {
       valdkondMatches > 0 ||
       tegevusalaMatches > 0 ||
       sectorRelevance.matches > 0 ||
+      crossSectorMatch ||
       tapsustusMatches > 0;
     const textMatch = q.q.length > 0 && text > 0;
     if (directFilterMatch || textMatch) boost += 12;
     if (activeTopicOrSector && tegevusalaMatches > 0) boost += 8;
-    else if (activeTopicOrSector && sectorRelevance.matches > 0) boost += 4;
+    else if (activeTopicOrSector && (sectorRelevance.matches > 0 || crossSectorMatch)) boost += 4;
   }
 
   if (c.outcomeStatus === "achieved") boost += 20;
@@ -299,6 +315,7 @@ export function scoreCandidate(c: Candidate, q: SearchQuery): ScoreBreakdown {
     sectorFallbackMatches: sectorRelevance.matches,
     sectorRelatedTopicMatches: sectorRelevance.topicMatches,
     sectorKeywordMatches: sectorRelevance.keywordMatches,
+    crossSectorMatch,
   };
 }
 
@@ -321,7 +338,7 @@ export function passesActiveFilters(
   if (q.q && isConservativeLawQuery(qn) && !opts?.lawMatch && !matchesConfirmedLawQuery(c, qn)) return false;
   if (q.q && s.text === 0 && !opts?.lawMatch) return false;
   if (q.valdkond.length && s.valdkondMatches === 0) return false;
-  if (q.tegevusala.length && s.tegevusalaMatches === 0 && s.sectorFallbackMatches === 0) {
+  if (q.tegevusala.length && s.tegevusalaMatches === 0 && s.sectorFallbackMatches === 0 && !s.crossSectorMatch) {
     return false;
   }
   if (q.type.length && !q.type.includes(primaryType(c))) return false;

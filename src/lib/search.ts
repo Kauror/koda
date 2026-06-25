@@ -8,6 +8,7 @@ import { Prisma, TagType } from "@prisma/client";
 import { prisma } from "./db";
 import { isPublicSearchEligible } from "./eligibility";
 import { detectLaw, extractLawMentions, lawMentionForSlug } from "./law-match";
+import { slugify } from "./slug";
 import { compactText, getCleanPublicExcerpt, publicSourceUrl, publicTitle, sourceCtaLabel } from "./content-display";
 import {
   type Candidate,
@@ -88,6 +89,7 @@ export function toCandidate(row: ContentWithTags): Candidate {
     tapsustused: byType(TagType.tapsustus),
     oigusaktid: byType(TagType.oigusakt),
     lawSearchAllowed: row.lawSearchAllowed,
+    activityPrimarySlug: row.activityPrimary ? slugify(row.activityPrimary) : null,
   };
 }
 

@@ -145,6 +145,7 @@ function toCandidate(row: Row): Candidate {
     tapsustused: byType("tapsustus"),
     oigusaktid: byType("oigusakt"),
     lawSearchAllowed: row.lawSearchAllowed,
+    activityPrimarySlug: null,
   };
 }
 

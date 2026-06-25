@@ -104,6 +104,7 @@ function cand(over: Partial<Candidate> = {}): Candidate {
     tapsustused: [],
     oigusaktid: [],
     lawSearchAllowed: false,
+    activityPrimarySlug: null,
     ...over,
   };
 }
@@ -323,14 +324,23 @@ check("sector-only search includes sector-matching Koda news", () => {
   });
   assert.equal(passesActiveFilters(q, scoreCandidate(news, q), news), true);
 });
-check("generic sector fallback does not flood unrelated sector searches", () => {
+check("cross-sector (valdkondadeülene) rows are included under any specific sector, ranked below exact", () => {
   const q: SearchQuery = { ...EMPTY, tegevusala: ["pollumajandus-metsandus-ja-kalandus"] };
   const generic = cand({
+    id: "generic",
     publicPriority: "medium",
     tegevusalad: [{ slug: "koik-tegevusalad-valdkondadeulene", name: "Kõik tegevusalad / valdkondadeülene" }],
   });
+  const exact = cand({
+    id: "exact",
+    publicPriority: "medium",
+    tegevusalad: [{ slug: "pollumajandus-metsandus-ja-kalandus", name: "Põllumajandus" }],
+  });
   assert.equal(hasGenericSectorTag(generic), true);
-  assert.equal(passesActiveFilters(q, scoreCandidate(generic, q), generic), false);
+  // cross-sector rows ARE included without selecting the generic option…
+  assert.equal(passesActiveFilters(q, scoreCandidate(generic, q), generic), true);
+  // …but a sector-specific match ranks above the cross-sector row.
+  assert.ok(scoreCandidate(exact, q).total > scoreCandidate(generic, q).total);
 });
 check("related generic sector row can appear below sector-specific matches", () => {
   const q: SearchQuery = { ...EMPTY, tegevusala: ["info-ja-side-it"] };
@@ -354,7 +364,7 @@ check("Info/IT sector has deterministic related topic mapping", () => {
   assert.ok(rule.topicNeedles.some((needle) => needle.includes("digi")));
   assert.equal(getRelatedTopicsForSector("info-ja-side-it"), rule);
 });
-check("Info/IT sector excludes e-commerce and consumer-protection fallback rows", () => {
+check("Info/IT: a cross-sector e-commerce row is included as cross-sector but ranks below an exact IT match", () => {
   const q: SearchQuery = { ...EMPTY, tegevusala: ["info-side-ja-it"] };
   const digital = cand({
     id: "digital",
@@ -364,14 +374,15 @@ check("Info/IT sector excludes e-commerce and consumer-protection fallback rows"
     tegevusalad: [{ slug: "koik-tegevusalad-valdkondadeulene", name: "Kõik tegevusalad / valdkondadeülene" }],
     valdkonnad: [{ slug: "e-kaubandus-ja-tarbijakaitse", name: "E-kaubandus ja tarbijakaitse" }],
   });
-  const relevance = getSectorRelevance(digital, q.tegevusala);
-  const explanation = getSectorRelevanceExplanation(digital, "info-side-ja-it");
-  assert.equal(relevance.matches, 0);
-  assert.equal(explanation.fallbackAllowed, false);
-  assert.equal(explanation.fallbackBlockedReason, "sector-fallback-exclusion");
-  assert.equal(passesActiveFilters(q, scoreCandidate(digital, q), digital), false);
+  // The keyword fallback itself still does not *promote* it on weak evidence…
+  assert.equal(getSectorRelevance(digital, q.tegevusala).matches, 0);
+  assert.equal(getSectorRelevanceExplanation(digital, "info-side-ja-it").fallbackBlockedReason, "sector-fallback-exclusion");
+  // …but it IS included because it is explicitly tagged cross-sector.
+  assert.equal(passesActiveFilters(q, scoreCandidate(digital, q), digital), true);
+  const exact = cand({ id: "exact-it", title: "IT teenuste areng", tegevusalad: [{ slug: "info-side-ja-it", name: "Info ja side / IT" }] });
+  assert.ok(scoreCandidate(exact, q).total > scoreCandidate(digital, q).total);
 });
-check("Info/IT sector excludes packaging, waste, labelling and environmental-claims fallback rows", () => {
+check("Info/IT: cross-sector rows (packaging, waste, etc.) are included as cross-sector", () => {
   const q: SearchQuery = { ...EMPTY, tegevusala: ["info-side-ja-it"] };
   for (const [id, title] of [
     ["waste", "Jaatmeseadus vajab parandusi"],
@@ -384,7 +395,7 @@ check("Info/IT sector excludes packaging, waste, labelling and environmental-cla
       title,
       tegevusalad: [{ slug: "koik-tegevusalad-valdkondadeulene", name: "Generic sector" }],
     });
-    assert.equal(passesActiveFilters(q, scoreCandidate(row, q), row), false, id);
+    assert.equal(passesActiveFilters(q, scoreCandidate(row, q), row), true, id);
   }
 });
 check("Info/IT sector includes actual slug and old alias for strong technology fallback", () => {
@@ -433,12 +444,14 @@ check("exact sector matches still pass when fallback exclusion terms are present
   assert.equal(explanation.exactSectorMatch, true);
   assert.equal(passesActiveFilters(q, scoreCandidate(exact, q), exact), true);
 });
-check("body text alone does not create sector fallback eligibility", () => {
+check("body text alone does not create sector eligibility for a no-sector row", () => {
   const q: SearchQuery = { ...EMPTY, tegevusala: ["info-side-ja-it"] };
+  // No sector tag at all (not even cross-sector): the keyword fallback needs
+  // title/summary evidence, so body-only keywords must not qualify.
   const noisy = cand({
     title: "Tavaline ettevotluse uudis",
     bodyText: "Tehisintellekt kuberturvalisus andmekaitse tarkvara digiteenused",
-    tegevusalad: [{ slug: "koik-tegevusalad-valdkondadeulene", name: "Generic sector" }],
+    tegevusalad: [],
   });
   assert.equal(hasOnlyGenericOrNoSector(noisy), true);
   assert.equal(passesActiveFilters(q, scoreCandidate(noisy, q), noisy), false);
@@ -456,21 +469,27 @@ check("Koda news can appear in Info/IT sector results through related topic fall
   assert.equal(assignKind(news), "uudis");
   assert.equal(passesActiveFilters(q, scoreCandidate(news, q), news), true);
 });
-check("agriculture fallback excludes broad environment, permit, planning, land and food terms without anchors", () => {
+check("agriculture: no-sector rows with broad terms (no anchor) are still excluded", () => {
   const q: SearchQuery = { ...EMPTY, tegevusala: ["pollumajandus-metsandus-ja-kalandus"] };
+  // No sector tag → keyword fallback applies, and broad non-anchor terms are excluded.
   for (const [id, title] of [
     ["environment", "Keskkond ja jaatmed ettevottes"],
     ["permit", "Lubade ja planeeringu muudatused"],
     ["land", "Maa kasutamise uued reeglid"],
     ["food", "Toidu margistamise nouded"],
   ]) {
-    const row = cand({
-      id,
-      title,
-      tegevusalad: [{ slug: "koik-tegevusalad-valdkondadeulene", name: "Generic sector" }],
-    });
+    const row = cand({ id, title, tegevusalad: [] });
     assert.equal(passesActiveFilters(q, scoreCandidate(row, q), row), false, id);
   }
+});
+check("agriculture: cross-sector tagged rows are included regardless of broad terms", () => {
+  const q: SearchQuery = { ...EMPTY, tegevusala: ["pollumajandus-metsandus-ja-kalandus"] };
+  const row = cand({
+    id: "cross",
+    title: "Keskkond ja jaatmed ettevottes",
+    tegevusalad: [{ slug: "koik-tegevusalad-valdkondadeulene", name: "Kõik tegevusalad / valdkondadeülene" }],
+  });
+  assert.equal(passesActiveFilters(q, scoreCandidate(row, q), row), true);
 });
 check("agriculture fallback includes agriculture, forestry and fishing anchors", () => {
   const q: SearchQuery = { ...EMPTY, tegevusala: ["pollumajandus-metsandus-ja-kalandus"] };
@@ -722,6 +741,53 @@ check("a confirmed law match satisfies the free-text filter (inflected query)", 
   assert.equal(s.text, 0); // literal scorer misses the inflected query
   assert.equal(passesActiveFilters(q, s, c), false);
   assert.equal(passesActiveFilters(q, s, c, { lawMatch: true }), true);
+});
+
+// ---- Activity tiers: primary > secondary > cross-sector, all included ----
+check("activity tiers rank primary > secondary > cross-sector and include all three", () => {
+  const q: SearchQuery = { ...EMPTY, tegevusala: ["toostus-ja-tootmine"] };
+  const primary = cand({
+    id: "p",
+    tegevusalad: [{ slug: "toostus-ja-tootmine", name: "Tööstus ja tootmine" }],
+    activityPrimarySlug: "toostus-ja-tootmine",
+  });
+  const secondary = cand({
+    id: "s",
+    tegevusalad: [
+      { slug: "kaubandus", name: "Kaubandus" },
+      { slug: "toostus-ja-tootmine", name: "Tööstus ja tootmine" },
+    ],
+    activityPrimarySlug: "kaubandus", // industry is only the secondary activity here
+  });
+  const cross = cand({
+    id: "c",
+    tegevusalad: [{ slug: "koik-tegevusalad-valdkondadeulene", name: "Kõik tegevusalad / valdkondadeülene" }],
+  });
+  for (const c of [primary, secondary, cross]) {
+    assert.equal(passesActiveFilters(q, scoreCandidate(c, q), c), true, c.id);
+  }
+  assert.ok(scoreCandidate(primary, q).total > scoreCandidate(secondary, q).total, "primary > secondary");
+  assert.ok(scoreCandidate(secondary, q).total > scoreCandidate(cross, q).total, "secondary > cross-sector");
+});
+
+check("cross-sector inclusion holds across the validation sectors (all layers)", () => {
+  const sectors = ["toostus-ja-tootmine", "kaubandus", "info-side-ja-it", "ehitus-ja-kinnisvara", "transport-ja-logistika"];
+  const layers = [
+    { sourceTypeDetail: "toovoit", sourceLayer: "koda_achievement" }, // töövõit
+    { sourceTypeDetail: "meie_arvamus_article", sourceLayer: "koda_public_opinion" }, // opinion
+    { sourceTypeDetail: "meie_uudis", sourceLayer: "koda_news" }, // web/news
+  ];
+  for (const slug of sectors) {
+    const q: SearchQuery = { ...EMPTY, tegevusala: [slug] };
+    for (const layer of layers) {
+      const cross = cand({
+        id: `${slug}-${layer.sourceLayer}`,
+        ...layer,
+        tegevusalad: [{ slug: "koik-tegevusalad-valdkondadeulene", name: "Kõik tegevusalad / valdkondadeülene" }],
+      });
+      assert.equal(passesActiveFilters(q, scoreCandidate(cross, q), cross), true, `${slug}/${layer.sourceLayer}`);
+    }
+  }
 });
 
 // ---- Topic splitting: repair ";"-corrupted compound names (filter doubling) ----
