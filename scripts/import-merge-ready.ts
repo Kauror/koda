@@ -1,6 +1,6 @@
 /**
- * Deterministic replacement import for the structured v0.9.5 Koda
- * package.
+ * Deterministic replacement import for the structured v0.9.10 Koda
+ * app-upload package.
  *
  *   npm run import:merge-ready            # validate, back up, replace content
  *   npm run import:merge-ready -- --dry-run
@@ -117,7 +117,7 @@ async function writeBackup(): Promise<{ path: string; counts: Record<string, num
   const backupsDir = resolve(IMPORT_DIR, "backups");
   mkdirSync(backupsDir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const path = resolve(backupsDir, `pre-v0-9-5-import-${stamp}.json`);
+  const path = resolve(backupsDir, `pre-v0-9-10-import-${stamp}.json`);
 
   const [contentItems, topicGroups, tags, evidenceLinks, achievements] = await Promise.all([
     prisma.contentItem.findMany({ include: { tags: true } }),
@@ -128,7 +128,7 @@ async function writeBackup(): Promise<{ path: string; counts: Record<string, num
   ]);
   const payload = {
     timestamp: new Date().toISOString(),
-    kind: "pre-v0.9.5-content-backup",
+    kind: "pre-v0.9.10-content-backup",
     counts: {
       contentItems: contentItems.length,
       topicGroups: topicGroups.length,

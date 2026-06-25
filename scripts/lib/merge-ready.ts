@@ -1,14 +1,14 @@
 /**
- * Shared logic for the structured v0.9.5 Koda import package.
+ * Shared logic for the structured v0.9.10 Koda app-upload package.
  *
  * The active source package is:
- *   - koda_web_content_v0_9_4_cleaned.xlsx (web_content_v0_9)       3804 rows
- *   - koda_opinions_v0_9_1.xlsx            (opinions_v0_9)           759 rows
- *   - koda_toovoidud_enrichment_v0_9_2.xlsx (toovoidud_v0_9)          97 rows
- *   - koda_taxonomy_rules_v0_9_1.txt        (taxonomy reference only)
+ *   - koda_web_content_v0_9_10_app_clean.xlsx (web_content_v0_9)       1132 rows
+ *   - koda_opinions_v0_9_8_app_clean.xlsx     (opinions_v0_9)           428 rows
+ *   - koda_toovoidud_enrichment_v0_9_10_app_clean.xlsx (toovoidud_v0_9)  73 rows
+ *   - koda_taxonomy_rules_v0_9_2.txt           (taxonomy reference only)
  *
- * Total content rows = 4660. Taxonomy audit/readme/repair sheets are never
- * imported as public content. Candidate links are admin/review-only.
+ * Total content rows = 1633. Quarantine/report/readme sheets are never
+ * imported as public content.
  */
 import { existsSync, statSync } from "fs";
 import { resolve } from "path";
@@ -23,10 +23,10 @@ export const IMPORT_DIR = resolve(process.cwd(), "data", "import");
 export type DatasetKey = "web" | "opinions" | "toovoidud";
 
 export const FILES = {
-  web: ["koda_web_content_v0_9_4_cleaned.xlsx", "koda_web_content_v0_9_4.xlsx"],
-  opinions: ["koda_opinions_v0_9_1.xlsx"],
-  toovoidud: ["koda_toovoidud_enrichment_v0_9_2.xlsx", "koda_toovoidud_enrichment_v0_9_1.xlsx"],
-  taxonomy: ["koda_taxonomy_rules_v0_9_1.txt"],
+  web: ["koda_web_content_v0_9_10_app_clean.xlsx"],
+  opinions: ["koda_opinions_v0_9_8_app_clean.xlsx"],
+  toovoidud: ["koda_toovoidud_enrichment_v0_9_10_app_clean.xlsx"],
+  taxonomy: ["koda_taxonomy_rules_v0_9_2.txt"],
 } as const;
 
 export const SHEETS = {
@@ -39,20 +39,20 @@ export const SHEETS = {
 } as const;
 
 export const EXPECTED_ROWS = {
-  web: 3804,
-  opinions: 759,
-  toovoidud: 97,
-  totalContentBeforeExclusions: 4660,
-  webPublic: 1530,
-  webSupportOnly: 1951,
-  webStagingOnly: 246,
-  webDoNotImportPublic: 77,
-  opinionsPublic: 432,
-  opinionsStagingOnly: 327,
-  toovoidudPublic: 72,
-  toovoidudHold: 25,
-  approvedLinks: 265,
-  candidateLinks: 288,
+  web: 1132,
+  opinions: 428,
+  toovoidud: 73,
+  totalContentBeforeExclusions: 1633,
+  webPublic: 1132,
+  webSupportOnly: 0,
+  webStagingOnly: 0,
+  webDoNotImportPublic: 0,
+  opinionsPublic: 428,
+  opinionsStagingOnly: 0,
+  toovoidudPublic: 73,
+  toovoidudHold: 0,
+  approvedLinks: 0,
+  candidateLinks: 0,
 } as const;
 
 export function filePath(name: string): string {
@@ -74,7 +74,7 @@ export function activeInputFileName(names: readonly string[]): string {
 export const ALLOWED = {
   webImportAction: new Set(["import_public", "import_support_only", "import_staging_only", "do_not_import_public"]),
   opinionImportAction: new Set(["import_public", "import_staging_only"]),
-  toovoitImportAction: new Set(["enrichment_public", "enrichment_hold"]),
+  toovoitImportAction: new Set(["enrichment_public", "enrichment_hold", "import"]),
   publicDisplayStatus: new Set([
     "public_candidate",
     "public_ready",
@@ -85,7 +85,14 @@ export const ALLOWED = {
     "source_quality_hold",
     "blocked",
   ]),
-  sourceQualityFlag: new Set(["ok", "duplicate_risk", "not_policy_relevant", "needs_review", "supporting_document_not_opinion"]),
+  sourceQualityFlag: new Set([
+    "ok",
+    "duplicate_risk",
+    "not_policy_relevant",
+    "needs_review",
+    "supporting_document_not_opinion",
+    "manual_source_checked_v0_9_7",
+  ]),
   classificationConfidence: new Set(["high", "medium-high", "medium", "medium-low", "low"]),
 } as const;
 
@@ -411,7 +418,8 @@ export function stageWebRow(r: Row): StagedContent {
     mergeNotes: orNull(cellText(r["notes"])),
     extractionQuality: null,
     needsHumanReview: parseBool(cellText(r["review_required"])),
-    numericClaimNeedsReview: parseBool(cellText(r["numeric_claim_needs_review"])),
+    numericClaimNeedsReview:
+      cellText(r["public_display_status"]) === "numeric_review_hold" && parseBool(cellText(r["numeric_claim_needs_review"])),
     reviewReason: orNull(cellText(r["review_reason"]) || cellText(r["public_block_reason"])),
     publicPriority: orNull(cellText(r["public_preference_rank"])),
     sourceQualityFlag: orNull(cellText(r["source_quality_flag"])),
@@ -612,7 +620,7 @@ export function stageToovoitRow(r: Row): StagedContent {
 export function computeVisibility(s: StagedContent): boolean {
   const actionOk =
     s.sourceDataset === "toovoidud"
-      ? s.importAction === "enrichment_public"
+      ? s.importAction === "enrichment_public" || s.importAction === "import"
       : s.importAction === "import_public";
   if (!actionOk) return false;
   if (s.publicDisplayAllowed !== true) return false;
@@ -659,8 +667,14 @@ function stageLinkRow(r: Row): StagedLink {
 }
 
 export async function stageLinks(): Promise<{ approved: StagedLink[]; candidate: StagedLink[] }> {
-  const approved = (await readSheet(FILES.web, SHEETS.approvedLinks)).rows.map(stageLinkRow);
-  const candidate = (await readSheet(FILES.web, SHEETS.candidateLinks)).rows.map(stageLinkRow);
+  const webFile = resolveImportFile(FILES.web);
+  const wb = XLSX.readFile(webFile, { cellDates: true, raw: false });
+  const approved = wb.SheetNames.includes(SHEETS.approvedLinks)
+    ? (await readSheet(FILES.web, SHEETS.approvedLinks)).rows.map(stageLinkRow)
+    : [];
+  const candidate = wb.SheetNames.includes(SHEETS.candidateLinks)
+    ? (await readSheet(FILES.web, SHEETS.candidateLinks)).rows.map(stageLinkRow)
+    : [];
   return { approved, candidate };
 }
 

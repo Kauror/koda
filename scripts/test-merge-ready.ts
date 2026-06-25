@@ -1,5 +1,5 @@
 /**
- * Deterministic checks for the structured v0.9.5 package.
+ * Deterministic checks for the structured v0.9.10 app-upload package.
  */
 import assert from "node:assert";
 import { loadEnv } from "./env";
@@ -36,15 +36,15 @@ async function main() {
   const analysis = analyze(staged, links);
 
   console.log("\n[test] running checks:");
-  check("web row count = 3804", () => assert.equal(staged.web.length, EXPECTED_ROWS.web));
-  check("opinions row count = 759", () => assert.equal(staged.opinions.length, EXPECTED_ROWS.opinions));
-  check("toovoidud row count = 97", () => assert.equal(staged.toovoidud.length, EXPECTED_ROWS.toovoidud));
-  check("total content = 4660", () => assert.equal(staged.all.length, EXPECTED_ROWS.totalContentBeforeExclusions));
+  check("web row count = 1132", () => assert.equal(staged.web.length, EXPECTED_ROWS.web));
+  check("opinions row count = 428", () => assert.equal(staged.opinions.length, EXPECTED_ROWS.opinions));
+  check("toovoidud row count = 73", () => assert.equal(staged.toovoidud.length, EXPECTED_ROWS.toovoidud));
+  check("total content = 1633", () => assert.equal(staged.all.length, EXPECTED_ROWS.totalContentBeforeExclusions));
 
-  check("web public count = 1530", () => assert.equal(analysis.perDataset.web.public, EXPECTED_ROWS.webPublic));
-  check("opinions public count = 432", () => assert.equal(analysis.perDataset.opinions.public, EXPECTED_ROWS.opinionsPublic));
-  check("toovoidud public count = 72", () => assert.equal(analysis.perDataset.toovoidud.public, EXPECTED_ROWS.toovoidudPublic));
-  check("toovoidud held count = 25", () => assert.equal(analysis.visibility.heldToovoidud, EXPECTED_ROWS.toovoidudHold));
+  check("web public count = 1132", () => assert.equal(analysis.perDataset.web.public, EXPECTED_ROWS.webPublic));
+  check("opinions public count = 428", () => assert.equal(analysis.perDataset.opinions.public, EXPECTED_ROWS.opinionsPublic));
+  check("toovoidud public count = 73", () => assert.equal(analysis.perDataset.toovoidud.public, EXPECTED_ROWS.toovoidudPublic));
+  check("toovoidud held count = 0", () => assert.equal(analysis.visibility.heldToovoidud, EXPECTED_ROWS.toovoidudHold));
   check("candidate links are admin-only", () => {
     assert.equal(analysis.links.candidateRows, EXPECTED_ROWS.candidateLinks);
     assert.equal(analysis.blockers.candidateLinksPublic, 0);
@@ -65,8 +65,8 @@ async function main() {
     assert.equal(computeVisibility(sample), false);
   });
 
-  check("enrichment_public toovoidud row can be public", () => {
-    const sample = staged.toovoidud.find((s) => s.importAction === "enrichment_public" && s.publicDisplayAllowed === true)!;
+  check("public toovoidud row can be public", () => {
+    const sample = staged.toovoidud.find((s) => s.publicDisplayAllowed === true)!;
     assert.equal(computeVisibility(sample), true);
   });
 
