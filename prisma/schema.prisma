@@ -133,6 +133,16 @@ model ContentItem {
   lawTagsCandidate    String?
   lawSearchAllowed    Boolean @default(false)
 
+  // --- Recipient / ministry metadata (taxonomy v2.1.6) ---
+  // Metadata ONLY: the recipient/ministry is an advanced filter dimension and
+  // must NEVER set or override topic_primary / topic classification.
+  recipientRaw                         String? // recipient_raw (verbatim)
+  recipientNormalized                  String? // recipient_normalized
+  recipientFilterGroup                 String? // recipient_filter_group (the filterable bucket)
+  recipientType                        String? // recipient_type (ministry | agency | ...)
+  recipientSecondary                   String? // recipient_secondary
+  recipientNormalizationReviewRequired Boolean @default(false) // recipient_normalization_review_required
+
   // Duplicate / canonical linkage.
   canonicalContentId String? // canonical_content_id (external id of the canonical row)
   duplicateStatus    String? // unique | possible_duplicate | ...
@@ -180,6 +190,7 @@ model ContentItem {
   @@index([importAction])
   @@index([publicDisplayAllowed])
   @@index([lawSearchAllowed])
+  @@index([recipientFilterGroup])
 }
 
 model TopicGroup {

@@ -12,6 +12,7 @@ import { slugify } from "./slug";
 import { firstTopic } from "./taxonomy-split";
 import { PUBLIC_TOPIC_FILTERS, canonicalTopicId } from "./topics";
 import { PUBLIC_ACTIVITY_FILTERS, canonicalPublicActivitySlug } from "./activities";
+import { computePublicDate } from "./public-date";
 import { normalizeTitle } from "./hash";
 import { compactText, getCleanPublicExcerpt, publicSourceUrl, publicTitle, sourceCtaLabel } from "./content-display";
 import {
@@ -100,6 +101,12 @@ export function toCandidate(row: ContentWithTags): Candidate {
       const first = firstTopic(row.activityPrimary);
       return first ? slugify(first) : null;
     })(),
+    year: row.year,
+    reportYear: row.reportYear,
+    classificationConfidence: row.classificationConfidence,
+    topicGroupCandidate: row.topicGroupCandidate,
+    recipientFilterGroup: row.recipientFilterGroup,
+    recipientNormalized: row.recipientNormalized,
   };
 }
 
@@ -125,6 +132,8 @@ export type FilterOptions = {
   valdkonnad: FilterOption[];
   tegevusalad: FilterOption[];
   tapsustused: FilterOption[];
+  /** Recipient/ministry advanced filter (metadata only). */
+  recipients: FilterOption[];
 };
 
 /**
@@ -193,10 +202,26 @@ export async function getFilterOptions(): Promise<FilterOptions> {
       }
     return [...map.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "et"));
   };
+  // Recipient/ministry advanced filter: distinct recipientFilterGroup buckets on
+  // public-eligible rows (metadata only — independent of topic/sector). Rows with
+  // no recipient simply don't appear under any recipient filter.
+  const recipientMap = new Map<string, FilterOption>();
+  for (const c of candidates) {
+    const slug = c.recipientFilterGroup ?? null;
+    if (!slug) continue;
+    const e = recipientMap.get(slug) ?? { slug, name: c.recipientNormalized ?? slug, count: 0 };
+    e.count++;
+    recipientMap.set(slug, e);
+  }
+  const recipients = [...recipientMap.values()].sort(
+    (a, b) => b.count - a.count || a.name.localeCompare(b.name, "et")
+  );
+
   return {
     valdkonnad,
     tegevusalad,
     tapsustused: tally((c) => c.tapsustused),
+    recipients,
   };
 }
 
@@ -220,7 +245,10 @@ export type ResultCard = {
   summary: string | null;
   url: string | null;
   sourceCtaLabel: string;
+  /** Raw ISO of the stored date (may be a placeholder; prefer displayDate). */
   date: string | null;
+  /** Safe, ready-to-render public date label, or null when suppressed. */
+  displayDate: string | null;
   kind: ResultKind;
   type: ResultType;
   isAchievement: boolean;
@@ -283,10 +311,22 @@ function dedupe(scored: { c: Candidate; total: number }[]): { c: Candidate; tota
   });
 }
 
-/** Newest-first ordering used for law-aware results (date wins, score breaks ties). */
+/** Verified ranking date (placeholder/import/future dates do not count). */
+function verifiedDateMs(c: Candidate): number {
+  return (
+    computePublicDate({
+      date: c.date,
+      year: c.year ?? null,
+      reportYear: c.reportYear ?? null,
+      classificationConfidence: c.classificationConfidence ?? null,
+    }).rankingDate?.getTime() ?? 0
+  );
+}
+
+/** Newest-first ordering used for law-aware results (verified date wins, score breaks ties). */
 function compareByDateThenScore(a: { c: Candidate; total: number }, b: { c: Candidate; total: number }): number {
-  const ad = a.c.date?.getTime() ?? 0;
-  const bd = b.c.date?.getTime() ?? 0;
+  const ad = verifiedDateMs(a.c);
+  const bd = verifiedDateMs(b.c);
   if (ad !== bd) return bd - ad;
   return b.total - a.total;
 }
@@ -321,7 +361,29 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
   // Law-aware searches surface the newest related content first.
   const deduped = dedupe(scored).sort(recognized ? compareByDateThenScore : compareRankedCandidates);
 
-  const grouped = groupRankedCandidates(deduped, GROUP_CAPS);
+  // News relevance threshold for activity-specific pages (trust/safety):
+  // a "Koja uudised" row may appear under a selected Tegevusala only if it has a
+  // real connection — exact/secondary sector, conservative sector-relevance,
+  // a topic match, or a free-text match. A row that matches ONLY via the
+  // cross-sector ("Kõik tegevusalad / valdkondadeülene") fallback and has no
+  // other signal is dropped from news, so activity pages show fewer but relevant
+  // news instead of being filled with unrelated cross-sector items. Töövõidud /
+  // seisukohad keep their cross-sector fallback (handled by ranking).
+  const sectorActive = query.tegevusala.length > 0;
+  const newsRelevant = (c: Candidate): boolean => {
+    const b = scoreCandidate(c, query);
+    return (
+      b.tegevusalaMatches > 0 ||
+      b.sectorFallbackMatches > 0 ||
+      b.valdkondMatches > 0 ||
+      (query.q.length > 0 && b.text > 0)
+    );
+  };
+  const ranked = sectorActive
+    ? deduped.filter((s) => assignKind(s.c) !== "uudis" || newsRelevant(s.c))
+    : deduped;
+
+  const grouped = groupRankedCandidates(ranked, GROUP_CAPS);
   const groups = grouped.displayedGroups;
   const displayed = grouped.displayed;
   const evidence = await buildEvidence(displayed.map((s) => s.c));
@@ -340,6 +402,14 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
     url: publicSourceUrl(s.c),
     sourceCtaLabel: sourceCtaLabel(s.c),
     date: s.c.date ? s.c.date.toISOString() : null,
+    // Public date safety gate: never render placeholder/import/future dates as
+    // exact public dates (see public-date.ts).
+    displayDate: computePublicDate({
+      date: s.c.date,
+      year: s.c.year ?? null,
+      reportYear: s.c.reportYear ?? null,
+      classificationConfidence: s.c.classificationConfidence ?? null,
+    }).text,
     kind: assignKind(s.c),
     type: primaryType(s.c),
     isAchievement: isAchievement(s.c),

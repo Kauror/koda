@@ -57,7 +57,7 @@ const IT = slugify("Info, side ja IT");
 const GENERIC = slugify(CROSS_SECTOR_ACTIVITY);
 const ENERGY = slugify(ENERGY_INTENSIVE_ACTIVITY);
 
-const EMPTY: SearchQuery = { q: "", valdkond: [], tegevusala: [], tapsustus: [], type: [] };
+const EMPTY: SearchQuery = { q: "", valdkond: [], tegevusala: [], tapsustus: [], recipient: [], type: [] };
 
 function cand(over: Partial<Candidate> = {}): Candidate {
   return {

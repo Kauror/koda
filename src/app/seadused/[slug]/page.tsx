@@ -66,6 +66,7 @@ export default async function LawPage({ params }: { params: Promise<{ slug: stri
     valdkond: [],
     tegevusala: [],
     tapsustus: [],
+    recipient: [],
     type: [],
   });
 

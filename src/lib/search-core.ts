@@ -10,6 +10,7 @@
 import { normalizeTitle } from "./hash";
 import { publicSummary, publicTitle } from "./content-display";
 import { canonicalTopicId } from "./topics";
+import { rankingDateFor } from "./public-date";
 import { getSectorRelevance as getSectorRelevanceForScore, hasGenericSectorTag, sectorMatchesSlug } from "./sector-relevance";
 
 export {
@@ -39,6 +40,7 @@ export type SearchQuery = {
   valdkond: string[]; // tag slugs (TagType.valdkond)
   tegevusala: string[]; // tag slugs (TagType.tegevusala)
   tapsustus: string[]; // tag slugs (TagType.tapsustus), provisional/light weight
+  recipient: string[]; // recipientFilterGroup slugs (advanced metadata filter)
   type: ResultType[]; // optional result-type filter
 };
 
@@ -66,11 +68,13 @@ export function parseSearchParams(params: Record<string, Raw>): SearchQuery {
   const valdkond = list(params.valdkond);
   const tegevusala = list(params.tegevusala);
   const tapsustus = list(params.tapsustus);
+  const recipient = list(params.recipient);
   const type = list(params.type).filter((t): t is ResultType =>
     (RESULT_TYPES as string[]).includes(t)
   );
 
-  const hasNew = q || valdkond.length || tegevusala.length || tapsustus.length || type.length;
+  const hasNew =
+    q || valdkond.length || tegevusala.length || tapsustus.length || recipient.length || type.length;
   let effectiveQ = q;
   if (!hasNew) {
     const legacy = [...list(params.huvid), ...list(params.sektor), ...list(params.tegevused)]
@@ -80,11 +84,18 @@ export function parseSearchParams(params: Record<string, Raw>): SearchQuery {
     if (legacy) effectiveQ = legacy;
   }
 
-  return { q: effectiveQ, valdkond, tegevusala, tapsustus, type };
+  return { q: effectiveQ, valdkond, tegevusala, tapsustus, recipient, type };
 }
 
 export function isEmptyQuery(q: SearchQuery): boolean {
-  return !q.q && !q.valdkond.length && !q.tegevusala.length && !q.tapsustus.length && !q.type.length;
+  return (
+    !q.q &&
+    !q.valdkond.length &&
+    !q.tegevusala.length &&
+    !q.tapsustus.length &&
+    !q.recipient.length &&
+    !q.type.length
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -127,6 +138,20 @@ export type Candidate = {
   lawSearchAllowed: boolean;
   /** Slug of activity_primary, so a primary match can rank above a secondary one. */
   activityPrimarySlug: string | null;
+  // Optional metadata used by the date-safety / related-content layers. Optional
+  // so plain test candidates need not set them.
+  /** Calendar year (source_year), used as a date fallback. */
+  year?: number | null;
+  /** Annual report year, used as a date fallback. */
+  reportYear?: number | null;
+  /** Classification confidence (high|medium|...|low), degrades date trust. */
+  classificationConfidence?: string | null;
+  /** Policy-thread id (canonical_policy_thread_id), for strict related content. */
+  topicGroupCandidate?: string | null;
+  /** Recipient/ministry filter bucket (metadata only — never affects topic). */
+  recipientFilterGroup?: string | null;
+  /** Recipient/ministry display name (normalized). */
+  recipientNormalized?: string | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -314,7 +339,21 @@ export function scoreCandidate(c: Candidate, q: SearchQuery): ScoreBreakdown {
   else if (c.publicPriority === "medium") boost += 6;
   boost += c.manualWeight * 10;
   if (c.isEvergreen) boost += 6;
-  boost += recencyBoost(c.date);
+  // Recency uses only a VERIFIED date (public-date gate): placeholder/import/
+  // future dates (e.g. 2026-06-24, 31.12) must not buy a recency boost — that is
+  // how uncertain rows were jumping to the top.
+  //  - verified date  → normal recency boost;
+  //  - a date that exists but is suspicious (placeholder/future/low-conf) → small
+  //    penalty, so a fake-recent row ranks below genuinely recent content;
+  //  - genuinely no date → neutral (0), so dateless töövõidud are not penalised.
+  const verifiedDate = rankingDateFor({
+    date: c.date,
+    year: c.year ?? null,
+    reportYear: c.reportYear ?? null,
+    classificationConfidence: c.classificationConfidence ?? null,
+  });
+  if (verifiedDate) boost += recencyBoost(verifiedDate);
+  else if (c.date) boost -= 4;
 
   return {
     text,
@@ -354,6 +393,11 @@ export function passesActiveFilters(
   if (q.q && s.text === 0 && !opts?.lawMatch) return false;
   if (q.valdkond.length && s.valdkondMatches === 0) return false;
   if (q.tegevusala.length && s.tegevusalaMatches === 0 && s.sectorFallbackMatches === 0 && !s.crossSectorMatch) {
+    return false;
+  }
+  // Recipient/ministry is an advanced metadata filter (AND constraint). It only
+  // narrows results by recipientFilterGroup — it never affects topic scoring.
+  if (q.recipient.length && !(c.recipientFilterGroup && q.recipient.includes(c.recipientFilterGroup))) {
     return false;
   }
   if (q.type.length && !q.type.includes(primaryType(c))) return false;
@@ -414,7 +458,15 @@ export function groupRankedCandidates(scored: RankedCandidate[], caps: GroupCapM
 }
 
 function dateMs(c: Candidate): number {
-  return c.date?.getTime() ?? 0;
+  // Tie-break recency uses only the VERIFIED date (public-date gate), so a
+  // placeholder/future date cannot push an uncertain row above a real one.
+  const verified = rankingDateFor({
+    date: c.date,
+    year: c.year ?? null,
+    reportYear: c.reportYear ?? null,
+    classificationConfidence: c.classificationConfidence ?? null,
+  });
+  return verified?.getTime() ?? 0;
 }
 
 /**

@@ -5,11 +5,6 @@ import { compactText, isUnsafePublicDetailText, uniquePublicTexts } from "@/lib/
 
 export const dynamic = "force-dynamic";
 
-function formatDate(iso: string | null): string | null {
-  if (!iso) return null;
-  return new Date(iso).toLocaleDateString("et-EE", { day: "numeric", month: "long", year: "numeric" });
-}
-
 function SourceButton({ item }: { item: Pick<ContentDetail, "sourceUrl" | "sourceCtaLabel"> }) {
   if (!item.sourceUrl) return null;
   return (
@@ -33,7 +28,7 @@ function TopicHistory({ rows }: { rows: EvidenceRow[] }) {
             ) : (
               <span className="evidence-title">{row.title}</span>
             )}
-            {formatDate(row.date) && <span className="badge-date"> · {formatDate(row.date)}</span>}
+            {row.displayDate && <span className="badge-date"> · {row.displayDate}</span>}
             {row.summary && <p className="item-excerpt small">{compactText(row.summary, 220)}</p>}
             {row.sourceUrl && (
               <a href={row.sourceUrl} target="_blank" rel="noopener noreferrer" className="item-source-link">
@@ -141,8 +136,8 @@ export default async function ContentDetailPage({
             ) : (
               <span className="badge">{item.sourceLabel}</span>
             )}
-            {formatDate(item.date) && <span className="badge-date">{formatDate(item.date)}</span>}
-            {!item.date && item.reportYear && <span className="badge-date">{item.reportYear}</span>}
+            {item.displayDate && <span className="badge-date">{item.displayDate}</span>}
+            {!item.displayDate && item.reportYear && <span className="badge-date">{item.reportYear}</span>}
           </p>
           <h1>{item.title}</h1>
           {(item.valdkonnad.length > 0 || item.tegevusalad.length > 0) && (

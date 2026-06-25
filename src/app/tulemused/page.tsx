@@ -14,13 +14,10 @@ import TrackedLink from "./TrackedLink";
 
 export const dynamic = "force-dynamic";
 
-function formatDate(iso: string | null): string | null {
-  if (!iso) return null;
-  return new Date(iso).toLocaleDateString("et-EE", { day: "numeric", month: "long", year: "numeric" });
-}
-
 function Badges({ card }: { card: ResultCard }) {
-  if (card.badges.length === 0 && !card.date) return null;
+  // card.displayDate is the safe public date (placeholder/import/future dates are
+  // suppressed by the public-date gate); never format card.date raw here.
+  if (card.badges.length === 0 && !card.displayDate) return null;
   return (
     <p className="item-meta">
       {card.badges.map((badge) => (
@@ -28,7 +25,7 @@ function Badges({ card }: { card: ResultCard }) {
           {badge === "Töövõit" ? `✓ ${badge}` : badge}
         </span>
       ))}
-      {formatDate(card.date) && <span className="badge-date">{formatDate(card.date)}</span>}
+      {card.displayDate && <span className="badge-date">{card.displayDate}</span>}
     </p>
   );
 }
@@ -170,7 +167,7 @@ export default async function ResultsPage({
   } catch (error) {
     console.error("Search failed", error);
   }
-  let options: FilterOptions = { valdkonnad: [], tegevusalad: [], tapsustused: [] };
+  let options: FilterOptions = { valdkonnad: [], tegevusalad: [], tapsustused: [], recipients: [] };
   try {
     options = await getFilterOptions();
   } catch (error) {
@@ -203,6 +200,7 @@ export default async function ResultsPage({
     ...query.valdkond.map((slug) => nameOf(options.valdkonnad, slug)),
     ...query.tegevusala.map((slug) => nameOf(options.tegevusalad, slug)),
     ...query.tapsustus.map((slug) => nameOf(options.tapsustused, slug)),
+    ...query.recipient.map((slug) => nameOf(options.recipients, slug)),
   ];
 
   const editParams = new URLSearchParams();
@@ -210,6 +208,7 @@ export default async function ResultsPage({
   if (query.valdkond.length) editParams.set("valdkond", query.valdkond.join(","));
   if (query.tegevusala.length) editParams.set("tegevusala", query.tegevusala.join(","));
   if (query.tapsustus.length) editParams.set("tapsustus", query.tapsustus.join(","));
+  if (query.recipient.length) editParams.set("recipient", query.recipient.join(","));
   if (query.type.length) editParams.set("type", query.type.join(","));
   const editQuery = editParams.toString();
   const fromQuery = editQuery;

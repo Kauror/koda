@@ -42,6 +42,7 @@ const FALLBACK_FILTER_OPTIONS: FilterOptions = {
     fallbackOption("kinnisvara-planeerimine-ja-ehitus", "Kinnisvara, planeerimine ja ehitus"),
   ],
   tapsustused: [],
+  recipients: [],
 };
 
 function withFallbackOptions(options: FilterOptions): FilterOptions {
@@ -49,6 +50,7 @@ function withFallbackOptions(options: FilterOptions): FilterOptions {
     tegevusalad: options.tegevusalad.length ? options.tegevusalad : FALLBACK_FILTER_OPTIONS.tegevusalad,
     valdkonnad: options.valdkonnad.length ? options.valdkonnad : FALLBACK_FILTER_OPTIONS.valdkonnad,
     tapsustused: options.tapsustused,
+    recipients: options.recipients,
   };
 }
 

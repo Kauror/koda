@@ -16,6 +16,7 @@ import * as XLSX from "xlsx";
 import { contentHash, normalizeTitle } from "../../src/lib/hash";
 import { splitTopics } from "../../src/lib/taxonomy-split";
 import { normalizeTopicLabel } from "../../src/lib/topics";
+import { normalizeRecipient } from "../../src/lib/recipient";
 
 export const IMPORT_DIR = resolve(process.cwd(), "data", "import");
 
@@ -240,6 +241,13 @@ export type StagedContent = {
   lawTagsConfirmed: string | null;
   lawTagsCandidate: string | null;
   lawSearchAllowed: boolean;
+  // Recipient / ministry metadata (taxonomy v2.1.6) — never affects topic.
+  recipientRaw: string | null;
+  recipientNormalized: string | null;
+  recipientFilterGroup: string | null;
+  recipientType: string | null;
+  recipientSecondary: string | null;
+  recipientNormalizationReviewRequired: boolean;
   canonicalContentId: string | null;
   duplicateStatus: string | null;
   isEvergreen: boolean;
@@ -271,6 +279,40 @@ type StageInput = Omit<
  * import script logs these as warnings for review.
  */
 export const unknownTopicLabels = new Map<string, number>();
+
+type RecipientFields = Pick<
+  StagedContent,
+  | "recipientRaw"
+  | "recipientNormalized"
+  | "recipientFilterGroup"
+  | "recipientType"
+  | "recipientSecondary"
+  | "recipientNormalizationReviewRequired"
+>;
+
+/**
+ * Map recipient/ministry columns to normalized metadata fields. Recipient is an
+ * advanced-filter dimension only — it never feeds topic classification. Explicit
+ * recipient_normalized / recipient_filter_group / recipient_type columns win;
+ * otherwise values are derived from recipient_raw via normalizeRecipient().
+ */
+function recipientFields(r: Row): RecipientFields {
+  const raw = cellText(r["recipient_raw"]) || cellText(r["recipient"]);
+  const norm = normalizeRecipient(raw, {
+    normalized: orNull(cellText(r["recipient_normalized"])),
+    filterGroup: orNull(cellText(r["recipient_filter_group"])),
+    type: orNull(cellText(r["recipient_type"])),
+  });
+  const reviewCol = cellText(r["recipient_normalization_review_required"]);
+  return {
+    recipientRaw: norm?.raw ?? orNull(raw),
+    recipientNormalized: norm?.normalized ?? null,
+    recipientFilterGroup: norm?.filterGroup ?? null,
+    recipientType: norm?.type ?? null,
+    recipientSecondary: orNull(cellText(r["recipient_secondary"])),
+    recipientNormalizationReviewRequired: reviewCol ? parseBool(reviewCol) : norm?.reviewRequired ?? false,
+  };
+}
 
 function makeTaxonomy(primary: string | null, secondary: string | null): string[] {
   // Topics/activities are canonical names that may contain commas, so use the
@@ -389,6 +431,7 @@ export function stageWebRow(r: Row): StagedContent {
     canonicalContentId: orNull(cellText(r["duplicate_of_web_content_id"])),
     duplicateStatus: orNull(cellText(r["duplicate_status"])),
     isEvergreen: false,
+    ...recipientFields(r),
     valdkonnad: makeTaxonomy(topicPrimary, topicSecondary),
     tegevusalad: makeTaxonomy(activityPrimary, activitySecondary),
     tapsustused: splitMulti(cellText(r["situation_tags"])),
@@ -432,7 +475,9 @@ export function stageOpinionRow(r: Row): StagedContent {
     year: parseYear(cellText(r["source_year"]) || cellText(r["document_date"]) || cellText(r["sort_date"])),
     reportYear: null,
     sourceFileName: orNull(cellText(r["source_file"])),
-    sourceSection: orNull(cellText(r["recipient_normalized"]) || cellText(r["recipient"])),
+    // Recipient is now mapped to dedicated recipient* fields (see recipientFields);
+    // sourceSection holds the actual section only.
+    sourceSection: orNull(cellText(r["source_section"])),
     sourcePageLocation: null,
     bodyText,
     excerpt: summary,
@@ -470,6 +515,7 @@ export function stageOpinionRow(r: Row): StagedContent {
     canonicalContentId: null,
     duplicateStatus: null,
     isEvergreen: false,
+    ...recipientFields(r),
     valdkonnad: makeTaxonomy(topicPrimary, topicSecondary),
     tegevusalad: makeTaxonomy(activityPrimary, activitySecondary),
     tapsustused: splitMulti(cellText(r["situation_tags"])),
@@ -552,6 +598,7 @@ export function stageToovoitRow(r: Row): StagedContent {
     canonicalContentId: orNull(cellText(r["canonical_toovoit_id"])),
     duplicateStatus: parseBool(cellText(r["is_duplicate"])) ? "possible_duplicate" : null,
     isEvergreen: true,
+    ...recipientFields(r),
     valdkonnad: makeTaxonomy(topicPrimary, topicSecondary),
     tegevusalad: makeTaxonomy(activityPrimary, activitySecondary),
     tapsustused: splitMulti(cellText(r["situation_tags"])),

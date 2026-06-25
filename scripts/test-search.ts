@@ -109,7 +109,7 @@ function cand(over: Partial<Candidate> = {}): Candidate {
   };
 }
 
-const EMPTY: SearchQuery = { q: "", valdkond: [], tegevusala: [], tapsustus: [], type: [] };
+const EMPTY: SearchQuery = { q: "", valdkond: [], tegevusala: [], tapsustus: [], recipient: [], type: [] };
 const total = (c: Candidate, q: SearchQuery = EMPTY) => scoreCandidate(c, q).total;
 
 console.log("[test] search-core checks:");

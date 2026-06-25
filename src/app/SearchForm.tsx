@@ -58,8 +58,11 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
     listParam("tegevusala").filter((slug) => tegevusalaSlugs.has(slug))
   );
   const [valdkond, setValdkond] = useState<string[]>(listParam("valdkond"));
+  const [recipient, setRecipient] = useState<string[]>(listParam("recipient"));
   const [showSectorError, setShowSectorError] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(listParam("valdkond").length > 0);
+  const [showAdvanced, setShowAdvanced] = useState(
+    listParam("valdkond").length > 0 || listParam("recipient").length > 0
+  );
 
   const toggle = (list: string[], set: (v: string[]) => void) => (slug: string) =>
     set(list.includes(slug) ? list.filter((s) => s !== slug) : [...list, slug]);
@@ -78,6 +81,11 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
       label: nameOf(options.valdkonnad, s),
       remove: () => setValdkond((v) => v.filter((x) => x !== s)),
     })),
+    ...recipient.map((s) => ({
+      key: `r-${s}`,
+      label: nameOf(options.recipients, s),
+      remove: () => setRecipient((v) => v.filter((x) => x !== s)),
+    })),
   ];
 
   function submit(e: React.FormEvent) {
@@ -89,6 +97,7 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
     const p = new URLSearchParams();
     if (tegevusala.length) p.set("tegevusala", tegevusala.join(","));
     if (valdkond.length) p.set("valdkond", valdkond.join(","));
+    if (recipient.length) p.set("recipient", recipient.join(","));
     router.push(`/tulemused?${p.toString()}`);
   }
 
@@ -151,6 +160,19 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
             </fieldset>
           )}
 
+          {options.recipients.length > 0 && (
+            <fieldset>
+              <legend>Adressaat / ministeerium</legend>
+              <p className="field-hint">
+                Kellele koda pöördus (valikuline, täpsem filter). Ei mõjuta teema määramist.
+              </p>
+              <ChipGroup
+                options={options.recipients}
+                selected={recipient}
+                onToggle={toggle(recipient, setRecipient)}
+              />
+            </fieldset>
+          )}
         </>
       )}
 

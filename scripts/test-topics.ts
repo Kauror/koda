@@ -86,7 +86,7 @@ const MUST_NOT_APPEAR = [
   "Äriõigus",
 ];
 
-const EMPTY: SearchQuery = { q: "", valdkond: [], tegevusala: [], tapsustus: [], type: [] };
+const EMPTY: SearchQuery = { q: "", valdkond: [], tegevusala: [], tapsustus: [], recipient: [], type: [] };
 
 function cand(over: Partial<Candidate> = {}): Candidate {
   return {
