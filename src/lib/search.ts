@@ -9,6 +9,8 @@ import { prisma } from "./db";
 import { isPublicSearchEligible } from "./eligibility";
 import { detectLaw, extractLawMentions, lawMentionForSlug } from "./law-match";
 import { slugify } from "./slug";
+import { firstTopic } from "./taxonomy-split";
+import { normalizeTitle } from "./hash";
 import { compactText, getCleanPublicExcerpt, publicSourceUrl, publicTitle, sourceCtaLabel } from "./content-display";
 import {
   type Candidate,
@@ -21,6 +23,7 @@ import {
   compareRankedCandidates,
   groupRankedCandidates,
   isAchievement,
+  isConservativeLawQuery,
   isEmptyQuery,
   parseSearchParams,
   passesActiveFilters,
@@ -89,7 +92,12 @@ export function toCandidate(row: ContentWithTags): Candidate {
     tapsustused: byType(TagType.tapsustus),
     oigusaktid: byType(TagType.oigusakt),
     lawSearchAllowed: row.lawSearchAllowed,
-    activityPrimarySlug: row.activityPrimary ? slugify(row.activityPrimary) : null,
+    // Use the FIRST primary activity (repairing ";"-corruption / multi-value), so
+    // its slug matches the imported tegevusala tag slug for the primary-tier boost.
+    activityPrimarySlug: (() => {
+      const first = firstTopic(row.activityPrimary);
+      return first ? slugify(first) : null;
+    })(),
   };
 }
 
@@ -236,12 +244,23 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
   // Score + filter. A confirmed law match satisfies the free-text requirement
   // (catching inflected mentions the literal scorer misses) and gets a small
   // bump; other active filters still apply.
-  const scored: { c: Candidate; total: number }[] = [];
-  for (const c of candidates) {
-    const s = scoreCandidate(c, query);
-    const lawMatch = recognized ? lawMentionForSlug(c, recognized.law.slug, "medium") !== null : false;
-    if (!empty && !passesActiveFilters(query, s, c, { lawMatch })) continue;
-    scored.push({ c, total: s.total + (lawMatch ? LAW_MATCH_BOOST : 0) });
+  const runFilter = (relaxLawGate: boolean): { c: Candidate; total: number }[] => {
+    const out: { c: Candidate; total: number }[] = [];
+    for (const c of candidates) {
+      const s = scoreCandidate(c, query);
+      const lawMatch = recognized ? lawMentionForSlug(c, recognized.law.slug, "medium") !== null : false;
+      if (!empty && !passesActiveFilters(query, s, c, { lawMatch, relaxLawGate })) continue;
+      out.push({ c, total: s.total + (lawMatch ? LAW_MATCH_BOOST : 0) });
+    }
+    return out;
+  };
+
+  let scored = runFilter(false);
+  // A law-looking query (e.g. "uus seadus") with no confirmed law match anywhere
+  // would otherwise return nothing; relax the law gate and fall back to normal
+  // keyword search so the user still gets relevant text matches.
+  if (scored.length === 0 && !empty && query.q && isConservativeLawQuery(normalizeTitle(query.q))) {
+    scored = runFilter(true);
   }
 
   // Law-aware searches surface the newest related content first.

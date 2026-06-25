@@ -14,6 +14,7 @@ import { existsSync, statSync } from "fs";
 import { resolve } from "path";
 import * as XLSX from "xlsx";
 import { contentHash, normalizeTitle } from "../../src/lib/hash";
+import { splitTopics } from "../../src/lib/taxonomy-split";
 
 export const IMPORT_DIR = resolve(process.cwd(), "data", "import");
 
@@ -132,28 +133,6 @@ export function parseDate(s: string): Date | null {
 
 export function splitMulti(s: string): string[] {
   return s
-    .split(/[;|]/)
-    .map((p) => p.trim())
-    .filter(Boolean);
-}
-
-/**
- * Split a topic/activity cell into canonical values.
- *
- * The package separates multiple topics with "; ". But a subset of source rows
- * have a compound canonical topic name's internal comma corrupted into a
- * semicolon — e.g. "Eksport; rahvusvahelistumine ja toll" instead of
- * "Eksport, rahvusvahelistumine ja toll". Splitting naively on ";" fragments
- * that one topic into two bogus filter entries (the doubled "Teema" list).
- *
- * Canonical Koda topic names are always Capitalised, so a ";" followed by a
- * lowercase word is an intra-name corruption: restore it to ", " before
- * splitting. A ";" before a Capitalised word is a genuine multi-topic separator
- * and is left intact.
- */
-export function splitTopics(s: string): string[] {
-  const repaired = s.replace(/;\s*(?=\p{Ll})/gu, ", ");
-  return repaired
     .split(/[;|]/)
     .map((p) => p.trim())
     .filter(Boolean);

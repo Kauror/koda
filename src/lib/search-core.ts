@@ -196,7 +196,7 @@ function lawHaystack(c: Candidate): string {
   return c.lawSearchAllowed ? normalizeTitle(c.oigusaktid.map((t) => t.name).join(" ")) : "";
 }
 
-function isConservativeLawQuery(qn: string): boolean {
+export function isConservativeLawQuery(qn: string): boolean {
   return /\b(seadus|seadustik|määrus|maarus|direktiiv|regulatsioon)\b/u.test(qn) || qn.endsWith("seadus");
 }
 
@@ -332,10 +332,14 @@ export function passesActiveFilters(
   q: SearchQuery,
   s: ScoreBreakdown,
   c: Candidate,
-  opts?: { lawMatch?: boolean }
+  opts?: { lawMatch?: boolean; relaxLawGate?: boolean }
 ): boolean {
   const qn = normalizeTitle(q.q || "");
-  if (q.q && isConservativeLawQuery(qn) && !opts?.lawMatch && !matchesConfirmedLawQuery(c, qn)) return false;
+  // A law-looking query normally requires a confirmed law match — unless we've
+  // relaxed the gate (no confirmed matches anywhere → fall back to normal search).
+  if (q.q && isConservativeLawQuery(qn) && !opts?.lawMatch && !opts?.relaxLawGate && !matchesConfirmedLawQuery(c, qn)) {
+    return false;
+  }
   if (q.q && s.text === 0 && !opts?.lawMatch) return false;
   if (q.valdkond.length && s.valdkondMatches === 0) return false;
   if (q.tegevusala.length && s.tegevusalaMatches === 0 && s.sectorFallbackMatches === 0 && !s.crossSectorMatch) {

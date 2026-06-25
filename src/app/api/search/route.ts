@@ -11,7 +11,13 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
-  const params = Object.fromEntries(sp.entries());
+  // Preserve repeated params (e.g. ?tegevusala=a&tegevusala=b) as arrays;
+  // Object.fromEntries would drop all but the last value.
+  const params: Record<string, string | string[]> = {};
+  for (const key of new Set(sp.keys())) {
+    const all = sp.getAll(key);
+    params[key] = all.length > 1 ? all : all[0];
+  }
   const query = parseSearchParams(params);
 
   let sessionId: string | null = null;

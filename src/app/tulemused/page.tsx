@@ -2,7 +2,14 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/db";
 import { anonymizeIp, hashUserAgent } from "@/lib/hash";
-import { getFilterOptions, parseSearchParams, search, type ResultCard } from "@/lib/search";
+import {
+  getFilterOptions,
+  parseSearchParams,
+  search,
+  type FilterOptions,
+  type ResultCard,
+  type SearchResults,
+} from "@/lib/search";
 import TrackedLink from "./TrackedLink";
 
 export const dynamic = "force-dynamic";
@@ -157,7 +164,37 @@ export default async function ResultsPage({
     console.error("Failed to store search session", error);
   }
 
-  const [results, options] = await Promise.all([search(query), getFilterOptions()]);
+  let results: SearchResults | null = null;
+  try {
+    results = await search(query);
+  } catch (error) {
+    console.error("Search failed", error);
+  }
+  let options: FilterOptions = { valdkonnad: [], tegevusalad: [], tapsustused: [] };
+  try {
+    options = await getFilterOptions();
+  } catch (error) {
+    console.error("Failed to load filter options", error);
+  }
+
+  if (!results) {
+    return (
+      <main>
+        <div className="container results-body">
+          <div className="card empty-state" style={{ marginTop: 36 }}>
+            <h2>Otsing pole hetkel saadaval</h2>
+            <p>Midagi läks valesti. Palun proovi mõne hetke pärast uuesti.</p>
+            <p style={{ marginTop: 16 }}>
+              <Link href="/" className="btn btn-secondary btn-small">
+                Avalehele
+              </Link>
+            </p>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   const hasResults = results.totalDisplayed > 0;
 
   const nameOf = (opts: { slug: string; name: string }[], slug: string) =>

@@ -38,7 +38,7 @@ import {
   lawMentionForSlug,
   rankLawContent,
 } from "../src/lib/law-match";
-import { splitTopics } from "./lib/merge-ready";
+import { firstTopic, splitTopics } from "../src/lib/taxonomy-split";
 
 let passed = 0;
 let failed = 0;
@@ -811,6 +811,22 @@ check("splitTopics keeps real ';' separators but repairs ';'-for-',' corruption"
     "Euroopa Liidu poliitika ja õigus",
   ]);
   assert.deepEqual(splitTopics(""), []);
+});
+
+check("firstTopic returns the primary value, repairing ;-corruption and multi-value", () => {
+  assert.equal(firstTopic("Eksport; rahvusvahelistumine ja toll"), "Eksport, rahvusvahelistumine ja toll");
+  assert.equal(firstTopic("Tööstus ja tootmine; Kaubandus"), "Tööstus ja tootmine");
+  assert.equal(firstTopic("Maksud ja tasud"), "Maksud ja tasud");
+  assert.equal(firstTopic(null), null);
+  assert.equal(firstTopic(""), null);
+});
+
+check("law-query gate is strict by default but relaxes to normal search as a fallback", () => {
+  const q: SearchQuery = { ...EMPTY, q: "uus seadus" };
+  const row = cand({ title: "Uus seadus ettevõtjatele", lawSearchAllowed: false }); // no confirmed law tag
+  const s = scoreCandidate(row, q);
+  assert.equal(passesActiveFilters(q, s, row, {}), false); // strict: needs a confirmed law match
+  assert.equal(passesActiveFilters(q, s, row, { relaxLawGate: true }), true); // fallback: normal text match
 });
 
 console.log(`\n[test] ${passed} passed, ${failed} failed`);
