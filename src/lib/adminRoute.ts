@@ -16,7 +16,7 @@ export function publicUrl(req: NextRequest, path: string): URL {
   if (/^https?:\/\//i.test(path)) return new URL(path);
 
   const internalUrl = new URL(req.url);
-  const appUrl = process.env.APP_URL ? new URL(process.env.APP_URL) : null;
+  const appUrl = safeUrl(process.env.APP_URL);
   const forwardedHost = firstHeader(req.headers.get("x-forwarded-host"));
   const forwardedProto = firstHeader(req.headers.get("x-forwarded-proto"));
   const requestHost = req.headers.get("host") || internalUrl.host;
@@ -24,6 +24,16 @@ export function publicUrl(req: NextRequest, path: string): URL {
   const host = forwardedHost || (isLocalHost(requestHost) && appHost ? appHost : requestHost || appHost);
   const protocol = forwardedProto || appUrl?.protocol.replace(":", "") || internalUrl.protocol.replace(":", "");
   return new URL(path, `${protocol}://${host}`);
+}
+
+/** Parse a URL without throwing — a malformed APP_URL must not break redirects. */
+function safeUrl(value: string | undefined): URL | null {
+  if (!value) return null;
+  try {
+    return new URL(value);
+  } catch {
+    return null;
+  }
 }
 
 function firstHeader(value: string | null): string | null {

@@ -15,10 +15,26 @@ const barlow = Barlow({
   variable: "--font-din-fallback",
 });
 
-const appUrl = process.env.APP_URL || "https://koda.orgusaar.ee";
+const DEFAULT_APP_URL = "https://koda.orgusaar.ee";
+
+/**
+ * Resolve metadataBase defensively: a malformed APP_URL (e.g. missing the
+ * https:// scheme) must not throw here, or the root layout would 500 every page.
+ */
+function resolveMetadataBase(): URL {
+  for (const candidate of [process.env.APP_URL, DEFAULT_APP_URL]) {
+    if (!candidate) continue;
+    try {
+      return new URL(candidate);
+    } catch {
+      // try the next candidate
+    }
+  }
+  return new URL(DEFAULT_APP_URL);
+}
 
 export const metadata: Metadata = {
-  metadataBase: new URL(appUrl),
+  metadataBase: resolveMetadataBase(),
   title: "Mida on koda teinud sinu ettevõtte heaks? | Eesti Kaubandus-Tööstuskoda",
   description:
     "Vali oma ettevõtte tegevusala ja vaata, mida Eesti Kaubandus-Tööstuskoda on sinu valdkonna ettevõtete heaks teinud.",
