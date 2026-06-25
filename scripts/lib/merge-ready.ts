@@ -15,6 +15,7 @@ import { resolve } from "path";
 import * as XLSX from "xlsx";
 import { contentHash, normalizeTitle } from "../../src/lib/hash";
 import { splitTopics } from "../../src/lib/taxonomy-split";
+import { normalizeTopicLabel } from "../../src/lib/topics";
 
 export const IMPORT_DIR = resolve(process.cwd(), "data", "import");
 
@@ -263,10 +264,31 @@ type StageInput = Omit<
   hashText: string | null;
 };
 
+/**
+ * Topic labels (valdkonnad) that the importer could not map to a canonical
+ * taxonomy topic. They are kept as internal classification but never become
+ * public filter options (the public filter is the canonical allowlist). The
+ * import script logs these as warnings for review.
+ */
+export const unknownTopicLabels = new Map<string, number>();
+
 function makeTaxonomy(primary: string | null, secondary: string | null): string[] {
   // Topics/activities are canonical names that may contain commas, so use the
   // topic-aware splitter that repairs ";"-for-"," corruption (see splitTopics).
-  return [...new Set([...splitTopics(primary ?? ""), ...splitTopics(secondary ?? "")])];
+  const raw = [...new Set([...splitTopics(primary ?? ""), ...splitTopics(secondary ?? "")])];
+  // Normalize each label to its canonical taxonomy label (aliases fold in);
+  // unknown labels are kept as-is but recorded as a warning.
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const value of raw) {
+    const { label, known } = normalizeTopicLabel(value);
+    if (!known) unknownTopicLabels.set(value, (unknownTopicLabels.get(value) ?? 0) + 1);
+    if (!seen.has(label)) {
+      seen.add(label);
+      out.push(label);
+    }
+  }
+  return out;
 }
 
 function finalize(input: StageInput): StagedContent {

@@ -9,6 +9,7 @@
  */
 import { normalizeTitle } from "./hash";
 import { publicSummary, publicTitle } from "./content-display";
+import { canonicalTopicId } from "./topics";
 import { getSectorRelevance as getSectorRelevanceForScore, hasGenericSectorTag, sectorMatchesSlug } from "./sector-relevance";
 
 export {
@@ -244,7 +245,17 @@ export function scoreCandidate(c: Candidate, q: SearchQuery): ScoreBreakdown {
     text = Math.min(text, 220); // cap so body spam cannot dominate
   }
 
-  const valdkondMatches = c.valdkonnad.filter((t) => q.valdkond.includes(t.slug)).length;
+  // Topic (valdkond) matching goes through the canonical taxonomy, not raw slug
+  // equality: both the selected filter ids and the candidate's tags are
+  // normalized to canonical topic ids. This lets a canonical filter (e.g.
+  // "energia_elektrihind_varustuskindlus") match rows still tagged with a legacy
+  // alias ("Energia") without exposing the alias as a filter option. (Sector /
+  // tegevusala matching below is intentionally left unchanged.)
+  const candidateTopicIds = new Set(
+    c.valdkonnad.map((t) => canonicalTopicId(t.slug) ?? canonicalTopicId(t.name)).filter(Boolean) as string[]
+  );
+  const queryTopicIds = q.valdkond.map((v) => canonicalTopicId(v)).filter(Boolean) as string[];
+  const valdkondMatches = queryTopicIds.filter((id) => candidateTopicIds.has(id)).length;
   const tegevusalaMatches = c.tegevusalad.filter((t) => sectorMatchesSlug(t.slug, q.tegevusala)).length;
   const tapsustusMatches = c.tapsustused.filter((t) => q.tapsustus.includes(t.slug)).length;
   const sectorActive = q.tegevusala.length > 0;

@@ -1,0 +1,2189 @@
+KODA DATA PACKAGE v0.9 TAXONOMY RULES COPY
+Package version: v0.9
+Underlying taxonomy guide version: v2.1.6
+Created: 2026-06-24 11:46:31 UTC
+Note: The taxonomy/rules version remains v2.1.6; this filename marks the cleaned v0.9 data package.
+
+================================================================================
+
+KODA TAXONOMY V2.1.6 ANDMESTIKE JUHEND
+Eesti Kaubandus-Toostuskoda / Koda value-discovery tool
+Versioon: v2.1.6
+Eesmärk: kasutada juhendina uute andmekihtide loomisel, eriti opinions, web, toovoidud ja annual reports kihtide puhul.
+
+================================================================================
+0. VERSIOONI MUUDATUSED
+================================================================================
+
+v2.1.6 täiendab v2.1.5 juhendit full-run'i ja baseline-lock QA põhjal ilmnenud metadata, extraction ja recipient-normalization reeglitega. Avalike teemade nimekirja, sektorite struktuuri, stance'i, value_type'i ja work_win_type'i ei muudeta. Tegemist on metadata and extraction addendum'iga, mitte uue avaliku teemataxonomy'ga.
+
+Peamised uued parandused v2.1.6-s:
+1. Lisatud boilerplate-skip reegel: `first_substantive_paragraph` ei tohi olla Koja üldtutvustus, liikmeskonna kirjeldus, kontaktiplokk, viisakusavang, adressaadi rida ega muu dokumendi vormiline osa.
+2. Täpsustatud, et esimene sisuline lõik on esimene lõik, mis kirjeldab eelnõu, poliitikaettepanekut, probleemi, Koja seisukohta, ettepanekut või ettevõtjate mõju.
+3. Lisatud recipient/ministry metadata schema: `recipient_raw`, `recipient_normalized`, `recipient_filter_group`, `recipient_type`, `recipient_secondary`, `recipient_normalization_review_required`.
+4. Lisatud recipient normalization reeglid ajalooliste ja lühendatud ministeeriuminimede ühtlustamiseks, säilitades alati raw adressaadi väärtuse.
+5. Täpsustatud maksud vs finants piir: sotsiaalmaks, tulumaks, TSD vormid, maksudeklaratsioonid, töötuskindlustusmaksete deklaratsioonid ja maksuseadustest tulenevad vormid kuuluvad üldjuhul `Maksud ja tasud` alla, mitte `Finants, krediit ja rahapesu nõuded`.
+6. Lisatud nõue, et ministeeriumi/adressaadi filter on metadata-filter, mitte topic taxonomy. Recipient ei tohi ise määrata `topic_primary` väärtust.
+
+v2.1.5 täiendab v2.1.4 juhendit 150+50 validation-run'i põhjal ilmnenud protsessi- ja kvaliteedireeglitega. Avalike teemade, sektorite, stance'i, value_type'i ja work_win_type'i struktuuri ei muudeta.
+
+v2.1.4 parandas v2.1.3 150-realise piloodi pohjal ilmnenud andmekvaliteedi ja klassifitseerimise probleemid.
+
+Avalike teemade nimekirja ei muudeta. Koik varasemad v2.1.3 reeglid jaavad kehtima.
+
+Peamised uued parandused v2.1.5-s:
+1. Lisatud approved baseline / regression-control reegel: QA-ga kinnitatud ridu ei tohi järgmises validation-run'is vabalt ümber klassifitseerida. Need tuleb lukustada ja kasutada regressioonikontrollina.
+2. Lisatud põhimõte, et "Maksud ja tasud" ei ole fallback-topic. Maksud/tasud primary on lubatud ainult siis, kui maksu-, tasu-, aktsiisi-, riigilõivu-, MTA maksukäsitluse või maksuadministreerimise küsimus on sisuline põhifookus.
+3. Lisatud secondary-topic centrality reegel: secondary topic on lubatud ainult siis, kui see aitab sisuliselt avastatavust ja on tekstis keskne. Parem tühi secondary kui vale secondary.
+4. Laiendatud MTA/tolli reeglit: "Maksu- ja Tolliamet", "MTA" või "maksuhaldur" ei tohi anda primary, secondary ega situation tag'i "Eksport/toll", "ekspordib" või "impordib", kui sisuline teema on maksukäsitlus või maksuhaldus.
+5. Lisatud validation-run'i metoodika: kinnitatud baseline'i ei reklassifitseerita; uued read klassifitseeritakse eraldi; lõppfailis peab olema regression_check_approved_baseline.
+6. Lisatud uued title-domain triggerid: kindlustusandjate kriisilahendus, hea õigusloome ja normitehnika eeskiri, andmeliidu strateegia/tehisaru/andmeruum, seadme ohutuse seadus, keskkonnahoidlikud riigihanked, kutsesüsteemi reform, pakendiregister ja süsiniku sidumise sertifitseerimine.
+7. Täpsustatud, et õigusloome kvaliteedi teema võib olla internal-only/public_filter_visible=false, kuid andmestikus tuleb see korrektselt märkida, kui title-domain sellele viitab.
+
+Peamised uued parandused v2.1.4-s:
+1. Lisatud source-binding kontroll enne klassifitseerimist. source_file, title, PDF-ist ekstraheeritud tekst, evidence_short, zip_path ja file_sha256 peavad viitama samale dokumendile. Kui need ei klapi, ei tohi rida normaalselt klassifitseerida.
+2. Lisatud source_binding_audit ja source_quality_flag = source_text_mismatch reegel. Vale tekstiga seotud rida peab minema review queue'i.
+3. Planeeringud/load reegel muutub veel rangemaks: allowlist-sona uksi ei piisa. Planeeringu/luba/ehituse trigger peab olema pealkirjas, failinimes, oigusakti nimes, esimestes sisulistes loikudes voi olema dokumendi peamine moju.
+4. Kui planning-audit voi law-audit markib rea review'd vajavaks, peab sama kajastuma pohitabeli review_required valjas voi eraldi audit_review_required valjas.
+5. Lisatud TAIKS alias: "Teadus- ja arendustegevuse ja innovatsiooni korralduse seadus" ning varasem "Teadus- ja arendustegevuse ning innovatsiooni korralduse seadus".
+6. Lisatud law seed/candidate: Krediiditeabe jagamise seadus.
+7. GDPR / isikuandmete kaitse uldmaarus voib olla confirmed EU act, kui title, failinimi voi esimene sisuline loik seda nimetab.
+8. Kui title/failinimi nimetab konkreetset seadust, kuid law_tags_confirmed seda ei sisalda, peab rida minema review'sse.
+9. Kui source binding on vigane, ei tohi teema, seaduse, stance'i ega sectori klassifikatsiooni avalikuks kasutuseks usaldada.
+
+Varasemad v2.1.3 pohimuudatused jaavad kehtima:
+- Planeeringud/load ja vajab_lube_planeeringuid on allowlist-pohised.
+- Uldine sona "luba" ei ole piisav.
+- Burokraatia vahendamine saab tugeva primary-prioriteedi.
+- Title/failinime law-match on korgema prioriteediga kui body-only luhend.
+- Tsiviilkriisi ja riigikaitse seadus on law seed-list'is.
+- Tuleohutusulevaatus ei ole raamatupidamise/auditi teema.
+- Avaliku teenistuse seadus ei tohi minna kliima alla ilma sisulise kliima/keskkonnaseoseta.
+- Alkoholi/tubaka aktsiis ja alkoholiregistri burokraatia eristatakse keskse moju jargi.
+- v2.1.2 law-tagging reeglid jaavad kehtima: luhendipohised ESS/IKS/AOKS/KMS/TuMS false-positive'id tuleb ara hoida, stale evidence tuleb eemaldada ning confirmed law tag peab olema keskne ja tugeva toendiga.
+
+================================================================================
+1. ULDPOHIMOTE
+================================================================================
+
+Taksonoomia peab aitama ettevotjal kiiresti aru saada:
+- kas teema puudutab tema tegevusala;
+- millist ettevotluspoliitika voi oigusloome teemat see kasitleb;
+- milliste oigusaktidega see on sisuliselt seotud;
+- mida Koda on selles teemas teinud voi saavutanud;
+- milline info on varskem ja toenaoliselt asjakohasem.
+
+Avalikus kasutuses on kolm peamist leidmise viisi:
+1. Tegevusala
+2. Teema / valdkond
+3. Oigusakt kui tag/advanced vaade, mitte esilehe pohifilter
+
+Sisemiselt kogutakse lisaks:
+- koja seisukoht ehk stance;
+- value_type;
+- toovoidu tuup;
+- EL-seotus;
+- oigusloome kvaliteediprobleemid;
+- event relevance;
+- source quality;
+- kuupaevad ja sorteerimisloogika;
+- QA ja review valjad.
+
+================================================================================
+2. AVALIKUD TEEMAD / VALDKONNAD
+================================================================================
+
+Igal sisureal peab olema tapselt uks topic_primary.
+Lisaks voib olla kuni kolm topic_secondary vaartust.
+Secondary voib puududa.
+
+Avalikud teemad:
+
+1. Ettevotluskeskkond ja konkurentsivoime
+ID: ettevotluskeskkond_konkurentsivoime
+Kasutus: uldine majanduskeskkond, konkurentsivoime, ettevotlusvabadus, majanduskasv, konkurentsiseadus, avaliku sektori efektiivsus, investeerimiskindlus.
+
+2. Euroopa Liidu poliitika ja oigus
+ID: euroopa_liidu_poliitika_oigus
+Kasutus: EL eelarve, EL tulevik, Euroopa Komisjoni tooprogramm, EMSK/EESC, EL poliitikasuund, EL uldine konkurentsivoime. Konkreetse direktiivi/maaruse puhul enamasti secondary/eu_related, mitte primary.
+
+3. Maksud ja tasud
+ID: maksud_tasud
+Kasutus: maksukoormus, maksumuudatused, riigiloivud, aktsiisid, maamaks, julgeolekumaks, keskkonnatasud kui tasu/maksukoormus on oluline.
+
+4. Raamatupidamine, audit ja aruandlus
+ID: raamatupidamine_audit_aruandlus
+Kasutus: e-arved, majandusaasta aruanne, audit, ulevaatus, aruandluskohustused, kestlikkusaruandlus kui aruandluskohustus.
+
+5. Burokraatia ja halduskoormus
+ID: burokraatia_halduskoormus
+Kasutus: liigne aruandlus, registrid, vormid, kohustuste lihtsustamine, halduskoormuse vahendamine, uute ebamoistlike nouete arahoidmine.
+
+6. Toojoud ja toooigus
+ID: toojoud_toooigus
+Kasutus: TLS, tooaeg, puhkeaeg, paindlik tooaeg, tahtajalised toolepingud, kollektiivlepingud, toovaidlused, tootaja ja tooandja oigused/kohustused.
+
+7. Tootervishoid ja tooohutus
+ID: tootervishoid_tooohutus
+Kasutus: TTOS, tervisekontroll, tookeskkond, tootervishoiuarstid, tooohutus, radoon tooruumides, tooandja tervisekohustused.
+
+8. Valistoojoud ja ranne
+ID: valistoojoud_ranne
+Kasutus: VMS, sisserande piirarv, elamisload, viisad, luhiajaline tootamine, valismaalaste palkamine.
+
+9. Haridus, oskused ja jarelkasv
+ID: haridus_oskused_jarelkasv
+Kasutus: kutseharidus, kutsesusteem, OSKA, taiskasvanute koolitus, koolide ja ettevotete koostoo, oskustoojoud, praktika kui hariduse/oskuste teema.
+
+10. Teadus, arendus ja innovatsioon
+ID: teadus_arendus_innovatsioon
+Kasutus: TAI, tootearendus, innovatsioon, katsetamise reeglid, sandbox'id, teadusasutuste rahastus, rakendusuuringud.
+
+11. Pakend, jaatmed ja ringmajandus
+ID: pakend_jaatmed_ringmajandus
+Kasutus: jaatmereform, pakendiaruandlus, pakendiseadus, ringmajandus, jaatmetasud.
+
+12. Tootjavastutus ja probleemtooted
+ID: tootjavastutus_probleemtooted
+Kasutus: patareid, akud, probleemtooted, tootjavastutuse kohustused. Parent: pakend, jaatmed ja ringmajandus.
+
+13. Kliima, kestlikkus ja rohenouded
+ID: kliima_kestlikkus_rohenouded
+Kasutus: kliimakindla majanduse seadus, kliimaeesmargid, kliimateekaardid, CBAM, EUDR, CSDDD sisuline kestlikkuse/keskkonnamojuga osa.
+
+14. Energia, elektrihind ja varustuskindlus
+ID: energia_elektrihind_varustuskindlus
+Kasutus: elektrihind, taastuvenergia tasu, suurtarbijad, gaas, energiamajanduse arengukava, varustuskindlus, universaalteenus.
+
+15. Digi, andmed, AI ja kuberturvalisus
+ID: digi_andmed_ai_kuberturvalisus
+Kasutus: AI, andmed, kuberturvalisus, digitaalsed aruandlussusteemid, e-arved, infosusteemid, elektrooniline side, andmekaitse, digitaalsed avalikud teenused, digitaalsed tooteandmed.
+
+16. E-kaubandus ja tarbijakaitse
+ID: ekaubandus_tarbijakaitse
+Kasutus: e-pood, tarbija oigused, taganemisnupp, parandamiskohustus, puudusega toode tarbija vaates, tarbijalepingud, tarbijavaidlused, reklaam tarbijale.
+
+17. Finants, krediit ja rahapesu nouded
+ID: finants_krediit_rahapesu
+Kasutus: pangandus, krediit, krediidiinkassod, rahapesu, sanktsioonide finantsjarelevalve, hilinenud maksed, maksetahtajad, kapitalinouded finantssektoris.
+
+18. Arioigus, uhingud ja ariregister
+ID: arioigus_uhingud_ariregister
+Kasutus: ariseadustik, ariregister, juhtide vastutus, uhinguoigus, osakapital, tegelikud kasusaajad, MSUS, EU Inc / 28. reziim kui arioiguslik algatus.
+
+19. Intellektuaalomand ja autorioigus
+ID: intellektuaalomand_autorioigus
+Kasutus: autorioigus, patendid, kaubamargid, erakopeerimise tasu, intellektuaalomandi tasud.
+
+20. Tootenouded, ohutus ja turujarelevalve
+ID: tootenouded_ohutus_turujarelevalve
+Kasutus: tooteohutus, tehnilised nouded, vastavushindamine, turujarelevalve, kestlike toodete nouded, meditsiiniseadmed, toidumargistus, kemikaalid, vaarismetalltooted.
+
+21. Planeeringud, load, ehitus ja kinnisvara
+ID: planeeringud_load_ehitus_kinnisvara
+Kasutus: ruumiline planeerimine, ehitus, kinnisvara, maa, ehitusluba, keskkonnaluba, taristu, varjendid ja ehitusnouded.
+
+22. Riigihanked ja avaliku sektoriga ari
+ID: riigihanked_avaliku_sektori_ari
+Kasutus: riigihangete seadus, hankemenetlused, vaidlustuskomisjon, avaliku sektoriga lepingud.
+
+23. Toetused, riigiabi ja investeeringud
+ID: toetused_riigiabi_investeeringud
+Kasutus: riigiabi, toetused, investeeringutoetused, suurinvesteeringud, EL toetusmeetmed, EIS meetmed.
+
+24. Eksport, rahvusvahelistumine ja toll
+ID: eksport_rahvusvahelistumine_toll
+Kasutus: eksport, import, toll, sanktsioonid kaubanduse kontekstis, rahvusvaheline konkurentsivoime. Selged Koja teenused nagu ATA, paritolusertifikaat ja EEN partnerotsing ei ole eraldi poliitikateemad.
+
+25. Alkohol, tubakas ja aktsiisikaubad
+ID: alkohol_tubakas_aktsiisikaubad
+Kasutus: alkohol, tubakas, nendega seotud piirangud, alkoholiregister, tubakatoodete nouded, alkoholi- ja tubakaaktsiis. Kutuseaktsiis ei kuulu siia automaatselt.
+
+26. Riigikaitse, julgeolek ja kriisikindlus
+ID: riigikaitse_julgeolek_kriisikindlus
+Kasutus: riigikaitse, julgeolek, kriisivalmidus, varjendid, tsiviilkriis, Ukraina toetamine, kaitsetoostus, elutahtsad teenused, reservvaelased.
+
+27. Oigusloome kvaliteet ja kaasamine
+ID: oigusloome_kvaliteet_kaasamine
+Avalik filtris: ei, internal-only.
+Kasutus: liiga kiire menetlus, puudulik kaasamine, VTK puudumine, ebaselge joustumine, halduskoormuse hindamata jatmine, hea oigusloome rikkumine.
+
+================================================================================
+3. PRIMARY JA SECONDARY TEEMA REEGLID
+================================================================================
+
+1. topic_primary kirjeldab peamist sisulist moju ettevotjale.
+2. topic_primary ei tohi tuleneda uksikust juhuslikust marksonast.
+3. topic_secondary voib olla 0 kuni 3 vaartust.
+4. Secondary teema peab andma kasutajale reaalse leidmise vaartuse.
+5. Secondary teemasid ei lisata igaks juhuks.
+6. Kui dokumendis on mitu teemat, vali primary selle jargi, mis on peamine kohustus, risk, kulu, voimalus voi Koja seisukoha objekt.
+7. Kui primary on ebakindel, kasuta review_required=true ja selgita review_reasonis.
+
+================================================================================
+4. EL REEGEL
+================================================================================
+
+Euroopa Liidu poliitika ja oigus ei tohi muutuda primary-teemaks ainult seetottu, et tekst mainib direktiivi, maarust voi Euroopa Komisjoni ettepanekut.
+
+Primary peab jaama sisulise ettevotjamojuga teemale.
+
+EL voib olla secondary voi eu_related=true juhul, kui tekstis on selgelt:
+- EL oigusakt;
+- direktiiv;
+- maarus;
+- Euroopa Komisjoni ettepanek;
+- EL eelarve voi rahastus;
+- EMSK/EESC;
+- EL poliitika;
+- EL oiguse ulevotmine.
+
+EL voib olla primary ainult siis, kui tekst ise on EL uldpoliitika, EL eelarve, EL tuleviku, EMSK, Euroopa Komisjoni tooprogrammi voi EL konkurentsivoime kohta.
+
+Puhas Eesti riigisisene teema ei saa EU secondary tagi ainult selleparast, et valdkond on Euroopas reguleeritud.
+
+================================================================================
+5. ROHELINE RAAMAT REEGEL
+================================================================================
+
+"Roheline raamat" on dokumendituup, mitte kliimaindikaator.
+
+See ei tahenda automaatselt:
+- kliimapoliitikat;
+- roheteemat;
+- kestlikkust;
+- keskkonnanoudeid.
+
+Teema maaratakse sisu jargi.
+
+Naide:
+- Vaimse tervise roheline raamat -> mitte Kliima.
+- Kui fookus on tooandja, tootaja, tookeskkond voi tootervishoid, siis primary: Tootervishoid ja tooohutus.
+- Kui fookus on laiem rahvatervis ja seos ettevotjaga on ebaselge, siis review_required=true.
+
+================================================================================
+6. PLANEERINGUD, LOAD, EHITUS JA KINNISVARA - RANGE REEGEL
+================================================================================
+
+Kasuta teemat Planeeringud, load, ehitus ja kinnisvara ainult juhul, kui tekst sisuliselt puudutab:
+- ruumilist planeerimist;
+- ehitust;
+- kinnisvara;
+- maa kasutust;
+- ehitusluba;
+- keskkonnaluba;
+- ehitus- voi kasutusluba;
+- varjendeid voi hoonete nouded;
+- taristut;
+- fuusilist asukohta voi fuusilist arendust;
+- kinnisvaraga seotud kohustust.
+
+Ara kasuta seda teemat jargmistel juhtudel:
+- elamisluba;
+- tooluba;
+- viisa;
+- uldine tegevusluba;
+- menetlusluba;
+- registrikohustus;
+- riigihanked;
+- toovaidlused;
+- elektrooniline side;
+- universaalteenus;
+- konkurentsiseadus;
+- strateegiad voi tegevuskavad;
+- iga dokumendis esinev sona "luba".
+
+Situation tag vajab_lube_planeeringuid lisatakse ainult siis, kui ettevotte probleem on pariselt planeering, ehitus, maa, keskkonnaluba, ehitusluba, taristu voi kinnisvara.
+
+Elamisluba, viisa, luhiajaline tootamine ja tooluba kuuluvad teemasse Valistoojoud ja ranne, mitte planeeringute/lubade alla.
+
+================================================================================
+7. DIGI, ANDMED, AI JA KUBERTURVALISUS - RANGE REEGEL
+================================================================================
+
+Kasuta Digi, andmed, AI ja kuberturvalisus ainult siis, kui tekst sisuliselt puudutab:
+- AI;
+- andmeid;
+- isikuandmeid;
+- kuberturvalisust;
+- e-arveid;
+- digitaalset aruandlust;
+- platvormimajandust;
+- infosusteeme;
+- elektroonilist sidet;
+- digitaalset identiteeti;
+- automatiseeritud susteeme;
+- digitaalseid avalikke teenuseid;
+- digitaalset tootepassi;
+- online dispute resolutioni, kui see on keskne;
+- digitaalselt asutatavat voi hallatavat ariuhingut, kui see on keskne.
+
+Ara lisa digi-secondary teemat ainult seetottu, et:
+- menetlus toimub elektrooniliselt;
+- olemas on register;
+- dokument mainib andmeid juhuslikult;
+- taotlus esitatakse veebis;
+- haldusmenetluses kasutatakse infosusteemi, aga poliitiline probleem ei ole digitaalne.
+
+================================================================================
+8. E-KAUBANDUS JA TARBIJAKAITSE VS TOOTENOUDDED
+================================================================================
+
+Kasuta E-kaubandus ja tarbijakaitse primary-na, kui tekst puudutab:
+- puudusega toodet tarbija oiguste vaates;
+- tarbija oiguskaitsevahendeid;
+- tarbija oigusi;
+- e-poodi;
+- taganemisreegleid;
+- parandamiskohustust tarbija suhtes;
+- muuja kohustusi tarbija ees;
+- tarbijalepinguid;
+- tarbijavaidlusi;
+- reklaami tarbijale.
+
+Kasuta Tootenouded, ohutus ja turujarelevalve primary-na, kui peamine teema on:
+- tehniline vastavus;
+- tooteohutus;
+- turujarelevalve;
+- vastavushindamine;
+- tootepass;
+- tooteturule laskmise nouded;
+- toidumargistus;
+- kemikaalide nouded;
+- meditsiiniseadmed.
+
+Kestlike toodete, okodisaini, ringlussevotu ja tootepassi algatuste puhul on sageli primary Tootenouded ning secondary Kliima/kestlikkus ja vajadusel EL.
+
+================================================================================
+9. TOOJOU, TOOTERVISHOID JA VALISTOOJOU REEGLID
+================================================================================
+
+Toojoud ja toooigus:
+- toolepingud;
+- tooaeg ja puhkeaeg;
+- paindlik tooaeg;
+- tahtajalised lepingud;
+- kollektiivlepingud;
+- kollektiivne tootuli;
+- toovaidlused;
+- toovaidluse lahendamine;
+- tootaja ja tooandja oigused/kohustused.
+
+Tootervishoid ja tooohutus:
+- tervisekontroll;
+- tootervishoiuarstid;
+- tookeskkond;
+- tooohutus;
+- radoon tooruumides;
+- riskianaluus;
+- tooandja tervisekohustused.
+
+Valistoojoud ja ranne:
+- sisserande piirarv;
+- elamisluba;
+- viisa;
+- luhiajaline tootamine;
+- valismaalase tookohavahetus;
+- valistoojou palkamine;
+- VMS.
+
+Riigikaitse ei tohi saada primary-ks ainult seetottu, et tekst mainib kriitilisi teenuseid, katkemist, piiranguid voi sotsiaalset stabiilsust. Kui keskne teema on kollektiivne tootuli voi toovaidlus, on primary Toojoud ja toooigus.
+
+================================================================================
+10. RIIGIKAITSE, JULGEOLEK JA KRIISIKINDLUS
+================================================================================
+
+Kasuta seda teemat ainult siis, kui peamine teema on:
+- riigikaitse;
+- julgeolek;
+- kriisivalmidus;
+- tsiviilkriis;
+- varjendid;
+- elutahtsa teenuse toimepidevus;
+- kaitsetoostus;
+- reservvaelased;
+- Ukraina toetamine;
+- hadaolukorra seadus sisulise kriisikindluse kontekstis;
+- tsiviilkriisi ja riigikaitse seadus.
+
+Ara kasuta seda teemat ainult sonade "katkemine", "kriitiline", "piirang", "tookatkestus" voi "teenus" pohjal.
+
+================================================================================
+11. SECTOR / TEGEVUSALA REEGLID
+================================================================================
+
+Default:
+activity_primary = Koik tegevusalad / valdkondadeulene
+sector_scope = cross_sector
+
+Kasuta kitsast tegevusala ainult siis, kui kohustus, risk, kulu, soodustus voi moju on pariselt sektoripohine.
+
+Ara lisa tegevusala ainult seetottu, et:
+- naidetes mainitakse sektorit;
+- sektor voib samuti mojutatud olla;
+- Kojas on selles sektoris palju liikmeid;
+- teema on uldiselt ettevotetele oluline.
+
+Sector scope:
+- cross_sector: puudutab koiki voi enamikku ettevotteid;
+- mixed_sector: puudutab laiemalt, aga monele sektorile eriti tugevalt;
+- sector_specific: suunatud kindlale sektorile;
+- unknown_or_review: vajab ulevaatust.
+
+Avalikud tegevusala parentid:
+- Toostus ja tootmine
+- Kaubandus
+- Ehitus ja kinnisvara
+- Transport ja logistika
+- Majutus, toitlustus ja turism
+- Info, side ja IT
+- Energia ja ressursimahukas tegevus
+- Pollumajandus, metsandus ja kalandus
+- Finants, kindlustus ja krediit
+- Haridus ja koolitus
+- Tervishoid, farmaatsia ja meditsiiniseadmed
+- Ariteenused ja kutseteenused
+- Meedia, loome- ja kultuurisektor
+- Koik tegevusalad / valdkondadeulene
+
+================================================================================
+12. SITUATION TAG REEGLID
+================================================================================
+
+Situation tagid ei ole avalik pohifilter, aga voivad hiljem aidata kasutajat segmenteerida.
+
+Lubatud tagid:
+- tooandja
+- kasutab_valistoojoudu
+- ekspordib
+- impordib
+- muub_epoes
+- osaleb_riigihangetel
+- pakendiettevotja
+- tekitab_jaatmeid
+- energiamahukas
+- vajab_lube_planeeringuid
+- esitab_aruandeid_andmeid
+- vajab_toetust_rahastust
+- reguleeritud_valdkond
+- maa_voi_kinnisvara_omanik
+- tegutseb_valisturgudel
+- vke
+- suurettevote
+- idu_voi_kasvuettevote
+
+Range reegel vajab_toetust_rahastust kohta:
+Kasuta ainult siis, kui teema puudutab toetuse, rahastuse, riigiabi, investeeringumeetme voi selge soodustuse taotlemist/saamist.
+
+Ara kasuta vajab_toetust_rahastust ainult seetottu, et tekstis on:
+- maksuvabastus;
+- tasu;
+- loiv;
+- maks;
+- kohustus;
+- annetuse maksukasitlus;
+- kulude kasv;
+- rahaline moju.
+
+Range reegel vajab_lube_planeeringuid kohta:
+Kasuta ainult planeeringu, ehituse, keskkonnaloa, maa, kinnisvara, taristu voi fuusilise arenduse korral. Mitte elamisloa, tooloa, viisa voi uldise tegevusloa korral.
+
+================================================================================
+13. OIGUSAKTIDE SUSTEEM
+================================================================================
+
+Oigusaktid on:
+- detailvaate tagid;
+- advanced leidmise alus;
+- eraldi seaduste vaate alus;
+- policy threadi ja seotud sisu uhendamise vahend.
+
+Need ei ole esilehe pohifilter.
+
+Oigusakti valjad:
+- law_name
+- law_abbreviation
+- jurisdiction: EE / EU
+- law_type: seadus / maarus / direktiiv / direktiivi ettepanek / maaruse ettepanek / strateegia / muu
+- law_tag_status: confirmed / candidate / rejected
+- confidence: high / medium / low
+- match_type: exact_name / inflected_name / abbreviation / title_match / filename_match / contextual_candidate
+- evidence_text
+- review_required
+
+================================================================================
+14. LAW TAG CENTRALITY REEGEL
+================================================================================
+
+Confirmed law tag ei tahenda "tekstis mainitud seadus".
+Confirmed law tag peab olema dokumendi peamine voi sisuliselt oluline oigusakt.
+
+Confirmed law tag on lubatud, kui oigusakt on:
+- pealkirjas;
+- failinimes;
+- arvamuse peamine eelnou;
+- esimeses sisulises loigus selgelt nimetatud;
+- voi tekstis selgelt keskne.
+
+Ara lisa confirmed law tagi, kui seadus:
+- on ainult korvalmainimine;
+- esineb ainult naitena;
+- on viidatud ainult uhes juhuslikus loigus;
+- on tuvastatud ainult luhendi juhusliku esinemise pohjal;
+- ei ole arvamuse peamine objekt.
+
+Kui oigusakt on toenaoline, kuid mitte piisavalt kinnitatud, kasuta law_tags_candidate.
+
+================================================================================
+15. LAW ABBREVIATION MATCH - V2.1.2 RANGE REEGEL
+================================================================================
+
+See on v2.1.2 koige olulisem parandus.
+
+Oigusakti luhendi match on kehtiv ainult siis, kui luhend esineb:
+- eraldiseisva tokenina;
+- case-sensitive kujul;
+- eelistatult uppercase kujul;
+- oiguslikus kontekstis;
+- ning seda toetab title, filename, full law name voi esimene sisuline loik.
+
+Ara matchi:
+- lowercase substringe;
+- sona sees olevaid tahekombinatsioone;
+- juhuslikke tahekombinatsioone;
+- tavasonade sees olevaid luhendeid;
+- body-only luhendit confirmed tagina.
+
+Luhikesed luhendid, mille puhul tuleb olla eriti range:
+- ESS
+- IKS
+- LS
+- AS
+- KMS
+- MKS
+- AOKS / AÕKS
+- TLS
+- TTOS
+- VMS
+- RHS
+- MSUS / MSÜS
+- HOS
+- AvTS
+- TuMS
+- SMS
+
+Reegel:
+Kui evidence on ainult "ess", "iks", "aoks", "aõks" voi muu luhike luhend body tekstis, ara loo confirmed law tagi.
+
+Sellisel juhul:
+- kas ara lisa law tagi uldse;
+- voi lisa candidate + review_required=true, kui umbritsev tekst selgelt viitab seadusele.
+
+Confirmed law tag peaks eelistama:
+1. pealkiri;
+2. failinimi;
+3. full law name;
+4. inflected full law name;
+5. esimene sisuline loik;
+6. alles siis luhend, ja ainult koos kontekstiga.
+
+Body-only abbreviation match ei ole piisav public-ready confirmed tagiks.
+
+Kui confirmed law tag pohineb ainult luhendil:
+- set review_required=true;
+- lisa review_reason: abbreviation_only_law_match;
+- v.a juhul, kui title/filename/full law name kinnitab sama seadust.
+
+================================================================================
+16. LAW EVIDENCE CLEANUP REEGEL
+================================================================================
+
+law_evidence_text voib sisaldada ainult nende oigusaktide toendeid, mis on law_tags_confirmed voi law_tags_candidate valjas.
+
+Kui law tag eemaldatakse confirmed/candidate valjast, tuleb eemaldada ka selle evidence.
+
+Stale evidence on viga.
+
+Naide:
+Kui Raamatupidamise seadus eemaldatakse law_tags_confirmed valjast, siis law_evidence_text ei tohi enam sisaldada "Raamatupidamise seadus: ...".
+
+================================================================================
+17. OIGUSAKTIDE SEED-LIST V2.1.2
+================================================================================
+
+Eesti oigusaktid:
+- Jaatmeseadus
+- Pakendiseadus
+- Toolepingu seadus / TLS / Toolepinguseadus / Toolepinguseaduse
+- Tootervishoiu ja tooohutuse seadus / TTOS
+- Maksukorralduse seadus / MKS
+- Tulumaksuseadus / TuMS
+- Kaibemaksuseadus / KMS
+- Sotsiaalmaksuseadus / SMS
+- Ariseadustik / AS / ÄS
+- Volaõigusseadus / VOS / VÕS
+- Ehitusseadustik / EhS
+- Planeerimisseadus / PlanS
+- Riigihangete seadus / RHS
+- Konkurentsiseadus / KonkS
+- Valismaalaste seadus / VMS
+- Isikuandmete kaitse seadus / IKS
+- Tarbijakaitseseadus / TKS
+- Reklaamiseadus / ReklS
+- Elektroonilise side seadus / ESS
+- Liiklusseadus / LS
+- Raamatupidamise seadus
+- Audiitortegevuse seadus
+- Toovoimetoetuse seadus
+- Pensionikogumise seadus
+- Kogumispensionide seadus
+- Keskkonnatasude seadus
+- Looduskaitseseadus
+- Metsaseadus
+- Maapoueseadus
+- Kliimakindla majanduse seadus
+- Elektrituruseadus
+- Maagaasiseadus
+- Alkoholi-, tubaka-, kutuse- ja elektriaktsiisi seadus
+- Tubakaseadus
+- Alkoholiseadus
+- Toiduseadus
+- Kemikaaliseadus
+- Toote nouetele vastavuse seadus
+- Autorioiguse seadus
+- Patendiseadus
+- Kaubamargiseadus
+- Karistusseadustik
+- Rahapesu ja terrorismi rahastamise tokestamise seadus / RahaPTS
+- Krediidiandjate ja -vahendajate seadus
+- Krediidiasutuste seadus
+- Kindlustustegevuse seadus
+- Majandustegevuse seadustiku uldosa seadus / MSUS / MSÜS
+- Mootorsoidukimaksu seadus
+- Julgeolekumaksu seadus
+- Maamaksuseadus
+- Riigiloivuseadus
+- Tootuskindlustuse seadus
+- Toovaidluse lahendamise seadus
+- Kollektiivlepingu seadus
+- Kollektiivse tootuli lahendamise seadus
+- Kutseseadus
+- Kutseoppeasutuse seadus
+- Taiskasvanute koolituse seadus
+- Teadus- ja arendustegevuse ning innovatsiooni korralduse seadus / TAIKS
+- Kuberturvalisuse seadus
+- Avaliku teabe seadus / AvTS
+- Infouhiskonna teenuse seadus
+- Vaartpaberituru seadus
+- Krediidiinkassode ja -ostjate seadus
+- Kriisiolukorra ja riigikaitse seadus
+- Tsiviilkriisi ja riigikaitse seadus
+- Hadaolukorra seadus / HOS
+- Tuleohutuse seadus
+- Paasteseadus
+- Atmosfaariõhu kaitse seadus / AOKS / AÕKS
+- Toostusheite seadus
+- Keskkonnamoju hindamise ja keskkonnajuhtimissusteemi seadus / KeHJS
+- Uhisveevargi ja -kanalisatsiooni seadus / UVVKS / ÜVVKS
+- Tolliseadus
+- Ravimiseadus
+- Vaarismetalltoodete seadus
+- Mittetulundusuhingute seadus
+- Riigivaraseadus
+- Rahvusvahelise sanktsiooni seadus
+- Kohtute seadus
+- Tsiviilkohtumenetluse seadustik
+- Kriminaalmenetluse seadustik
+- Vaarteomenetluse seadustik
+
+EL oigusaktid / algatused:
+- GDPR / isikuandmete kaitse uldmaarus
+- CSRD
+- CSDDD
+- Omnibus-paketid
+- DSA
+- DMA
+- AI Act
+- Data Act
+- Cyber Resilience Act
+- NIS2
+- CBAM
+- EUDR / raadamismaarus
+- PPWR / pakendi ja pakendijaatmete maarus
+- ViDA
+- Green Claims / rohevaidete direktiiv
+- Right to Repair / parandamisoiguse direktiiv
+- Consumer Credit Directive
+- Late Payment Regulation / Directive
+- BEFIT
+- EL peakontori maksususteemi algatus VKEdele
+- EU Inc. / 28. reziim
+- EL riigihangete direktiivid
+- EL taksonoomia maarus
+- EL mitmeaastane finantsraamistik
+- Patareide ja akude maarus / Batteries Regulation
+
+================================================================================
+18. STANCE
+================================================================================
+
+Lubatud stance vaartused:
+- toetab
+- ei_toeta
+- toetab_tingimusel
+- kriitiline
+- esitas_ettepanekud
+- neutraalne_info
+- toovoit_saavutatud
+
+Reeglid:
+- Kasuta uks primary stance.
+- esitas_ettepanekud: Koda teeb parandusettepanekuid, kuid ei toeta/ei torju kogu algatust selgelt.
+- kriitiline: olulised probleemid, aga mitte tingimata taielik vastuseis.
+- ei_toeta: Koda on selgelt vastu.
+- toetab_tingimusel: Koda toetab juhul, kui tingimusi muudetakse.
+- neutraalne_info: selgitav voi informatiivne sisu.
+- Ara loo vaartust "jalgib_teemat".
+
+================================================================================
+19. VALUE TYPE
+================================================================================
+
+Lubatud value_type:
+- huvide_esindamine
+- toovoit
+- hoiatus_voi_risk
+- selgitus
+- kaasa_raakimise_kutse
+- teenus_voi_tugi
+- taust_ja_analuus
+
+value_type on sisemine vali, mitte avalik pohifilter.
+
+================================================================================
+20. TOOVOIDU TUUBID
+================================================================================
+
+Toovoidul voib olla:
+- work_win_type_primary
+- work_win_type_secondary
+
+Lubatud vaartused:
+- kohustus_ara_hoitud
+- maksukulu_ara_hoitud
+- tahtaeg_pikendatud
+- noue_leevendatud
+- aruandlus_lihtsustatud
+- paindlikkus_lisatud
+- ettevotja_oigus_selgem
+- toetus_voi_soodustus_saadud
+- konkurentsivoime_kaitstud
+- ettepanek_arvesse_voetud
+- halduskoormus_vahendatud
+- rakendamine_lihtsustatud
+
+================================================================================
+21. OIGUSLOOME KVALITEEDI TAGID
+================================================================================
+
+Vali: law_making_issue_tags
+
+Lubatud vaartused:
+- liigne_kiirustamine_voi_luhike_tahtaeg
+- puudulik_kaasamine
+- vtk_puudub
+- ebaselge_joustumine
+- ebaselge_rakendamine
+- vastuolu_oigusloome_hea_tavaga
+- tagasiulatuv_moju
+- halduskoormus_hindamata
+
+Need on sisemised tagid. Need ei ole avalik teema, valja arvatud juhul, kui tulevikus tehakse eraldi oigusloome kvaliteedi vaade.
+
+================================================================================
+22. KUUPAEVAD JA SORTEERIMINE
+================================================================================
+
+Kasutada tuleb voimalikult tapseid kuupaevi.
+
+Valjad:
+- published_date
+- document_date
+- source_year
+- event_start_date
+- event_end_date
+- sort_date
+- date_confidence
+
+Juhul kui opinions failinimes voi dokumendis on kuupaev, kasuta seda document_date ja sort_date alusena.
+
+Avaliku vaate vaikimisi jarjestus:
+1. uuem sisu ees;
+2. toovoidud ja konkreetsed seisukohad enne uldist tausta;
+3. Koda.ee artiklid ja arvamused enne MAA tausta;
+4. vana sisu jaab leitavaks, kuid ei tohi varjutada uuemat;
+5. sama teema puhul eelistada kanoonilisemat allikat.
+
+Me ei loo kasitsi valja "joustumata", "kehtiv", "kehtetu" vms, sest andmeid ei kontrollita jooksvalt Riigi Teataja vastu.
+
+================================================================================
+23. EVENT / KOOLITUS / VISIIT
+================================================================================
+
+Uritused ei ole pohisisu, kuid voivad olla seotud voimalus.
+
+Vali: event_relevance_type
+
+Lubatud vaartused:
+- policy_relevant_event
+- awareness_or_capacity_event
+- future_relevant_event
+- generic_event
+- not_event
+
+Event lisavaljad:
+- event_start_date
+- event_end_date
+- event_is_future
+- event_policy_relevance
+- event_public_role
+
+Reeglid:
+- Toimunud uldine uritus ei lahe pohisisusse.
+- Toimunud teemakoolitus voib olla toetav viide.
+- Tulevikus toimuv relevantne koolitus/visiit/urituse voib ilmuda seotud voimalusena.
+- Uritus ei tohi varjutada arvamust, toovoitu ega sisulist uudist.
+
+================================================================================
+24. SOURCE QUALITY JA SCRAPE QA
+================================================================================
+
+Uue scrape'i puhul puhasta enne klassifitseerimist:
+- navigatsioon;
+- menuud;
+- footer;
+- ostukorv;
+- korduvad kontaktid;
+- boilerplate;
+- seotud teenuste korduvad plokid;
+- tehnilised kordused.
+
+Suurem kaal anda:
+- pealkirjale;
+- avaldamiskuupaevale;
+- URL-ile;
+- lead'ile;
+- esimestele sisulistele loikudele;
+- failinimele;
+- toovoidu lehe struktureeritud tekstile.
+
+Source quality valjad:
+- source_quality_flag: ok / boilerplate_risk / duplicate_risk / ocr_risk / draft_risk / needs_review
+- date_quality_flag: ok / missing / inferred / conflicting
+- numeric_claim_needs_review
+- possible_ocr_or_template_error
+- source_preference_rank
+- canonical_policy_thread_id
+
+Allika eelistusjarjekord:
+1. toovoidu leht
+2. Koda.ee arvamus / seisukoht
+3. Koda.ee sisuline uudis
+4. arvamuse originaaldokument
+5. MAA kokkuvote
+6. koolitus/uritus toetava viitena
+7. vana voi dubleeriv sisu
+
+================================================================================
+25. ANNUAL REPORT / MAA REEGEL
+================================================================================
+
+MAA kiht on context/background.
+
+Reeglid:
+- MAA pohjal uldiselt law tagi ei anta.
+- MAA annab ajalugu, toovoidu tausta ja kokkuvotlikku konteksti.
+- Kui sama teema on Koda.ee uudises, arvamuses voi toovoidu lehel, eelistatakse seda avalikus viites.
+- MAA ei tohi muutuda oigusakti otsingu pohitulemuseks.
+- MAA arvandmeid kasutada ettevaatlikult, eriti kui allikas on draft, OCR voi vastuoluline.
+
+================================================================================
+26. NUMERIC QA REEGEL
+================================================================================
+
+numeric_claim_needs_review = true ainult siis, kui:
+- avalik kokkuvote voi peamine valjavoetud vaide tugineb numbrile;
+- rida sisaldab olulist finants-, protsendi-, mahu-, arvu-, tahtaja- voi mojuvaidet, mida voib avalikult kuvada.
+
+Ara pane true ainult seetottu, et tekst sisaldab:
+- kuupaevi;
+- paragrahvinumbreid;
+- dokumendinumbreid;
+- oigusakti viiteid;
+- kohtuasja numbreid.
+
+================================================================================
+27. REVIEW_REQUIRED REEGEL
+================================================================================
+
+review_required=true tahendab, et rida vajab enne avalikku kasutust inimkontrolli.
+
+Ara pane review_required=true ainult seetottu, et:
+- stance on esitas_ettepanekud;
+- secondary teemasid on mitu;
+- EU on korrektselt lisatud;
+- row sisaldab tavalist confirmed law tagi;
+- teema on keeruline, aga klassifikatsioon on kindel;
+- sector_scope on cross_sector.
+
+Pane review_required=true kui:
+- classification_confidence on low voi medium-low;
+- primary topic on ebakindel;
+- law candidate on olemas, confirmed puudub ja oigusakt on avaliku leidmise jaoks oluline;
+- source tekst on liiga luhike;
+- source on OCR/template/boilerplate riskiga;
+- title ja body on vastuolus;
+- kitsas sector/activity on ebakindel;
+- mitu teemat voistleb primary rolli parast;
+- law evidence sisaldab stale evidence'i;
+- confirmed law tag pohineb ainult luhendil;
+- luhendipohine law match on kahtlane.
+
+qa_flags voib olla laiem hoiatusvali. review_required peab olema kitsam ja praktiliselt kasutatav.
+
+================================================================================
+28. KOHUSTUSLIKUD VALJAD OPINIONS-KIHIS
+================================================================================
+
+Opinions merge-ready valjad peaksid sisaldama vahemalt:
+- content_id
+- source_layer
+- source_type
+- source_file
+- title
+- document_date
+- source_year
+- sort_date
+- topic_primary
+- topic_secondary
+- activity_primary
+- activity_secondary
+- sector_scope
+- stance
+- value_type
+- law_tags_confirmed
+- law_tags_candidate
+- law_evidence_text
+- law_match_confidence
+- eu_related
+- eu_law_transposition
+- law_making_issue_tags
+- work_win_candidate
+- numeric_claim_needs_review
+- qa_flags
+- classification_confidence
+- review_required
+- review_reason
+- notes
+
+================================================================================
+29. SOOVITATAVAD SHEETID UUTE ANDMESTIKE LOOMISEL
+================================================================================
+
+Opinions pilot / full run:
+- 01_inventory
+- 02_classification
+- 03_law_tag_test
+- 04_review_cases
+- 05_rule_changes_applied
+- 06_qa_summary
+- 07_final_fields
+- 08_remaining_risks
+- 09_law_false_positive_audit
+
+Full run puhul:
+- opinions_v2_merge_ready
+- opinions_v2_review_required
+- opinions_v2_law_candidates
+- opinions_v2_low_confidence
+- opinions_v2_law_false_positive_audit
+- opinions_v2_qa_summary
+- opinions_v2_field_mapping
+
+================================================================================
+30. EDUKRITEERIUM ENNE FULL RUN'I
+================================================================================
+
+Enne kogu opinions ZIP-i tootlemist peab piloot naitama, et:
+- false primary topics on kadunud;
+- EL secondary ei ole ule kasutatud;
+- digi secondary ei ole ule kasutatud;
+- Planeeringud/load ei tule valedel pohjustel sisse;
+- vajab_lube_planeeringuid ilmub ainult paris planeeringu/ehituse/loa juhtudel;
+- kitsas sector tagging ei ole ule kasutatud;
+- law tagid ei teki luhendite juhuslikust esinemisest;
+- ESS/IKS/AOKS jms false-positive tagid on eemaldatud;
+- law_evidence_text ei sisalda stale evidence'it;
+- review_required on sisuline ja kasutatav;
+- remaining review cases on paris piirijuhtumid, mitte susteemsed vead.
+
+================================================================================
+31. PRAKTILISED PUNASED LIPUD KLASSIFITSEERIJAS
+================================================================================
+
+Kui need ilmuvad, on vaja QA-d:
+
+1. Elektroonilise side seadus / ESS tekib teemadele, mis ei puuduta elektroonilist sidet.
+2. Isikuandmete kaitse seadus / IKS tekib juhuslikult tekstides, kus andmekaitse pole keskne.
+3. Atmosfaariõhu kaitse seadus / AOKS tekib tekstides, mis ei puuduta FOKA, heidet, ohku voi atmosfaari.
+4. Planeeringud/load tekib elamisloa, tooloa, riigihanke, toovaidluse voi uldise menetluse pohjal.
+5. Digi tekib ainult registri olemasolu pohjal.
+6. TAI muutub primary-ks uldise majanduskava puhul, kuigi TAI on vaid uks alamteema.
+7. Toetus/rahastus situation tag tekib maksuvabastuse voi tasu pohjal.
+8. Riigikaitse tekib kollektiivse tootuli voi toooiguse teemal.
+9. Kliima tekib "roheline raamat" sonapaari pohjal.
+10. Law evidence sisaldab seadust, mida confirmed/candidate valjas enam ei ole.
+
+Kui punane lipp on tuvastatud, lisa qa_flags ja vajadusel review_required=true.
+
+================================================================================
+32. V2.1.3 PILOT CORRECTION ADDENDUM
+================================================================================
+
+See peatukk lisab v2.1.2 juhendile 125-realise piloodi pohjal opitud parandused.
+Avalike teemade nimekirja ei muudeta. Kui siin peatukis on konkreetsem reegel
+kui varasemas juhendi osas, siis kasuta konkreetsemat v2.1.3 reeglit.
+
+32.1 PLANEERINGUD/LOAD - ALLOWLIST-POHINE REEGEL
+
+Teemat Planeeringud, load, ehitus ja kinnisvara ning situation tagi
+vajab_lube_planeeringuid tohib kasutada ainult siis, kui tekstis on otsene ja
+sisuline seos alltoodud allowlistiga.
+
+Lubatud tugevad triggerid:
+- planeering;
+- detailplaneering;
+- uldplaneering;
+- riigi eriplaneering;
+- ehitus;
+- ehitis;
+- hoone;
+- rajatis;
+- kinnisasi;
+- kinnistu;
+- kinnisvara;
+- maakasutus;
+- maa kasutus;
+- ehitusluba;
+- kasutusluba;
+- keskkonnaluba;
+- kompleksluba;
+- veekasutusluba;
+- maavara kaevandamise luba;
+- taristu;
+- varjend;
+- varjumiskoht;
+- tuleohutusulevaatus;
+- tuleohutusnoue, kui see puudutab ehitist, hoonet voi rajatist;
+- fuusilise asukoha, kinnistu, ehitise voi rajatise kohustus.
+
+Keelatud voi vaga norgad triggerid, mis EI TOHI uksi planeeringute/lubade teemat
+luua:
+- luba uldsonana;
+- tegevusluba;
+- elamisluba;
+- tooluba;
+- viisa;
+- menetlusluba;
+- taotlus;
+- kooskollastus;
+- juhend;
+- VTK;
+- eelnou;
+- strateegia;
+- tegevuskava;
+- riigihange;
+- toovaidlus;
+- kollektiivne tootuli;
+- elektrooniline side;
+- universaalteenus;
+- konkurentsiseadus;
+- maamaks;
+- hilinenud maksed;
+- andmekogu;
+- register;
+- aruandlus.
+
+Kui tekstis esineb sona "luba", kuid pole selget seost ehituse, maa,
+planeeringu, keskkonnaloa, taristu voi kinnisvaraga, siis ara kasuta:
+- topic_secondary = Planeeringud, load, ehitus ja kinnisvara;
+- situation tag = vajab_lube_planeeringuid.
+
+32.2 VAJAB_LUBE_PLANEERINGUID TAGI ERITI RANGE REEGEL
+
+vajab_lube_planeeringuid on praktiline kasutajaolukorra tag. Seda tohib panna
+ainult siis, kui ettevote peab voi voib sisuliselt vajada:
+- ehitusluba;
+- kasutusluba;
+- keskkonnaluba;
+- planeeringut;
+- maakasutuse otsust;
+- kinnistu/ehitisega seotud luba;
+- taristu voi rajatise luba;
+- varjendi/hoone/tuleohutusulevaatuse kohustuse taitmist.
+
+Ara kasuta seda tagi, kui jutt on:
+- elamisloast;
+- tooloast;
+- viisast;
+- tegevusloast uldiselt;
+- riigihankest;
+- toovaidlusest;
+- maksu voi tasu muutusest;
+- toetuse saamisest;
+- elektroonilisest sidest;
+- universaalteenusest;
+- konkurentsijarelevalvest;
+- majanduskavast voi strateegiast;
+- avaliku teenistuse seadusest;
+- hilinenud maksetest.
+
+32.3 BUROKRAATIA PRIMARY PRIORITEET
+
+Kui pealkiri, failinimi voi esimene sisuline loik utleb, et teema on:
+- burokraatia vahendamine;
+- halduskoormuse vahendamine;
+- registri kaotamine;
+- aruandluskohustuse lihtsustamine;
+- kohustuse kaotamine;
+- ebamoistliku noude arahoidmine;
+- menetluse lihtsustamine;
+- vormi/andmekogu/teavituse kohustuse leevendamine,
+
+siis Burokraatia ja halduskoormus saab vaga tugeva primary-prioriteedi.
+
+Naide:
+- Alkoholiseaduse registri voi teavituskohustuse lihtsustamine -> primary
+  Burokraatia ja halduskoormus, secondary Alkohol, tubakas ja aktsiisikaubad.
+- Kui keskne on alkoholiaktsiisi maar voi maksutous -> primary Alkohol,
+  tubakas ja aktsiisikaubad, secondary Maksud ja tasud.
+
+32.4 TULEOHUTUSULEVAATUS EI OLE RAAMATUPIDAMISE/AUDITI TEEMA
+
+Sona "ulevaatus" ei tohi automaatselt viia teemasse Raamatupidamine, audit ja
+aruandlus.
+
+Tuleohutusulevaatus, tuleohutusnoue, automaatne tulekahjuteade, paastesusteem
+voi hoone tuleohutus on tavaliselt:
+- Planeeringud, load, ehitus ja kinnisvara, kui fookus on ehitisel/hoonel;
+- Burokraatia ja halduskoormus, kui fookus on kohustuse kaotamisel/lihtsustamisel;
+- Riigikaitse, julgeolek ja kriisikindlus, kui fookus on kriisivalmidusel.
+
+Raamatupidamine/audit sobib ainult finantsauditi, aruandluse, majandusaasta
+aruande voi raamatupidamise kontekstis.
+
+32.5 AVALIKU TEENISTUSE SEADUS JA KLIIMA FALSE-POSITIVE
+
+Avaliku teenistuse seadus, ametnikud, avalik sektor, avaliku sektori tootajad
+voi ametiasutuste korraldus ei ole kliima/kestlikkuse teema ilma vaga tugeva
+sisulise keskkonna-, kliima- voi rohenouete seoseta.
+
+Tavaline klassifikatsioon:
+- Ettevotluskeskkond ja konkurentsivoime, kui fookus on avaliku sektori
+  efektiivsusel voi ettevotluskeskkonnal;
+- Toojoud ja toooigus, kui fookus on toosuhete/teenistussuhete reeglitel;
+- Burokraatia ja halduskoormus, kui fookus on halduskoormusel.
+
+32.6 ALKOHOL/TUBAKAS/AKTSIIS - PRIMARY VALIK
+
+Kui teema on alkoholi voi tubaka muugipiirang, kaubanduspiirang, reklaam,
+registrikohustus, tarbimise vahendamise kava voi sektoripohine regulatsioon,
+kasuta:
+- primary Alkohol, tubakas ja aktsiisikaubad.
+
+Kui teema on alkoholi voi tubaka aktsiisimaar, aktsiisitous voi aktsiisipoliitika,
+kasuta:
+- primary Alkohol, tubakas ja aktsiisikaubad;
+- secondary Maksud ja tasud.
+
+Kui teema on alkoholiregistri, teavituskohustuse, vormi voi muu haldusliku
+kohustuse kaotamine/lihtsustamine, kasuta:
+- primary Burokraatia ja halduskoormus;
+- secondary Alkohol, tubakas ja aktsiisikaubad.
+
+Kutuseaktsiis ei kuulu automaatselt alkoholi/tubaka teema alla. Kutuseaktsiis
+on tavaliselt:
+- primary Maksud ja tasud;
+- secondary Energia, elektrihind ja varustuskindlus voi Transport ja logistika.
+
+32.7 TITLE/FILENAME LAW PRIORITY
+
+Kui title'is voi failinimes on konkreetne seadus, eelnou voi maarus, siis see on
+law tagi jaoks korgema prioriteediga kui body-only luhendid voi korvalmainimised.
+
+Reegel:
+1. Title/filename full law name -> tugev confirmed kandidaatus.
+2. Esimese sisulise loigu full law name -> tugev confirmed kandidaatus.
+3. Hilisem body full law name -> confirmed ainult siis, kui seadus on keskne.
+4. Body-only luhend -> candidate/review, mitte confirmed, v.a kui kontekst on vaga selge.
+5. Korvalmainitud seadus -> ara tagi voi jata candidate/review.
+
+Kui title'is on seadus A ja body sisaldab juhuslikku luhendit ESS/IKS/AOKS/KMS
+vms, siis ara lase luhendil seadust A varjutada.
+
+32.8 TSIIVILKRIISI JA RIIGIKAITSE SEADUS
+
+Lisa law seed-list'i:
+- Tsiviilkriisi ja riigikaitse seadus
+
+Seda tuleb eristada:
+- Kriisiolukorra ja riigikaitse seadusest;
+- Hadaolukorra seadusest / HOS;
+- Paasteseadusest;
+- Tuleohutuse seadusest.
+
+Kui title/failinimi utleb "Tsiviilkriisi ja riigikaitse seadus", peab see olema
+prioriteetne law tag. HOS voi TLS ei tohi seda varjutada, kui need on ainult
+korvalmainimised.
+
+32.9 RIIGIKAITSE VS TOOOIGUS
+
+Riigikaitse, julgeolek ja kriisikindlus sobib siis, kui peamine teema on:
+- tsiviilkriis;
+- riigikaitse;
+- kriisivalmidus;
+- varjendid;
+- elutahtsad teenused;
+- kaitsetoostus;
+- reservvaelased;
+- Ukraina toetamine;
+- ettevotte kriisikindluse kohustus.
+
+Ara kasuta riigikaitset, kui peamine teema on:
+- kollektiivne tootuli;
+- toovaidlus;
+- kollektiivleping;
+- toorahurisk;
+- toosuhete piirang,
+
+v.a kui tekst seob selle selgelt riigikaitse/kriisikohustusega. Tavalise
+toovaidluse voi kollektiivse tootuli puhul primary on Toojoud ja toooigus.
+
+32.10 RIIGIABI / TOETUSED EI OLE PLANEERING
+
+Riigiabi grupierand, investeeringutoetus, toetusmeede voi rahastustingimus ei
+ole planeeringute/lubade teema ainult selleparast, et meetmel on tingimused voi
+menetlus.
+
+Klassifikatsioon:
+- primary Toetused, riigiabi ja investeeringud;
+- secondary vastavalt sisule TAI, kliima, energia, eksport vms;
+- ara lisa Planeeringud/load, kui pole otsest ehitus/maa/keskkonnaloa seost.
+
+32.11 TOOTENOUDED JA OKODISAIN EI OLE PLANEERING
+
+Okodisain, tahkekutusekatlad, kestlikud tooted, digitaalne tootepass,
+tooteohutus, toodete parandatavus ja tooteturujarelevalve on tavaliselt:
+- primary Tootenouded, ohutus ja turujarelevalve;
+- secondary Kliima, kestlikkus ja rohenouded, kui kestlikkus/kliima on oluline;
+- secondary Euroopa Liidu poliitika ja oigus, kui tegemist on EL maaruse/
+  direktiivi/ettepanekuga.
+
+Ara lisa Planeeringud/load, kui tekst ei puuduta ehitusluba, keskkonnaluba,
+maakasutust voi fuusilise rajatise lubasid.
+
+32.12 MAAMAKS EI OLE PLANEERING
+
+Maamaksu, kinnisasja maksustamise voi kohaliku maksu teema klassifikatsioon on
+tavaliselt:
+- primary Maksud ja tasud;
+- secondary Ettevotluskeskkond ja konkurentsivoime voi Planeeringud/load ainult
+  siis, kui tekst sisuliselt puudutab maa kasutust, planeeringuid voi kinnisvara
+  arendust.
+
+Ara lisa vajab_lube_planeeringuid ainult seetottu, et tekstis on maa, kinnistu
+voi maamaks. Maksukohustus ei ole luba.
+
+32.13 UUTE PILOOTIDE QA TRIGGERID
+
+Jargmistes pilootides ja full run'is tuleb review queue'i voi auditisse panna
+vahemalt koik read, kus:
+- topic_secondary sisaldab Planeeringud, load, ehitus ja kinnisvara;
+- situation tag sisaldab vajab_lube_planeeringuid;
+- primary on Kliima, kuid title/failinimi ei viita keskkonnale, kliimale,
+  kestlikkusele, rohenouetele, heitele, loodusele, jaatmetele voi energiale;
+- title'is on konkreetne seadus, kuid law_tags_confirmed ei sisalda seda;
+- law_tags_confirmed sisaldab rohkem kui kaks seadust;
+- law_match_type on ainult body_abbreviation;
+- law_evidence_text sisaldab seadust, mida confirmed/candidate valjades pole;
+- primary on Raamatupidamine/audit, kuid "audit" voi "ulevaatus" viitab
+  tegelikult tehnilisele, tuleohutus- voi keskkonnaulevaatusele.
+
+Need read ei pea koik automaatselt olema avaliku kasutuse jaoks valed, kuid nad
+peavad minema QA auditisse, et susteemsed trigger-vead ei jaaks full run'i sisse.
+
+================================================================================
+33. V2.1.4 ADDENDUM: SOURCE-BINDING JA VIIMASE PILOODI PARANDUSED
+================================================================================
+
+See peatukk lisab v2.1.3-le viimase 150-realise piloodi pohjal opitud reeglid.
+Avalike teemade nimekiri ei muutu. Kui siin on vastuolu varasema peatukiga, kasuta
+v2.1.4 rangemat reeglit.
+
+33.1 SOURCE-BINDING KONTROLL ENNE KLASSIFITSEERIMIST
+
+Enne iga rea klassifitseerimist tuleb kontrollida, et jargmised valjad viitavad
+samale dokumendile:
+- source_file
+- zip_path
+- file_sha256 voi muu failipohine kontrollsumma
+- title
+- PDF-ist ekstraheeritud esimene sisuline pealkiri
+- evidence_short
+- body_text_clean voi muu kasutatav tekstikatkend
+- document_date, kui see parineb failinimest voi dokumendist
+
+Kui source_file/title utleb uhte asja, kuid evidence_short voi body_text_clean
+viitab teisele arvamusele, on tegemist source-binding veaga.
+
+Sellisel juhul:
+- ara kasuta seda rida normaalseks avalikuks klassifitseerimiseks;
+- ara usalda topic_primary, law_tags, stance'i, sectorit ega summary't;
+- sea source_quality_flag = source_text_mismatch;
+- sea review_required = true;
+- lisa review_reason = source_file/title does not match extracted text;
+- lisa rida source_binding_audit lehele;
+- kui voimalik, proovi sidumine parandada tegeliku PDF-i ja zip_path/file_sha256 pohjal;
+- kui sidumist ei saa parandada, jata klassifikatsioon tyhjaks voi margi low confidence.
+
+Source-binding viga on full run'i jaoks blocker. Enne taismahus andmestikku ei tohi
+jatkata, kui sample'is esineb korduvaid source_text_mismatch juhtumeid.
+
+33.2 SOURCE_BINDING_AUDIT SHEET
+
+Pilootides ja full run'is peab olema eraldi auditileht, kui tuvastatakse voi
+kontrollitakse source-binding riski.
+
+Soovituslikud valjad:
+- content_id
+- source_file
+- zip_path
+- file_sha256
+- title
+- extracted_title
+- evidence_short
+- document_date_from_filename
+- document_date_from_text
+- binding_status
+- mismatch_type
+- action_taken
+- source_quality_flag
+- review_required
+- review_reason
+
+binding_status vaartused:
+- ok
+- repaired
+- source_text_mismatch
+- missing_text
+- duplicate_file_risk
+- needs_manual_review
+
+mismatch_type vaartused:
+- title_evidence_mismatch
+- file_text_mismatch
+- date_mismatch
+- duplicate_text_under_different_file
+- missing_or_empty_pdf_text
+- ocr_noise
+- unknown
+
+33.3 PLANEERINGUD/LOAD: CENTRALITY RULE
+
+v2.1.3 allowlist jaab kehtima, kuid v2.1.4 lisab keskse moju reegli.
+
+Allowlist-sona uksi ei piisa. Naiteks "ehitus", "taristu", "rajatis",
+"kinnistu", "keskkonnaluba" voi "hoone" ei anna automaatselt
+Planeeringud, load, ehitus ja kinnisvara teemat.
+
+Planeeringud/load teema voi vajab_lube_planeeringuid tag on lubatud ainult siis,
+kui planeeringu/luba/ehituse seos on:
+- title'is;
+- failinimes;
+- oigusakti nimes;
+- esimeses sisulises loigus;
+- dokumendi peamine kohustus, risk, ettepanek voi moju;
+- voi selgelt seotud ettevotja vajadusega saada ehitus-, kasutus-, keskkonna-,
+  maa-, kinnisvara- voi taristuluba.
+
+Kui allowlist-sona esineb ainult:
+- korvalnaitega;
+- loetelus;
+- taustaviitena;
+- juhusliku kinnistu/rajatise mainimisena;
+- teises seaduses, mis ei ole dokumendi keskne teema,
+
+siis ara lisa Planeeringud/load topic'ut ega vajab_lube_planeeringuid tagi.
+
+33.4 PLANEERINGUTE FALSE-POSITIVE'ITE TYYPJUHUD
+
+Ara lisa Planeeringud, load, ehitus ja kinnisvara ega vajab_lube_planeeringuid,
+kui keskne teema on:
+- elektri universaalteenus;
+- riigihangete strateegilised pohimotted;
+- konkurentsiseadus;
+- majanduse konkurentsivoime tegevuskava;
+- elektroonilise side VTK, v.a kui keskne on fuusilise sidevorgu/taristu ehitus;
+- kutseoppe kvaliteedi juhend;
+- hilinenud maksed;
+- toovaidlus;
+- valismaalaste seadus / elamisluba / tooluba / viisa;
+- maamaks;
+- riigiabi grupierand;
+- okodisain / tahkekutusekatlad / kestlikud tooted;
+- jaatmeseadus/pakendiseadus ilma keskse keskkonnaloa, rajatise, taristu voi
+  maakasutuse teemata;
+- rahapesu/sanktsioonid, kui kinnistu voi vara mainimine on ainult korvaline;
+- vaarismetalltoodete nouete teema.
+
+Planeering/luba voib olla oige, kui keskne teema on:
+- keskkonnakompleksluba;
+- ehitusluba;
+- kasutusluba;
+- detailplaneering voi uldplaneering;
+- tuleohutusulevaatus kui hoone/premissi kohustus;
+- varjend, varjumiskoht voi kriisiehitis;
+- taristu ehitus voi fuusilise vorgu rajamine;
+- kinnisvara arendus, maakasutus voi kinnisasja oigused.
+
+33.5 AUDIT-REVIEW CONSISTENCY
+
+Kui auditileht markib, et rida vajab review'd, peab see olema kooskola pohitabeliga.
+
+Reegel:
+- kui source_binding_audit.review_required = true, siis 02_pohitabel.review_required = true;
+- kui law_false_positive_audit.review_required = true, siis 02_pohitabel.review_required = true;
+- kui planning_permit_audit.review_required = true, siis 02_pohitabel.review_required = true;
+- kui ei soovita pohitabeli review_required valja laiendada, lisa eraldi vali
+  audit_review_required = true.
+
+Ei tohi tekkida olukorda, kus auditileht utleb "review_required = true", kuid
+pohitabel utleb sama rea kohta "review_required = false" ilma selgituseta.
+
+33.6 TAIKS ALIASED
+
+Law seed-list peab sisaldama molemaid nimetuse variante:
+- Teadus- ja arendustegevuse ning innovatsiooni korralduse seadus
+- Teadus- ja arendustegevuse ja innovatsiooni korralduse seadus
+
+Alias:
+- TAIKS
+
+Kui title/failinimi sisaldab uhte nendest variantidest, peab TAIKS olema
+law_tags_confirmed, v.a kui source-binding on vigane.
+
+33.7 KREDIIDITEABE JAGAMISE SEADUS
+
+Lisa law seed/candidate list'i:
+- Krediiditeabe jagamise seadus
+
+Kui title/failinimi voi esimene sisuline loik nimetab krediiditeabe jagamise
+seadust/eelnou, kasuta seda confirmed voi candidate law tagina vastavalt evidence'i
+tugevusele.
+
+Tavaparing:
+- topic_primary: Finants, krediit ja rahapesu nouded;
+- secondary: Digi, andmed, AI ja kuberturvalisus ainult siis, kui andmevahetus,
+  infosusteem voi krediiditeabe jagamise andmetoote teema on keskne.
+
+33.8 GDPR / ISIKUANDMETE KAITSE ULDMÄÄRUS
+
+GDPR / isikuandmete kaitse uldmaarus voib olla confirmed EU act, kui:
+- title/failinimi nimetab isikuandmete kaitse uldmaarust;
+- voi esimene sisuline loik utleb, et arvamus puudutab GDPR-i / uldmaarust;
+- voi tekst kasitleb selgelt GDPR-i kohustusi.
+
+Kui title nimetab GDPR-i, ara jata seda ainult candidate'iks ilma pohjuseta.
+Kui tekst puudutab hoopis Eesti Isikuandmete kaitse seadust, erista:
+- GDPR / isikuandmete kaitse uldmaarus;
+- Isikuandmete kaitse seadus / IKS.
+
+Ara kasuta IKS/GDPR tagi juhusliku andmekaitse voi body-only luhendi pohjal, kui
+andmekaitse pole keskne.
+
+33.9 KAITSEVAETEENISTUSE SEADUS
+
+Lisa law seed/candidate list'i:
+- Kaitsevaeteenistuse seadus
+
+Kasuta seda siis, kui title/failinimi voi peamine tekst puudutab:
+- kaitsevaeteenistust;
+- reservvaelasi;
+- reservoppekogunemist;
+- toandja kohustusi seoses kaitsevaeteenistusega;
+- maksuerisust, kompensatsiooni voi toooiguslikku moju kaitsevaeteenistuse kontekstis.
+
+Kui keskne on maksuerisus, voib primary olla Maksud ja tasud ning secondary
+Riigikaitse, julgeolek ja kriisikindlus. Kui keskne on toosuhe, voib primary olla
+Toojoud ja toooigus. Kui keskne on reservvaelaste/kriisi/riigikaitse moju
+ettevotetele, voib primary olla Riigikaitse, julgeolek ja kriisikindlus.
+
+33.10 RIIGI TEATAJA SEADUS JA DIGIRIIK
+
+Kui title/failinimi nimetab Riigi Teataja seadust, ara klassifitseeri seda
+automaatselt Maksud ja tasud alla.
+
+Vali primary sisulise moju jargi:
+- Digi, andmed, AI ja kuberturvalisus, kui keskne on digiriik, avaldamine,
+  andmekogud, elektrooniline juurdepääs, infosusteemid voi masinloetavus;
+- Ettevotluskeskkond ja konkurentsivoime, kui keskne on oiguskeskkonna labi-
+  paistvus, teabe kättesaadavus voi normide avaldamine;
+- Maksud ja tasud ainult siis, kui keskne on riigiloiv, tasu voi maksekohustus.
+
+Law tag:
+- Riigi Teataja seadus, kui title/failinimi voi peamine tekst seda toetab.
+
+33.11 JULGEOLEKUMAKS JA MAKSUHALDURI VEEBIS AVALDAMINE
+
+Kui source puudutab julgeolekumaksu, maksuhalduri veebis andmete avaldamist,
+tulumaksu voi ettevotlustulu maksustamist, vali primary keskse moju jargi:
+- Maksud ja tasud, kui keskne on maksukohustus, maksuvabastus, maksumaar voi
+  maksuhalduri tegevus;
+- Digi, andmed, AI ja kuberturvalisus secondary, kui keskne on andmete avaldamine,
+  veebis kuvamine, andmetoode voi andmekaitse;
+- Burokraatia secondary, kui keskne on aruandlus/avaldamiskohustus.
+
+Ara kasuta Ariõigus, uhingud ja ariregister primary'na ainult seetottu, et avaldatakse
+ettevotte andmeid. Maksuvaldkonna sisu on tavaliselt Maksud ja tasud.
+
+33.12 EELNOU TITLE JA EVIDENCE PRIORITY
+
+Kui title/failinimi ja body_text/evidence_short ei klapi, source-binding reegel
+on ule koigi teiste reeglite.
+
+Kui need klapivad ja title/failinimi nimetab konkreetset seadust/eelnou,
+siis:
+- topic maaratakse ikkagi sisulise moju jargi;
+- law tagis saab title/failinime seadus korge prioriteedi;
+- body-only korvalmainimised ei tohi title law'd varjutada;
+- kui title law puudub law_tags_confirmed valjast, review_required = true.
+
+33.13 FULL RUN'I BLOKKERID
+
+Ara mine taismahus 759 PDF-i jooksule, kui piloot naitab:
+- korduvat source_text_mismatch probleemi;
+- planning/luba tagide susteemset ulekasutust;
+- law_evidence_text sisaldab stale evidence'it;
+- title/failinime seadused puuduvad confirmed law tagidest;
+- auditilehed ja pohitabeli review_required on vastuolus;
+- ESS/IKS/AOKS/KMS/TuMS vms luhendi false-positive'id taastuvad;
+- review_required on liiga lai voi liiga kitsas ega vasta tegelikule riskile.
+
+Full run on lubatav alles siis, kui:
+- source binding on kontrollitud;
+- planning/luba kasutus on keskne ja pohjendatud;
+- law tagid on kesksed ning tugeva evidence'iga;
+- auditite review signaalid on kooskola pohitabeliga;
+- uued 25 testjuhtu ei too esile uut susteemset veamustrit.
+
+================================================================================
+23. V2.1.5 VALIDATION JA ANTI-REGRESSION ADDENDUM
+================================================================================
+
+See lisa põhineb 150+50 validation-run'i kvaliteedikontrollil. Selle jooksu peamine õppetund oli, et kinnitatud 150 rea klassifikatsiooni ei tohi järgmises validation-run'is vabalt ümber klassifitseerida. Kui heaks kiidetud baseline uuesti lahti lasta, võib klassifikaator tuua tagasi varem juba parandatud vead.
+
+Avalike teemade, sektorite, stance'i, value_type'i ja work_win_type'i struktuuri v2.1.5 ei muuda. Muudatused puudutavad andmestike loomise protsessi, regressioonikontrolli, secondary-topic rangust ning mõningaid title-domain signaale.
+
+--------------------------------------------------------------------------------
+23.1. APPROVED BASELINE / REGRESSION-CONTROL REEGEL
+--------------------------------------------------------------------------------
+
+Kui ridade kogum on pärast QA-d kinnitatud, tuleb seda käsitleda approved baseline'ina.
+
+Approved baseline'i reeglid:
+- Ära reklassifitseeri kinnitatud ridu validation-run'is vabalt uuesti.
+- Kopeeri kinnitatud ridade klassifikatsiooniväljad muutmata kujul viimasest heakskiidetud failist.
+- Kinnitatud ridu võib kontrollida source-bindingu, failide olemasolu, duplikaatide ja auditite mõttes, kuid taxonomy/classification välju ei muudeta ilma selge eraldi põhjuseta.
+- Kui approved baseline'i reas avastatakse uus probleem, ära kirjuta seda vaikselt üle. Märgi see regression_check_approved_baseline lehel ning lisa review_reason.
+- Validation-run'i eesmärk on testida uusi ridu ja kontrollida, et baseline ei regresseeruks, mitte parandatud ridu uuesti nullist klassifitseerida.
+
+Kui tehakse validation-run formaadis "150 approved + 50 new":
+- approved 150 = locked baseline;
+- new 50 = uus klassifikatsioon;
+- lõppfailis võib olla 200 rida, kuid baseline'i ja uusi ridu peab olema võimalik eristada;
+- lisa väli `baseline_status` väärtustega `approved_locked`, `new_classified`, `baseline_review_needed`;
+- lisa leht `regression_check_approved_baseline`.
+
+`regression_check_approved_baseline` soovituslikud veerud:
+- content_id
+- source_file
+- approved_topic_primary
+- current_topic_primary
+- approved_topic_secondary
+- current_topic_secondary
+- approved_law_tags_confirmed
+- current_law_tags_confirmed
+- approved_situation_tags
+- current_situation_tags
+- changed_from_approved
+- change_allowed
+- regression_risk
+- reason
+- review_required
+
+Kui approved baseline muutub ilma eraldi põhjenduseta, on validation-run kehtetu.
+
+--------------------------------------------------------------------------------
+23.2. "MAKSUD JA TASUD" EI OLE FALLBACK-TOPIC
+--------------------------------------------------------------------------------
+
+`Maksud ja tasud` on suur ja oluline teema, kuid seda ei tohi kasutada fallback'ina kõigi rahaliste, halduslike või MTA-ga seotud tekstide puhul.
+
+Kasuta `Maksud ja tasud` primary-topic'una ainult siis, kui põhifookus on üks järgnevatest:
+- maks;
+- maksumäär;
+- maksuvabastus;
+- maksukohustus;
+- maksuadministreerimine;
+- maksukäsitlus;
+- MTA maksujuhend;
+- tulumaks;
+- käibemaks;
+- sotsiaalmaks;
+- maamaks;
+- julgeolekumaks;
+- keskkonnatasu;
+- aktsiis;
+- riigilõiv;
+- järelevalvetasu;
+- muu tasu või lõiv, kui see on dokumendi peamine objekt.
+
+Ära kasuta `Maksud ja tasud` primary-topic'una üksnes sellepärast, et:
+- tekstis on sõna "tasu" kõrvalteemana;
+- tekstis on rahaline mõju;
+- ettevõttel tekib kulu;
+- tekstis esineb Maksu- ja Tolliamet või MTA;
+- tekstis esineb maksuhaldur;
+- tekstis mainitakse riigilõivu kõrvalviitena;
+- õigusaktiga kaasneb kaudne rahaline mõju;
+- toetuse, meetme või tingimuse täitmine eeldab kulutusi.
+
+Kui title/main law viitab selgelt teisele valdkonnale, jääb primary selle valdkonna juurde. `Maksud ja tasud` võib minna secondary'ks ainult siis, kui maksu/tasu aspekt on tekstis tõesti sisuline ja kasutajale avastatavuse mõttes oluline.
+
+Näited:
+- `Tolliseadus` -> primary `Eksport, rahvusvahelistumine ja toll`, mitte `Maksud ja tasud`, kui jutt on tollimenetlusest.
+- `Data Act` / andmemäärus -> primary `Digi, andmed, AI ja küberturvalisus`, mitte `Maksud ja tasud`, isegi kui andmekasutusega kaasneb kulu.
+- `keskkonnakompleksluba` -> primary `Planeeringud, load, ehitus ja kinnisvara`, mitte `Maksud ja tasud`, kui põhifookus on loa taotlemine.
+- `toidu-, sööda- ja veterinaarjärelevalve tunnitasu` -> primary `Maksud ja tasud`, sest tunnitasu on peamine objekt; secondary `Tootenõuded, ohutus ja turujärelevalve`.
+
+--------------------------------------------------------------------------------
+23.3. SECONDARY-TOPIC CENTRALITY REEGEL
+--------------------------------------------------------------------------------
+
+Secondary topic ei ole kohustuslik. Parem tühi secondary kui vale või mürane secondary.
+
+Secondary topic on lubatud ainult siis, kui:
+- see kirjeldab tekstis sisuliselt olulist teist mõju;
+- see aitab ettevõtjal sisu leida;
+- see on title'is, failinimes, esimeses sisulises lõigus või dokumendi põhiosas selgelt toetatud;
+- see ei põhine üksikul kõrvalmainimisel.
+
+Ära lisa secondary't "igaks juhuks".
+
+Eriti tuleb vältida järgmisi automaatseid secondary-vigu:
+- Ära lisa `Maksud ja tasud` secondary'ks lihtsalt rahalise mõju või kulu tõttu.
+- Ära lisa `Digi, andmed, AI ja küberturvalisus` secondary'ks lihtsalt seetõttu, et menetlus toimub registris või veebis.
+- Ära lisa `Eksport, rahvusvahelistumine ja toll` secondary'ks seetõttu, et tekstis on "Maksu- ja Tolliamet" või MTA.
+- Ära lisa `Toetused, riigiabi ja investeeringud` secondary'ks sõnade "meede", "tingimused" või "taotlus" tõttu, kui tegelik valdkond on muu.
+- Ära lisa `Kliima, kestlikkus ja rohenõuded` secondary'ks lihtsalt EL-i, strateegia või sõna "roheline" tõttu.
+- Ära lisa `E-kaubandus ja tarbijakaitse` secondary'ks, kui tarbija või e-kaubandus ei ole sisuline mõju.
+
+Secondary topic peab läbima sama title-domain sanity kontrolli nagu primary, lihtsalt madalama prioriteediga.
+
+Soovituslik auditiväli:
+- `secondary_topic_evidence`
+- `secondary_topic_is_directly_supported`
+- `secondary_topic_review_reason`
+
+--------------------------------------------------------------------------------
+23.4. MTA / TOLL REEGLI LAIENDUS PRIMARY, SECONDARY JA SITUATION TAG'IDELE
+--------------------------------------------------------------------------------
+
+`Maksu- ja Tolliamet`, `MTA` või `maksuhaldur` ei tohi automaatselt anda:
+- primary topic `Eksport, rahvusvahelistumine ja toll`;
+- secondary topic `Eksport, rahvusvahelistumine ja toll`;
+- situation tag `ekspordib`;
+- situation tag `impordib`.
+
+Kasuta `Eksport, rahvusvahelistumine ja toll` ainult siis, kui sisuline teema on:
+- tollimenetlus;
+- tollideklaratsioon;
+- tollimaks;
+- tolliseadustik;
+- Tolliseadus;
+- impordi- või ekspordiprotseduur;
+- päritolu- või tollidokumendid;
+- sanktsioonid väliskaubanduse kontekstis;
+- piiriülene kaubandus;
+- kauba liikumine üle piiri.
+
+Kui allikas räägib:
+- MTA maksujuhendist;
+- maksukäsitlusest;
+- tulumaksust;
+- käibemaksust;
+- ettevõtte tulumaksust;
+- debt push-down'ist;
+- maksuadministreerimisest;
+- maksuaruandlusest;
+- maksuhalduri veebis avaldamisest;
+- maksuvõlast;
+- maksukohustusest;
+
+siis primary on tavaliselt `Maksud ja tasud`, mitte toll/eksport.
+
+Sama reegel kehtib situation tag'idele: `ekspordib` ja `impordib` tohib lisada ainult otsese väliskaubanduse, tolli, impordi, ekspordi või piiriülese kauba/teenuse liikumise tõendi korral.
+
+--------------------------------------------------------------------------------
+23.5. UUED TITLE-DOMAIN TRIGGERID V2.1.5
+--------------------------------------------------------------------------------
+
+Lisa need triggerid andmestike loomisel title-domain sanity kontrolli.
+
+1. Kindlustusandjate kriiside ennetamine ja lahendamine
+- Primary: `Finants, krediit ja rahapesu nõuded`
+- Activity/sector: `Finants, kindlustus ja krediit`
+- Mitte `Maksud ja tasud`, kui maks/tasu ei ole põhifookus.
+
+2. Hea õigusloome ja normitehnika eeskiri
+- Primary: `Õigusloome kvaliteet ja kaasamine`.
+- Kuna see teema on internal-only / public_filter_visible=false, võib avalikus kihis kasutada review'd või map'ida vajadusel `Bürokraatia ja halduskoormus`, kui põhifookus on halduskoormuse vähendamine.
+- Ära sunni seda maksude, digi või toetuste alla.
+
+3. Andmeliidu strateegia, tehisaru, AI, andmeruum, andmejagamine
+- Primary: `Digi, andmed, AI ja küberturvalisus`
+- Secondary: `Euroopa Liidu poliitika ja õigus`, kui EL strateegia/õigus on keskne.
+- Ära kasuta `Maksud ja tasud` lihtsalt mõju või kulude tõttu.
+
+4. Seadme ohutuse seadus, tehnilised nõuded, seadmete ohutus
+- Primary: `Tootenõuded, ohutus ja turujärelevalve`
+- Secondary sõltuvalt sisust: `Bürokraatia ja halduskoormus`, `Euroopa Liidu poliitika ja õigus` või sektor.
+
+5. Keskkonnahoidlikud riigihanked
+- Primary: `Riigihanked ja avaliku sektoriga äri`
+- Secondary: `Kliima, kestlikkus ja rohenõuded`
+- Ära kasuta primary `Digi`, kui digilahendus ei ole keskne.
+
+6. Kutsesüsteemi reform, kutse andmine, kutsestandardid, kutseeksamid
+- Primary: `Haridus, oskused ja järelkasv`
+- Secondary: `Toetused, riigiabi ja investeeringud` ainult siis, kui rahastus/toetus on tõesti põhisisuline instrument.
+
+7. Pakendiregister, pakendiandmete esitamine
+- Primary: `Pakend, jäätmed ja ringmajandus`
+- Secondary: `Digi, andmed, AI ja küberturvalisus` ainult siis, kui register/andmete esitamine on keskne.
+- Secondary: `Bürokraatia ja halduskoormus`, kui põhifookus on aruandluskoormuse vähendamine.
+
+8. Süsiniku sidumise sertifitseerimine, carbon removals, süsinikupõllundus
+- Primary: `Kliima, kestlikkus ja rohenõuded`
+- Secondary: `Euroopa Liidu poliitika ja õigus`, kui EL määrus/raamistik on keskne.
+- Secondary: `Põllumajandus, metsandus ja kalandus` sector/activity ainult siis, kui allikas on selgelt maa-, metsa- või põllumajanduse keskne.
+
+9. Kaitsetööstuse arendusprojektid, kaitsetööstuse toetus, kaitsevaldkonna innovatsioon
+- Primary: `Riigikaitse, julgeolek ja kriisikindlus`
+- Secondary: `Teadus, arendus ja innovatsioon` või `Toetused, riigiabi ja investeeringud`, kui vastav aspekt on keskne.
+- Activity/sector võib olla `Tööstus ja tootmine` või kitsam kaitsetööstuse märge, kui olemas.
+
+10. Hilinenud maksed, maksetähtajad, late payment directive/regulation
+- Primary: `Finants, krediit ja rahapesu nõuded`
+- Secondary: `Euroopa Liidu poliitika ja õigus`, kui EL direktiiv/määrus on keskne.
+- Ära kasuta `Maksud ja tasud`, kui jutt ei ole maksust või lõivust.
+
+--------------------------------------------------------------------------------
+23.6. VALIDATION-RUN'I SOOVITUSLIK METOODIKA
+--------------------------------------------------------------------------------
+
+Kui eesmärk on testida prompti/taksonoomiat uutel ridadel, kasuta järgmist töövoogu:
+
+1. Vali viimane QA-ga kinnitatud fail approved baseline'iks.
+2. Lukusta approved baseline'i klassifikatsiooniväljad.
+3. Vali uued testread, mis ei olnud baseline'is.
+4. Klassifitseeri ainult uued read.
+5. Koosta lõppfail, kus on baseline + uued read.
+6. Lisa `baseline_status` igale reale.
+7. Lisa `regression_check_approved_baseline`, kus kinnitatakse, et baseline ei muutunud.
+8. Lisa `new_cases_validation_audit`, kus hinnatakse ainult uusi ridu.
+9. Kui uutes ridades ilmneb uus süsteemne viga, paranda prompti/taksonoomiajuhendit ja rerun'i ainult uued read, mitte approved baseline'i.
+
+Soovituslikud `baseline_status` väärtused:
+- `approved_locked`
+- `new_classified`
+- `baseline_review_needed`
+- `new_review_required`
+
+Kui validation-run muudab approved baseline'i topic_primary, topic_secondary, law_tags, situation_tags, stance või value_type välju ilma eraldi põhjenduseta, loe see regressiooniks.
+
+--------------------------------------------------------------------------------
+23.7. FULL RUN'I EELTINGIMUSED V2.1.5 JÄRGI
+--------------------------------------------------------------------------------
+
+Enne full run'i peab viimane validation-run näitama, et:
+- approved baseline ei regresseeru;
+- uued read ei too välja uut süsteemset taxonomy-probleemi;
+- `Maksud ja tasud` ei ole üle kasutatud fallback'ina;
+- secondary topic'id ei ole mürased;
+- MTA/tolli reegel kehtib primary, secondary ja situation tag'idele;
+- source-binding audit töötab;
+- topic_sanity_audit töötab ja ei kinnita ilmseid title-domain vastuolusid;
+- situation_tag_audit kontrollib riskantseid tage otsese tõendi alusel;
+- law false-positive audit kontrollib lühendipõhiseid vigu;
+- planning/permit audit kontrollib, et lubade/planeeringute teema on keskne;
+- review_required on sisuline ega ole lihtsalt automaatselt liiga lai.
+
+Kui full run tehakse pärast approved pilot'it, võib full run klassifitseerida kõiki uusi ridu, kuid varem kinnitatud ridu tuleb käsitleda kontrollpunktina. Kui full run'is nende klassifikatsioon muutub, tuleb muutus tuua eraldi regressioonilehele ja põhjendada.
+
+
+
+================================================================================
+24. V2.1.6 METADATA AND EXTRACTION ADDENDUM
+================================================================================
+
+v2.1.6 ei muuda avalike teemade nimekirja. See peatükk lisab reeglid, mis puudutavad
+teksti ekstraheerimist, Koja boilerplate'i ignoreerimist ja adressaadi/ministeeriumi
+normaliseerimist. Need reeglid kehtivad opinions-kihi full run'ides ning kõigis
+hilisemates parandusringides.
+
+--------------------------------------------------------------------------------
+24.1. FIRST_SUBSTANTIVE_PARAGRAPH BOILERPLATE-SKIP REEGEL
+--------------------------------------------------------------------------------
+
+`first_substantive_paragraph` peab olema dokumendi esimene sisuline lõik, mitte esimene
+tehniliselt loetav tekstiplokk.
+
+`first_substantive_paragraph` peab vahele jätma:
+- kirjapäise ja kontaktandmed;
+- dokumendi numbri, kuupäeva, adressaadi ja viite read;
+- tervituse ja formaalsed tänuavangud, nt "Täname võimaluse eest avaldada arvamust";
+- Koja üldise boilerplate'i;
+- Koja liikmeskonna või esindusrolli üldkirjelduse;
+- lõigud stiilis "Kaubanduskoda esindab ja kaitseb kõigi ettevõtjate ühishuvisid";
+- lõigud stiilis "Kaubanduskoja liikmed annavad üle 40 protsendi...";
+- üldised laused Koja mitteriikliku, apoliitilise või vabatahtliku olemuse kohta;
+- signatuurid, jalused, kontaktisikute andmed ja failitehnilised tekstid;
+- sisukorra, pealkirjaloendi või PDF/OCR artefaktid;
+- lühikesed üherealised vormelid, mis ei kirjelda eelnõu sisu.
+
+Esimene sisuline lõik on esimene lõik, mis kirjeldab vähemalt üht järgmistest:
+- konkreetset eelnõu, määrust, seadust, strateegiat või poliitikadokumenti;
+- probleemi, mille kohta Koda arvamust avaldab;
+- muudatuse ärimõju ettevõtjatele;
+- Koja seisukohta, vastuseisu, toetust või ettepanekut;
+- eelnõu eesmärki või kavandatavat muudatust;
+- õigusakti keskset valdkonda;
+- ettevõtjatele tekkivat kohustust, riski, kulu, õigust või võimalust.
+
+Kui dokumendis on mitu formaalset avangut, tuleb need kõik vahele jätta. Kui sisuline
+tekst algab alles teisel või kolmandal leheküljel, peab `first_substantive_paragraph`
+võtma sealt, mitte boilerplate'i lõigust.
+
+Näited boilerplate'ist, mida ei tohi kasutada sisulise lõiguna:
+- "Kaubanduskoda esindab ja kaitseb kõigi ettevõtjate ühishuvisid..."
+- "Kaubanduskoja liikmed annavad üle 40 protsendi Eesti ettevõtete käibest..."
+- "Eesti Kaubandus-Tööstuskoda on mitteriiklik ja apoliitiline organisatsioon..."
+- "Täname võimaluse eest avaldada arvamust..." juhul, kui lõik ei kirjelda sisuliselt eelnõu.
+
+Lubatud on kasutada lõiku, mis algab tänuga, ainult siis, kui samas lõigus on selgelt
+kirjas konkreetne eelnõu ja selle peamine sisu või ärimõju. Kui tänulõik nimetab vaid
+dokumendi nime, kuid ei kirjelda sisu, tuleb otsida järgmine sisuline lõik.
+
+--------------------------------------------------------------------------------
+24.2. FIRST_SUBSTANTIVE_PARAGRAPH KASUTAMINE KLASSIFITSEERIMISES
+--------------------------------------------------------------------------------
+
+`first_substantive_paragraph` on abiväli source-bindingu ja topic sanity jaoks. See ei
+ole ainus klassifitseerimise alus.
+
+Topic'i määramisel tuleb kasutada koos:
+- title;
+- filename;
+- title_extracted_from_pdf;
+- main law / domain signal;
+- first substantive heading;
+- first substantive paragraph;
+- korduvad sisulised märksõnad;
+- Koja tegelik seisukoht või ettepanek.
+
+Kui `first_substantive_paragraph` sisaldab Koja boilerplate'i või OCR-müra, tuleb:
+- märkida `qa_flags` väärtusesse `first_substantive_paragraph_boilerplate_or_noise`;
+- võimalusel täita `first_substantive_paragraph_corrected` või kasutada auditilehel selgitust;
+- mitte teha topic otsust boilerplate'i põhjal.
+
+Kui sisulist lõiku ei õnnestu usaldusväärselt leida:
+- `classification_confidence` ei tohi olla high, välja arvatud juhul, kui title/main law annab väga tugeva signaali;
+- `review_required = true`, kui title-domain pole üheselt selge;
+- `source_binding_status` võib jääda ok, kui fail ise on õige, kuid extraction quality tuleb flag'ida.
+
+--------------------------------------------------------------------------------
+24.3. RECIPIENT / MINISTRY METADATA SCHEMA
+--------------------------------------------------------------------------------
+
+Opinions-kihis tuleb adressaat säilitada ja normaliseerida eraldi metadata-väljadena.
+Recipient ei ole topic taxonomy. Recipient-filter aitab kasutajal vaadata, millisele
+ministeeriumile või asutusele Koda on mingi teema kohta seisukohti esitanud.
+
+Lisa või säilita järgmised väljad:
+
+1. `recipient_raw`
+- Dokumendist leitud adressaat/adressaadid täpselt algsel kujul.
+- Säilita kirjaviis, lühendid ja ajaloolised nimed.
+- Ära paranda raw väärtust käsitsi, kui tegu on source'ist loetud kujuga.
+
+2. `recipient_normalized`
+- Ühtlustatud asutuse nimi.
+- Kasuta tänapäevast või kokkulepitud standardnime, kuid säilita ajalooline seos.
+- Näiteks `MKM`, `Majandus-ja Kommunikatsiooniministeerium` ja `Majandus- ja Kommunikatsiooniministeerium` normaliseeritakse samasse väärtusesse.
+
+3. `recipient_filter_group`
+- Kasutajale nähtav filtergrupp.
+- Võib koondada ajaloolised ja tänased asutused, kui see aitab kasutajal sisu leida.
+- Näiteks `Kliimaministeerium / endine Keskkonnaministeerium`.
+
+4. `recipient_type`
+Lubatud väärtused:
+- `ministry`
+- `parliament_committee`
+- `government`
+- `agency`
+- `eu_institution`
+- `local_government`
+- `other_public_body`
+- `private_or_association`
+- `multiple`
+- `unknown`
+
+5. `recipient_secondary`
+- Kui kiri on mitmele adressaadile, lisa teisene adressaat või adressaatide loend.
+- Kui mitu adressaati on võrdselt olulised, võib `recipient_type = multiple`.
+
+6. `recipient_normalization_review_required`
+Lubatud väärtused:
+- `true`
+- `false`
+
+Märgi `true`, kui:
+- adressaat on OCR-i tõttu moonutatud;
+- asutus on ajalooliselt ümber nimetatud ja mapping pole kindel;
+- adressaate on mitu ja pole selge, milline peaks olema public filter;
+- raw väärtus on ainult isikunimi ilma asutuseta;
+- kiri on saadetud töörühmale, komisjonile või mitteametlikule kontaktile.
+
+--------------------------------------------------------------------------------
+24.4. RECIPIENT NORMALIZATION REEGLID JA NÄITED
+--------------------------------------------------------------------------------
+
+Recipient-normalization peab olema konservatiivne. Raw väärtus jääb alati alles.
+Normaliseeritud väärtus on mõeldud filtriks, mitte õiguslikuks väiteks.
+
+Näited:
+
+Raw väärtused:
+- `Rahandusministeerium`
+- `Rahandusministeeriumi maksupoliitika osakond`
+- `RM`
+Normaliseeritud:
+- `Rahandusministeerium`
+Filter group:
+- `Rahandusministeerium`
+Type:
+- `ministry`
+
+Raw väärtused:
+- `MKM`
+- `Majandus- ja Kommunikatsiooniministeerium`
+- `Majandus-ja Kommunikatsiooniministeerium`
+- `Majandusministeerium`
+Normaliseeritud:
+- `Majandus- ja Kommunikatsiooniministeerium`
+Filter group:
+- `Majandus- ja Kommunikatsiooniministeerium / majandusvaldkond`
+Type:
+- `ministry`
+
+Raw väärtused:
+- `Keskkonnaministeerium`
+- `Kliimaministeerium`
+Normaliseeritud:
+- Kui dokument on ajalooliselt Keskkonnaministeeriumile saadetud, võib `recipient_normalized = Keskkonnaministeerium`.
+- Public filter võib olla `Kliimaministeerium / endine Keskkonnaministeerium`.
+Filter group:
+- `Kliimaministeerium / endine Keskkonnaministeerium`
+Type:
+- `ministry`
+
+Raw väärtused:
+- `Haridus- ja Teadusministeerium`
+- `HTM`
+Normaliseeritud:
+- `Haridus- ja Teadusministeerium`
+Filter group:
+- `Haridus- ja Teadusministeerium`
+Type:
+- `ministry`
+
+Raw väärtused:
+- `Sotsiaalministeerium`
+- `SoM`
+Normaliseeritud:
+- `Sotsiaalministeerium`
+Filter group:
+- `Sotsiaalministeerium`
+Type:
+- `ministry`
+
+Raw väärtused:
+- `Justiitsministeerium`
+- `Justiits- ja Digiministeerium`
+Normaliseeritud:
+- Säilita ajalooline nimi `recipient_raw` väljal.
+- `recipient_normalized` võib olla konkreetne dokumendi-aegne asutus.
+- Public filter group võib koondada: `Justiitsministeerium / Justiits- ja Digiministeerium`.
+Type:
+- `ministry`
+
+Raw väärtused:
+- `Riigikogu rahanduskomisjon`
+- `Riigikogu majanduskomisjon`
+- `Riigikogu õiguskomisjon`
+Normaliseeritud:
+- konkreetne komisjon, nt `Riigikogu rahanduskomisjon`.
+Filter group:
+- `Riigikogu komisjonid`
+Type:
+- `parliament_committee`
+
+Raw väärtused:
+- `Vabariigi Valitsus`
+- `Riigikantselei`
+Normaliseeritud:
+- vastav asutus.
+Filter group:
+- `Vabariigi Valitsus / Riigikantselei`
+Type:
+- `government`
+
+Raw väärtused:
+- `Maksu- ja Tolliamet`
+- `MTA`
+Normaliseeritud:
+- `Maksu- ja Tolliamet`
+Filter group:
+- `Maksu- ja Tolliamet`
+Type:
+- `agency`
+
+NB: MTA recipient ei tähenda automaatselt topic'ut `Eksport, rahvusvahelistumine ja toll`.
+Topic määratakse sisust, mitte adressaadist.
+
+--------------------------------------------------------------------------------
+24.5. RECIPIENT EI TOHI MÄÄRATA TOPIC_PRIMARY'T
+--------------------------------------------------------------------------------
+
+Recipient/adressaat on metadata-filter. See ei tohi automaatselt määrata `topic_primary` väärtust.
+
+Näited:
+- Rahandusministeeriumile saadetud kiri võib olla `Maksud ja tasud`, kuid võib olla ka `Riigihanked`, `Finants`, `Raamatupidamine`, `Bürokraatia` või muu teema.
+- Kliimaministeeriumile saadetud kiri võib olla `Kliima`, kuid võib olla ka `Pakend, jäätmed`, `Energia`, `Planeeringud` või `Maksud ja tasud`.
+- Majandus- ja Kommunikatsiooniministeeriumile saadetud kiri võib olla `Ettevõtluskeskkond`, `Digi`, `Energia`, `Tööjõud`, `Tootenõuded` või muu teema.
+- MTA-le saadetud kiri ei tähenda tolli/eksporti, kui sisu puudutab maksukäsitlust.
+
+Kui recipient ja title-domain lähevad eri suunda, vali topic sisu järgi ning säilita recipient metadata-väljadel.
+
+--------------------------------------------------------------------------------
+24.6. MAKSUD VS FINANTS TÄPSUSTUS V2.1.6
+--------------------------------------------------------------------------------
+
+Järgmised allikad kuuluvad üldjuhul `Maksud ja tasud` alla, mitte `Finants, krediit ja rahapesu nõuded`, kui teema ei puuduta finantssektorit, krediiti, kindlustust, rahapesu, sanktsioone, võlgnevuste sissenõudmist või maksetähtaegu:
+
+- `Sotsiaalmaksuseadus`;
+- `Tulumaksuseadus`;
+- `Käibemaksuseadus`;
+- `Maksukorralduse seadus`;
+- TSD vormid;
+- maksudeklaratsioonid;
+- maksutõendid;
+- töötuskindlustusmaksete deklareerimine;
+- kogumispensioni makse deklareerimine;
+- maksuseadustest tulenevate deklaratsioonide ja tõendite vormide kinnitamine;
+- maksuvabastus;
+- maksukohustus;
+- maksu tasumise kohustusest vabastamine;
+- mitteresidendist tööandja sotsiaalmaksu või töötuskindlustusmakse kohustus.
+
+Näited:
+
+1. Sotsiaalmaksuseaduse muutmine, mille keskne sisu on sotsiaalmaksu või töötuskindlustusmaksete maksmise kohustusest vabastamine:
+- Primary: `Maksud ja tasud`
+- Mitte: `Finants, krediit ja rahapesu nõuded`
+
+2. Tulumaksuseadusest, sotsiaalmaksuseadusest, kogumispensionide seadusest ja töötuskindlustuse seadusest tulenevate deklaratsioonide ja tõendite vormide määrus:
+- Primary: `Maksud ja tasud`
+- Secondary: `Raamatupidamine, audit ja aruandlus` ainult siis, kui aruandlus/deklaratsioonivormide esitamise kohustus on sisuliselt oluline avastatavuse jaoks.
+- Mitte: `Finants, krediit ja rahapesu nõuded`
+
+3. TSD vormide muutmine seoses tulumaksuseaduse muudatustega:
+- Primary: `Maksud ja tasud`
+- Secondary: `Raamatupidamine, audit ja aruandlus` võib olla lubatud, kui vormide esitamine/aruandlus on keskne.
+
+4. Magustatud joogi maksu seaduse eelnõu:
+- Primary: `Maksud ja tasud`
+- Secondary võib sõltuda sisust, kuid maks on primary, kui eelnõu keskne objekt on maks.
+
+`Finants, krediit ja rahapesu nõuded` sobib, kui allika keskne sisu on:
+- finantsasutused;
+- krediiditurud;
+- kindlustus;
+- pangandus;
+- rahapesu ja terrorismi rahastamise tõkestamine;
+- rahvusvahelised sanktsioonid compliance kontekstis;
+- võlgade sissenõudmine;
+- hilinenud maksed ja maksetähtajad ettevõtetevahelistes suhetes;
+- finantsjärelevalve.
+
+--------------------------------------------------------------------------------
+24.7. EXISTING DATASET REPAIR SOOVITUSED V2.1.6 PÕHJAL
+--------------------------------------------------------------------------------
+
+Kui v2.1.6 rakendatakse juba loodud full opinions failile, ei ole vaja teha uut full run'i.
+Soovitatav on targeted fix:
+
+1. Ära puutu approved baseline ridu, kui need on lukus.
+2. Paranda ainult teadaolevad uute full-run ridade vead.
+3. Lisa või täida recipient metadata-väljad, kui neid pole või kui need on ainult raw kujul.
+4. Märgi boilerplate'i tõttu kasutud first_substantive_paragraph väärtused QA flag'iga või täida parandatud extraction-väli.
+5. Ära muuda `topic_primary` ainult recipient'i põhjal.
+6. Tee regression check pärast iga parandust.
+
+Tüüpilised parandused, mida v2.1.6 toetab:
+- sotsiaalmaksu/tulumaksu/TSD vormide read -> `Maksud ja tasud`, mitte `Finants`;
+- magustatud joogi maksu read -> `Maksud ja tasud`;
+- recipient public filter fields -> normaliseeritud metadata, mitte uus topic;
+- Koja boilerplate'i lõigud -> mitte kasutada sisulise paragraph'ina.
+
+--------------------------------------------------------------------------------
+24.8. V2.1.6 FULL RUN'I / PARANDUSRINGI KVALITEEDIKONTROLL
+--------------------------------------------------------------------------------
+
+Iga v2.1.6 alusel loodud või parandatud opinions fail peab QA-s kontrollima:
+
+1. Kas `first_substantive_paragraph` jätab Koja boilerplate'i vahele.
+2. Kas boilerplate/noise juhtumid on flag'itud.
+3. Kas `recipient_raw` on säilitatud.
+4. Kas `recipient_normalized` ja `recipient_filter_group` on täidetud, kui recipient on tuvastatav.
+5. Kas ministeeriumi/adressaadi filter ei muuda topicut automaatselt.
+6. Kas maksuseaduste deklaratsioonide, TSD vormide ja sotsiaalmaksu/tulumaksu ridade primary on `Maksud ja tasud`, kui maks on keskne.
+7. Kas `Finants, krediit ja rahapesu nõuded` ei ole kasutatud tavaliste maksudeklaratsioonide või sotsiaalmaksu/tulumaksu vormide puhul.
+8. Kas approved baseline ei regresseeru.
+9. Kas recipient-normalization ebaselged juhtumid on review's.
+10. Kas public filter group'id on piisavalt koondatud, et kasutaja leiaks ajaloolised ja tänapäevased ministeeriumiteemad koos.
+
+Kui need kontrollid läbivad ja muid blockereid pole, võib fail liikuda controlled merge'i.
+

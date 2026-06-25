@@ -23,6 +23,7 @@ import {
   rankRelatedOpinions,
 } from "./search-core";
 import { candidateInclude, toCandidate } from "./search";
+import { canonicalPublicValdkonnad } from "./topics";
 
 const RELATED_OPINION_CAP = 5;
 const TOPIC_HISTORY_CAP = 4;
@@ -141,7 +142,10 @@ export async function getContentDetail(id: string): Promise<ContentDetail | null
     canonicalUrl: c.canonicalUrl,
     sourceFileName: item.sourceFileName,
     sourceSection: item.sourceSection,
-    valdkonnad: c.valdkonnad,
+    // Public display: canonical public topic labels only (no legacy aliases /
+    // internal-only). The raw c.valdkonnad slugs are still used for the
+    // related-content query below.
+    valdkonnad: canonicalPublicValdkonnad(c.valdkonnad),
     tegevusalad: c.tegevusalad,
     tapsustused: c.tapsustused,
     enrichment: enr

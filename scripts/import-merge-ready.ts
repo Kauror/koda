@@ -22,6 +22,7 @@ import {
   actionCounts,
   analyze,
   stageAllContent,
+  unknownTopicLabels,
   stageLinks,
   type StagedContent,
   type StagedLink,
@@ -282,6 +283,15 @@ async function main() {
 
   log(`Staged: web=${staged.web.length} opinions=${staged.opinions.length} toovoidud=${staged.toovoidud.length} total=${staged.all.length}`);
   log(`Public: web=${analysis.perDataset.web.public} opinions=${analysis.perDataset.opinions.public} toovoidud=${analysis.perDataset.toovoidud.public}`);
+
+  // Surface topic labels that are neither canonical nor a known alias. They are
+  // kept as internal classification but never exposed as public filter options.
+  if (unknownTopicLabels.size > 0) {
+    log(`  WARNING: ${unknownTopicLabels.size} unknown (non-canonical) topic label(s) — kept internal, not exposed as public filters:`);
+    for (const [label, n] of [...unknownTopicLabels.entries()].sort((a, b) => b[1] - a[1])) {
+      log(`    - "${label}" (${n} row(s))`);
+    }
+  }
 
   if (!analysis.ok) {
     console.error("[import] Validation errors:");

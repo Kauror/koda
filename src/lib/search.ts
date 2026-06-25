@@ -10,6 +10,7 @@ import { isPublicSearchEligible } from "./eligibility";
 import { detectLaw, extractLawMentions, lawMentionForSlug } from "./law-match";
 import { slugify } from "./slug";
 import { firstTopic } from "./taxonomy-split";
+import { PUBLIC_TOPIC_FILTERS, canonicalTopicId } from "./topics";
 import { normalizeTitle } from "./hash";
 import { compactText, getCleanPublicExcerpt, publicSourceUrl, publicTitle, sourceCtaLabel } from "./content-display";
 import {
@@ -125,9 +126,39 @@ export type FilterOptions = {
   tapsustused: FilterOption[];
 };
 
-/** Tag filter options, restricted to tags with ≥1 public-eligible content item. */
+/**
+ * Filter options for the public UI.
+ *
+ *  - `valdkonnad` (Teema / valdkond) is built ONLY from the canonical public
+ *    topic allowlist (PUBLIC_TOPIC_FILTERS, taxonomy v2.1.6), NOT from the
+ *    distinct topic_primary/topic_secondary values on content rows. This keeps
+ *    legacy aliases, short labels and the internal-only topic
+ *    ("Õigusloome kvaliteet ja kaasamine") out of the public filter. The list is
+ *    always the exact 26 canonical topics in canonical order; counts are tallied
+ *    by normalizing each candidate's tags to canonical topic ids (so aliases
+ *    fold into their canonical topic).
+ *  - `tegevusalad` / `tapsustused` keep the dynamic behaviour (the activity /
+ *    cross-sector filter logic must not change).
+ */
 export async function getFilterOptions(): Promise<FilterOptions> {
   const candidates = await fetchEligibleCandidates();
+
+  // Topic counts per canonical id (aliases fold into their canonical topic).
+  const topicCount = new Map<string, number>();
+  for (const c of candidates) {
+    const ids = new Set<string>();
+    for (const t of c.valdkonnad) {
+      const id = canonicalTopicId(t.slug) ?? canonicalTopicId(t.name);
+      if (id) ids.add(id);
+    }
+    for (const id of ids) topicCount.set(id, (topicCount.get(id) ?? 0) + 1);
+  }
+  const valdkonnad: FilterOption[] = PUBLIC_TOPIC_FILTERS.map((o) => ({
+    slug: o.slug,
+    name: o.name,
+    count: topicCount.get(o.slug) ?? 0,
+  }));
+
   const tally = (pick: (c: Candidate) => { slug: string; name: string }[]) => {
     const map = new Map<string, FilterOption>();
     for (const c of candidates)
@@ -139,7 +170,7 @@ export async function getFilterOptions(): Promise<FilterOptions> {
     return [...map.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "et"));
   };
   return {
-    valdkonnad: tally((c) => c.valdkonnad),
+    valdkonnad,
     tegevusalad: tally((c) => c.tegevusalad),
     tapsustused: tally((c) => c.tapsustused),
   };
