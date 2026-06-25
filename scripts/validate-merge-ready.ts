@@ -1,5 +1,5 @@
 /**
- * Validate the structured v0.9.4/v0.9.1 package without touching the database.
+ * Validate the structured v0.9.5 package without touching the database.
  */
 import { mkdirSync, writeFileSync } from "fs";
 import { resolve } from "path";

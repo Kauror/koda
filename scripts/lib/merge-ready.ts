@@ -1,10 +1,10 @@
 /**
- * Shared logic for the structured v0.9.4/v0.9.1 Koda import package.
+ * Shared logic for the structured v0.9.5 Koda import package.
  *
  * The active source package is:
  *   - koda_web_content_v0_9_4_cleaned.xlsx (web_content_v0_9)       3804 rows
  *   - koda_opinions_v0_9_1.xlsx            (opinions_v0_9)           759 rows
- *   - koda_toovoidud_enrichment_v0_9_1.xlsx (toovoidud_v0_9)          97 rows
+ *   - koda_toovoidud_enrichment_v0_9_2.xlsx (toovoidud_v0_9)          97 rows
  *   - koda_taxonomy_rules_v0_9_1.txt        (taxonomy reference only)
  *
  * Total content rows = 4660. Taxonomy audit/readme/repair sheets are never
@@ -23,7 +23,7 @@ export type DatasetKey = "web" | "opinions" | "toovoidud";
 export const FILES = {
   web: ["koda_web_content_v0_9_4_cleaned.xlsx", "koda_web_content_v0_9_4.xlsx"],
   opinions: ["koda_opinions_v0_9_1.xlsx"],
-  toovoidud: ["koda_toovoidud_enrichment_v0_9_1.xlsx"],
+  toovoidud: ["koda_toovoidud_enrichment_v0_9_2.xlsx", "koda_toovoidud_enrichment_v0_9_1.xlsx"],
   taxonomy: ["koda_taxonomy_rules_v0_9_1.txt"],
 } as const;
 

@@ -1,5 +1,5 @@
 /**
- * Deterministic checks for the structured v0.9.4/v0.9.1 package.
+ * Deterministic checks for the structured v0.9.5 package.
  */
 import assert from "node:assert";
 import { loadEnv } from "./env";

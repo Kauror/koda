@@ -1,5 +1,5 @@
 /**
- * Deterministic replacement import for the structured v0.9.4/v0.9.1 Koda
+ * Deterministic replacement import for the structured v0.9.5 Koda
  * package.
  *
  *   npm run import:merge-ready            # validate, back up, replace content
@@ -110,7 +110,7 @@ async function writeBackup(): Promise<{ path: string; counts: Record<string, num
   const backupsDir = resolve(IMPORT_DIR, "backups");
   mkdirSync(backupsDir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const path = resolve(backupsDir, `pre-v0-9-4-import-${stamp}.json`);
+  const path = resolve(backupsDir, `pre-v0-9-5-import-${stamp}.json`);
 
   const [contentItems, topicGroups, tags, evidenceLinks, achievements] = await Promise.all([
     prisma.contentItem.findMany({ include: { tags: true } }),
@@ -121,7 +121,7 @@ async function writeBackup(): Promise<{ path: string; counts: Record<string, num
   ]);
   const payload = {
     timestamp: new Date().toISOString(),
-    kind: "pre-v0.9.4-content-backup",
+    kind: "pre-v0.9.5-content-backup",
     counts: {
       contentItems: contentItems.length,
       topicGroups: topicGroups.length,
@@ -361,7 +361,7 @@ async function writeReport(analysis: ReturnType<typeof analyze>, r: ImportResult
 
   const report = {
     timestamp: new Date().toISOString(),
-    kind: "structured-v0.9.4-import",
+    kind: "structured-v0.9.5-import",
     dryRun: r.dryRun,
     inputFiles: {
       web: `data/import/${activeInputFileName(FILES.web)}`,
@@ -378,7 +378,7 @@ async function writeReport(analysis: ReturnType<typeof analyze>, r: ImportResult
     },
     backupPath: r.backupPath,
     backupCounts: r.backupCounts,
-    oldDataRemovalMethod: "Cleared ContentItem, TopicGroup, ContentTag, ContentEvidenceLink and AchievementEnrichment before inserting v0.9.4 rows.",
+    oldDataRemovalMethod: "Cleared ContentItem, TopicGroup, ContentTag, ContentEvidenceLink and AchievementEnrichment before inserting v0.9.5 rows.",
     rowCountsPerSource: analysis.rowCounts,
     totalContentStaged: analysis.totalContentStaged,
     totalContentImported: r.created,
@@ -407,7 +407,7 @@ async function writeReport(analysis: ReturnType<typeof analyze>, r: ImportResult
 
   writeFileSync(resolve(reportsDir, "import-report.json"), JSON.stringify(report, null, 2));
 
-  const md = `# Structured v0.9.4 import report
+  const md = `# Structured v0.9.5 import report
 
 - Timestamp: ${report.timestamp}
 - Mode: ${r.dryRun ? "dry-run (no DB writes)" : "replacement import"}

@@ -1,6 +1,6 @@
-# Structured v0.9.4 import
+# Structured v0.9.5 import
 
-This app now imports the structured v0.9.4/v0.9.1 Koda source package as the
+This app now imports the structured v0.9.5 Koda source package as the
 authoritative content source. The crawler, seed data, old annual-report imports,
 old v1 merge-ready workbooks, audit sheets, and repair sheets are not production
 content sources.
@@ -14,7 +14,7 @@ mount (`/mnt/user/appdata/koda/import`) on the server:
 | --- | --- | --- | ---: |
 | `koda_web_content_v0_9_4_cleaned.xlsx` | `web_content_v0_9` | public/support/staging web content | 3804 |
 | `koda_opinions_v0_9_1.xlsx` | `opinions_v0_9` | public/staging formal opinions | 759 |
-| `koda_toovoidud_enrichment_v0_9_1.xlsx` | `toovoidud_v0_9` | achievement/value cards | 97 |
+| `koda_toovoidud_enrichment_v0_9_2.xlsx` | `toovoidud_v0_9` | achievement/value cards | 97 |
 | `koda_taxonomy_rules_v0_9_1.txt` | n/a | taxonomy reference only | n/a |
 
 Total content rows before public exclusions: **4660**.
@@ -46,7 +46,7 @@ source metadata only and are not public filter tags.
 2. Create a JSON backup under `data/import/backups/`.
 3. Clear active content/import tables (`ContentItem`, `TopicGroup`,
    `ContentTag`, `ContentEvidenceLink`, `AchievementEnrichment`).
-4. Insert the v0.9.4/v0.9.1 package.
+4. Insert the v0.9.5 package.
 5. Write reports under `data/import/reports/`.
 
 It intentionally avoids mixing old imported rows with the new structured
