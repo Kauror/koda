@@ -11,6 +11,7 @@ import { detectLaw, extractLawMentions, lawMentionForSlug } from "./law-match";
 import { slugify } from "./slug";
 import { firstTopic } from "./taxonomy-split";
 import { PUBLIC_TOPIC_FILTERS, canonicalTopicId } from "./topics";
+import { PUBLIC_ACTIVITY_FILTERS, canonicalPublicActivitySlug } from "./activities";
 import { normalizeTitle } from "./hash";
 import { compactText, getCleanPublicExcerpt, publicSourceUrl, publicTitle, sourceCtaLabel } from "./content-display";
 import {
@@ -159,6 +160,29 @@ export async function getFilterOptions(): Promise<FilterOptions> {
     count: topicCount.get(o.slug) ?? 0,
   }));
 
+  // Tegevusala (business sector): built ONLY from the canonical 12-sector
+  // allowlist, in canonical order — never from distinct content values. This
+  // excludes the cross-sector fallback label ("Kõik tegevusalad /
+  // valdkondadeülene") and the energy-intensive company profile ("Energia ja
+  // ressursimahukas tegevus") from the main filter. Cross-sector rows are still
+  // included by search ranking (sector-relevance.ts), and the energy value is
+  // still kept as an internal tag — neither is offered as a checkbox here.
+  // Counts fold each candidate's sector tags into their canonical sector slug.
+  const sectorCount = new Map<string, number>();
+  for (const c of candidates) {
+    const slugs = new Set<string>();
+    for (const t of c.tegevusalad) {
+      const slug = canonicalPublicActivitySlug(t);
+      if (slug) slugs.add(slug);
+    }
+    for (const slug of slugs) sectorCount.set(slug, (sectorCount.get(slug) ?? 0) + 1);
+  }
+  const tegevusalad: FilterOption[] = PUBLIC_ACTIVITY_FILTERS.map((o) => ({
+    slug: o.slug,
+    name: o.name,
+    count: sectorCount.get(o.slug) ?? 0,
+  }));
+
   const tally = (pick: (c: Candidate) => { slug: string; name: string }[]) => {
     const map = new Map<string, FilterOption>();
     for (const c of candidates)
@@ -171,7 +195,7 @@ export async function getFilterOptions(): Promise<FilterOptions> {
   };
   return {
     valdkonnad,
-    tegevusalad: tally((c) => c.tegevusalad),
+    tegevusalad,
     tapsustused: tally((c) => c.tapsustused),
   };
 }
