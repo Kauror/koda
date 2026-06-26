@@ -10,6 +10,7 @@ import {
   type ResultCard,
   type SearchResults,
 } from "@/lib/search";
+import { isGenericWorkWinUrl } from "@/lib/content-display";
 import TrackedLink from "./TrackedLink";
 
 export const dynamic = "force-dynamic";
@@ -51,21 +52,25 @@ function Card({
         <Link href={detailHref}>{card.title}</Link>
       </h3>
       {card.summary && <p className="item-excerpt small">{card.summary}</p>}
-      {!compact && card.laws.length > 0 && (
+      {!compact && (card.laws.length > 0 || card.recipient) && (
         <div className="card-tags">
-          <span className="card-tags-label">Seotud õigusaktid:</span>
           {card.laws.map((law) => (
             <Link key={law.slug} href={`/seadused/${law.slug}`} className="tag tag-law">
               {law.canonicalName}
             </Link>
           ))}
+          {card.recipient && <span className="tag tag-recipient">{card.recipient}</span>}
         </div>
       )}
       <p className="card-links">
         <Link href={detailHref} className="btn btn-secondary btn-small">
-          Vaata kokkuvõtet
+          Loe lähemalt
         </Link>
-        {card.url && (
+        {/* Töövõit and news cards keep a single internal CTA: their external
+            source is either the generic koda.ee work-wins listing (useless) or a
+            duplicate of the detail page. Opinions/context keep a specific source
+            link, but never the generic work-wins URL. */}
+        {card.url && !card.isAchievement && card.kind !== "uudis" && !isGenericWorkWinUrl(card.url) && (
           <TrackedLink
             href={card.url}
             sessionId={sessionId}
@@ -196,11 +201,12 @@ export default async function ResultsPage({
 
   const nameOf = (opts: { slug: string; name: string }[], slug: string) =>
     opts.find((option) => option.slug === slug)?.name ?? slug;
+  // Recipient/ministry is no longer a public global filter, so it is not echoed
+  // as an active-filter chip here (it still works as background search metadata).
   const activeFilters = [
     ...query.valdkond.map((slug) => nameOf(options.valdkonnad, slug)),
     ...query.tegevusala.map((slug) => nameOf(options.tegevusalad, slug)),
     ...query.tapsustus.map((slug) => nameOf(options.tapsustused, slug)),
-    ...query.recipient.map((slug) => nameOf(options.recipients, slug)),
   ];
 
   const editParams = new URLSearchParams();
@@ -208,7 +214,6 @@ export default async function ResultsPage({
   if (query.valdkond.length) editParams.set("valdkond", query.valdkond.join(","));
   if (query.tegevusala.length) editParams.set("tegevusala", query.tegevusala.join(","));
   if (query.tapsustus.length) editParams.set("tapsustus", query.tapsustus.join(","));
-  if (query.recipient.length) editParams.set("recipient", query.recipient.join(","));
   if (query.type.length) editParams.set("type", query.type.join(","));
   const editQuery = editParams.toString();
   const fromQuery = editQuery;

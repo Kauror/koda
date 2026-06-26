@@ -1,12 +1,19 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getContentDetail, type ContentDetail, type EvidenceRow } from "@/lib/content-detail";
-import { compactText, isUnsafePublicDetailText, uniquePublicTexts } from "@/lib/content-display";
+import {
+  compactText,
+  isGenericWorkWinUrl,
+  isUnsafePublicDetailText,
+  uniquePublicTexts,
+} from "@/lib/content-display";
 
 export const dynamic = "force-dynamic";
 
 function SourceButton({ item }: { item: Pick<ContentDetail, "sourceUrl" | "sourceCtaLabel"> }) {
-  if (!item.sourceUrl) return null;
+  // Only show an external source button when there is a specific article/source.
+  // The generic koda.ee work-wins listing page is never a useful source link.
+  if (!item.sourceUrl || isGenericWorkWinUrl(item.sourceUrl)) return null;
   return (
     <a href={item.sourceUrl} target="_blank" rel="noopener noreferrer" className="btn btn-small">
       {item.sourceCtaLabel}
@@ -140,7 +147,7 @@ export default async function ContentDetailPage({
             {!item.displayDate && item.reportYear && <span className="badge-date">{item.reportYear}</span>}
           </p>
           <h1>{item.title}</h1>
-          {(item.valdkonnad.length > 0 || item.tegevusalad.length > 0) && (
+          {(item.valdkonnad.length > 0 || item.tegevusalad.length > 0 || item.recipient) && (
             <div className="filter-summary">
               {item.valdkonnad.map((t) => (
                 <span key={`v-${t.slug}`} className="tag accent">
@@ -152,6 +159,7 @@ export default async function ContentDetailPage({
                   {t.name}
                 </span>
               ))}
+              {item.recipient && <span className="tag tag-recipient">{item.recipient}</span>}
             </div>
           )}
         </div>

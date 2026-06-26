@@ -103,3 +103,28 @@ export function canonicalPublicActivitySlug(tag: { slug: string; name: string })
   const fromName = slugify(tag.name);
   return PUBLIC_ACTIVITY_SLUGS.has(fromName) ? fromName : null;
 }
+
+/**
+ * True when an activity tag is the internal cross-sector fallback
+ * ("Kõik tegevusalad / valdkondadeülene", its slug `koik-tegevusalad-…`, or a
+ * bare "valdkondadeülene" / "Kõik tegevusalad" label). This value is ranking
+ * metadata only and must NEVER be shown as a public chip (cards, detail pages,
+ * filters, breadcrumbs, metadata rows). It stays usable for search/ranking.
+ */
+export function isInternalFallbackActivity(tag: { slug?: string | null; name?: string | null }): boolean {
+  const text = `${tag.slug ?? ""} ${tag.name ?? ""}`.toLocaleLowerCase("et-EE");
+  return (
+    text.includes("kõik tegevusalad") ||
+    text.includes("koik tegevusalad") ||
+    text.includes("koik-tegevusalad") ||
+    text.includes("valdkondadeülene") ||
+    text.includes("valdkondadeulene")
+  );
+}
+
+/** Drop the internal cross-sector fallback activity from a list before public display. */
+export function displayablePublicActivities<T extends { slug?: string | null; name?: string | null }>(
+  tags: T[]
+): T[] {
+  return tags.filter((t) => !isInternalFallbackActivity(t));
+}

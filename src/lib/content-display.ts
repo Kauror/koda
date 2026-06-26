@@ -71,6 +71,18 @@ export function publicSourceUrl(i: Pick<DisplayFields, "sourceUrl" | "canonicalU
   return null;
 }
 
+/**
+ * True when a URL points at the generic koda.ee work-wins archive/listing page
+ * ("meie-moju/meie-toovoidud") rather than a specific article/source. All
+ * imported töövõidud share this one generic URL, so it must never be offered as
+ * an external source button — the internal app detail/summary page is the useful
+ * destination instead. Matches both absolute and relative forms.
+ */
+export function isGenericWorkWinUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  return url.toLowerCase().includes("meie-moju/meie-toovoidud");
+}
+
 export function sourceCtaLabel(i: SourceLabelFields): string {
   if (i.sourceTypeDetail === "toovoit" || i.sourceLayer === "koda_achievement") {
     return "Vaata töövõitu";

@@ -536,6 +536,14 @@ a.tag.tag-law:hover {
   color: #fff;
 }
 
+/* Non-clickable recipient/ministry display chip (opinions / opinion-related
+   news only). Same blue family as law chips, but not a link. */
+.tag.tag-recipient {
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary);
+  color: var(--color-primary-dark);
+}
+
 .results-body {
   padding-bottom: 64px;
 }
@@ -822,12 +830,6 @@ a.tag.tag-law:hover {
   margin-top: 16px;
   padding-top: 14px;
   border-top: 1px solid var(--color-border);
-}
-
-.card-tags-label {
-  font-size: 0.78rem;
-  color: var(--color-muted);
-  margin-right: 2px;
 }
 
 /* Other items list */

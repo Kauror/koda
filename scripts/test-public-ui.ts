@@ -5,10 +5,13 @@ import {
   getCleanPublicExcerpt,
   getPublicDetailSummary,
   isDuplicateText,
+  isGenericWorkWinUrl,
   isUnsafePublicDetailText,
   sourceCtaLabel,
   uniquePublicTexts,
 } from "../src/lib/content-display";
+import { displayablePublicActivities, isInternalFallbackActivity } from "../src/lib/activities";
+import { shouldShowRecipientChip } from "../src/lib/search-core";
 
 let passed = 0;
 let failed = 0;
@@ -193,7 +196,11 @@ check("search form allows topic-only search (sector not mandatory) and hides rem
   // user may search by Teema / valdkond (or recipient) alone.
   assert.ok(source.includes("hasAnyFilter"));
   assert.ok(!source.includes("tegevusalaOptions.length > 0 && tegevusala.length === 0"));
-  assert.ok(source.includes("isGenericSectorOption"));
+  // The cross-sector fallback option is hidden via the shared helper.
+  assert.ok(source.includes("isInternalFallbackActivity"));
+  // The recipient/ministry filter section is removed from public search.
+  assert.ok(!source.includes("Adressaat / ministeerium"));
+  assert.ok(!source.includes("Kellele koda pöördus"));
   assert.ok(source.includes('type="submit"'));
   assert.ok(source.includes("Teema / valdkond"));
   assert.ok(!source.includes('type="search"'));
@@ -248,11 +255,79 @@ check("result cards show linked law tags, not generic topic/sector chips", () =>
   assert.ok(source.includes("card.laws"));
   assert.ok(source.includes("tag-law"));
   assert.ok(source.includes("/seadused/"));
-  assert.ok(source.includes("Seotud õigusaktid"));
+  // The "Seotud õigusaktid:" label is removed; only the blue chips remain.
+  assert.ok(!source.includes("Seotud õigusaktid"));
   // The old generic valdkond/tegevusala chip rendering is gone from the card.
   assert.ok(!source.includes("card.valdkonnad.slice"));
   assert.ok(!source.includes("card.tegevusalad.slice"));
   assert.ok(!source.includes("tag tag-muted"));
+});
+
+check("result cards use one internal 'Loe lähemalt' CTA and recipient chips", () => {
+  const source = readFileSync("src/app/tulemused/page.tsx", "utf8");
+  // Internal CTA renamed everywhere on the results page.
+  assert.ok(source.includes("Loe lähemalt"));
+  assert.ok(!source.includes("Vaata kokkuvõtet"));
+  // Recipient/ministry shows as a non-clickable chip next to law chips.
+  assert.ok(source.includes("card.recipient"));
+  assert.ok(source.includes("tag-recipient"));
+  // Töövõit and news cards drop the external source link (one CTA only); the
+  // generic koda.ee work-wins listing is never linked.
+  assert.ok(source.includes("isGenericWorkWinUrl"));
+  assert.ok(source.includes('card.kind !== "uudis"'));
+});
+
+check("law page renames news section, renames CTA and drops generic work-win links", () => {
+  const source = readFileSync("src/app/seadused/[slug]/page.tsx", "utf8");
+  assert.ok(source.includes('title="Uudised"'));
+  assert.ok(!source.includes("Uudised ja arengud"));
+  assert.ok(source.includes("Loe lähemalt"));
+  assert.ok(!source.includes("Vaata kokkuvõtet"));
+  assert.ok(source.includes("isGenericWorkWinUrl"));
+});
+
+check("work-win / news detail page hides the generic external source button", () => {
+  const source = readFileSync("src/app/sisu/[id]/page.tsx", "utf8");
+  assert.ok(source.includes("isGenericWorkWinUrl"));
+  // Recipient/ministry chip is rendered on relevant detail pages.
+  assert.ok(source.includes("item.recipient"));
+  assert.ok(source.includes("tag-recipient"));
+});
+
+check("isInternalFallbackActivity suppresses the cross-sector fallback only", () => {
+  assert.equal(
+    isInternalFallbackActivity({ slug: "koik-tegevusalad-valdkondadeulene", name: "Kõik tegevusalad / valdkondadeülene" }),
+    true
+  );
+  assert.equal(isInternalFallbackActivity({ slug: "", name: "valdkondadeülene" }), true);
+  assert.equal(isInternalFallbackActivity({ slug: "", name: "Kõik tegevusalad" }), true);
+  // Real sectors are kept.
+  assert.equal(isInternalFallbackActivity({ slug: "kaubandus", name: "Kaubandus" }), false);
+  assert.equal(isInternalFallbackActivity({ slug: "toostus-ja-tootmine", name: "Tööstus ja tootmine" }), false);
+
+  const filtered = displayablePublicActivities([
+    { slug: "kaubandus", name: "Kaubandus" },
+    { slug: "koik-tegevusalad-valdkondadeulene", name: "Kõik tegevusalad / valdkondadeülene" },
+  ]);
+  assert.deepEqual(filtered, [{ slug: "kaubandus", name: "Kaubandus" }]);
+});
+
+check("shouldShowRecipientChip: opinions/news with a recipient only", () => {
+  assert.equal(shouldShowRecipientChip({ kind: "arvamus", hasRecipient: true }), true);
+  assert.equal(shouldShowRecipientChip({ kind: "uudis", hasRecipient: true }), true);
+  // No recipient → never shown.
+  assert.equal(shouldShowRecipientChip({ kind: "arvamus", hasRecipient: false }), false);
+  // Work wins and background never show recipient chips.
+  assert.equal(shouldShowRecipientChip({ kind: "toovoit", hasRecipient: true }), false);
+  assert.equal(shouldShowRecipientChip({ kind: "kontekst", hasRecipient: true }), false);
+});
+
+check("isGenericWorkWinUrl matches the generic koda.ee work-wins listing only", () => {
+  assert.equal(isGenericWorkWinUrl("https://www.koda.ee/et/meie-moju/meie-toovoidud"), true);
+  assert.equal(isGenericWorkWinUrl("/et/meie-moju/meie-toovoidud"), true);
+  assert.equal(isGenericWorkWinUrl("https://www.koda.ee/et/uudised/mingi-konkreetne-artikkel"), false);
+  assert.equal(isGenericWorkWinUrl(null), false);
+  assert.equal(isGenericWorkWinUrl(undefined), false);
 });
 
 console.log(`\n[test] ${passed} passed, ${failed} failed`);

@@ -17,12 +17,15 @@ import {
 import { datasetLabel, outcomeLabel, sourceLabel } from "./labels";
 import {
   type Candidate,
+  assignKind,
   buildBadges,
   isAchievement,
   isKodaNews,
+  shouldShowRecipientChip,
 } from "./search-core";
 import { candidateInclude, toCandidate } from "./search";
 import { canonicalPublicValdkonnad } from "./topics";
+import { displayablePublicActivities } from "./activities";
 import { computePublicDate } from "./public-date";
 import { qualifiesAsLawTopicRelation } from "./related";
 
@@ -82,6 +85,8 @@ export type ContentDetail = {
   valdkonnad: { slug: string; name: string }[];
   tegevusalad: { slug: string; name: string }[];
   tapsustused: { slug: string; name: string }[];
+  /** Recipient/ministry display chip (opinions / opinion-related news only), or null. */
+  recipient: string | null;
   enrichment: AchievementEnrichmentView | null;
   evidence: {
     annualContext: EvidenceRow[];
@@ -163,8 +168,12 @@ export async function getContentDetail(id: string): Promise<ContentDetail | null
     // internal-only). The raw c.valdkonnad slugs are still used for the
     // related-content query below.
     valdkonnad: canonicalPublicValdkonnad(c.valdkonnad),
-    tegevusalad: c.tegevusalad,
+    // Never expose the internal cross-sector fallback activity as a public chip.
+    tegevusalad: displayablePublicActivities(c.tegevusalad),
     tapsustused: c.tapsustused,
+    recipient: shouldShowRecipientChip({ kind: assignKind(c), hasRecipient: !!c.recipientNormalized })
+      ? c.recipientNormalized ?? null
+      : null,
     enrichment: enr
       ? {
           outcome: outcomeLabel(enr.outcomeStatus) ?? enr.outcomeStatus,

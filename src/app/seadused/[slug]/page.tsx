@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getLawBySlug } from "@/lib/law-dictionary";
+import { isGenericWorkWinUrl } from "@/lib/content-display";
 import { search, type ResultCard } from "@/lib/search";
 
 export const dynamic = "force-dynamic";
@@ -25,11 +26,18 @@ function LawCard({ card }: { card: ResultCard }) {
         <Link href={`/sisu/${encodeURIComponent(card.detailId)}`}>{card.title}</Link>
       </h3>
       {card.summary && <p className="item-excerpt small">{card.summary}</p>}
+      {card.recipient && (
+        <div className="card-tags">
+          <span className="tag tag-recipient">{card.recipient}</span>
+        </div>
+      )}
       <p className="card-links">
         <Link href={`/sisu/${encodeURIComponent(card.detailId)}`} className="btn btn-secondary btn-small">
-          Vaata kokkuvõtet
+          Loe lähemalt
         </Link>
-        {card.url && (
+        {/* Töövõit/news keep a single internal CTA; never link the generic
+            koda.ee work-wins listing as an external source. */}
+        {card.url && !card.isAchievement && card.kind !== "uudis" && !isGenericWorkWinUrl(card.url) && (
           <a href={card.url} target="_blank" rel="noopener noreferrer" className="item-source-link">
             {card.sourceCtaLabel} →
           </a>
@@ -137,7 +145,7 @@ export default async function LawPage({ params }: { params: Promise<{ slug: stri
           cards={results.achievements}
         />
         <LawSection title="Koja seisukohad ja arvamused" cards={results.positions} />
-        <LawSection title="Uudised ja arengud" cards={results.news} />
+        <LawSection title="Uudised" cards={results.news} />
         <LawSection title="Teema ajalugu / taust" cards={results.context} />
       </div>
     </main>

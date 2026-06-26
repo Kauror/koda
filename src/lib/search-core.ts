@@ -183,6 +183,20 @@ export function assignKind(c: Candidate): ResultKind {
   return "arvamus";
 }
 
+/**
+ * Whether a recipient/ministry chip may be shown on this card. Recipient is
+ * content metadata for Koda opinions/seisukohad, not a property of every card:
+ * show it on opinion ("arvamus") cards and on news cards that actually carry
+ * recipient data (a news row only has a recipient when the source recorded which
+ * ministry the Koda pöördumine/seisukoht was addressed to — i.e. the news is
+ * about a Koda opinion). Never on töövõidud or annual/background (kontekst)
+ * cards, and never when there is no recipient.
+ */
+export function shouldShowRecipientChip(opts: { kind: ResultKind; hasRecipient: boolean }): boolean {
+  if (!opts.hasRecipient) return false;
+  return opts.kind === "arvamus" || opts.kind === "uudis";
+}
+
 /** Primary result-type token (for the `type` filter). */
 export function primaryType(c: Candidate): ResultType {
   if (isAchievement(c)) return "toovoit";

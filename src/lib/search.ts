@@ -32,6 +32,7 @@ import {
   passesActiveFilters,
   primaryType,
   scoreCandidate,
+  shouldShowRecipientChip,
 } from "./search-core";
 
 export { parseSearchParams };
@@ -258,6 +259,12 @@ export type ResultCard = {
   tegevusalad: { slug: string; name: string }[];
   /** Confirmed legal acts (õigusaktid) mentioned by this row; link to /seadused/[slug]. */
   laws: { slug: string; canonicalName: string }[];
+  /**
+   * Recipient/ministry display chip text (e.g. "Rahandusministeerium"), shown
+   * next to law chips on opinion / opinion-related news cards. Null when it must
+   * not be shown (töövõidud, background, generic news, or no recipient).
+   */
+  recipient: string | null;
   evidence: EvidenceHint;
   score: number;
 };
@@ -394,7 +401,9 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
       return breakdown.tegevusalaMatches === 0 && breakdown.sectorFallbackMatches > 0;
     });
 
-  const toCard = (s: { c: Candidate; total: number }): ResultCard => ({
+  const toCard = (s: { c: Candidate; total: number }): ResultCard => {
+    const kind = assignKind(s.c);
+    return {
     id: s.c.id,
     detailId: s.c.externalId ?? s.c.id,
     title: publicTitle(s.c),
@@ -410,7 +419,7 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
       reportYear: s.c.reportYear ?? null,
       classificationConfidence: s.c.classificationConfidence ?? null,
     }).text,
-    kind: assignKind(s.c),
+    kind,
     type: primaryType(s.c),
     isAchievement: isAchievement(s.c),
     outcomeStatus: s.c.outcomeStatus,
@@ -420,9 +429,13 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
     laws: extractLawMentions(s.c)
       .filter((m) => m.confidence !== "low")
       .map((m) => ({ slug: m.slug, canonicalName: m.canonicalName })),
+    recipient: shouldShowRecipientChip({ kind, hasRecipient: !!s.c.recipientNormalized })
+      ? s.c.recipientNormalized ?? null
+      : null,
     evidence: evidence.get(s.c.id) ?? { annualContext: false, relatedOpinions: 0 },
     score: s.total,
-  });
+    };
+  };
 
   return {
     query,

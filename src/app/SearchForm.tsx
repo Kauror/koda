@@ -3,16 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import type { FilterOptions } from "@/lib/search";
-
-function isGenericSectorOption(option: { slug: string; name: string }): boolean {
-  const text = `${option.slug} ${option.name}`.toLocaleLowerCase("et-EE");
-  return (
-    text.includes("kõik tegevusalad") ||
-    text.includes("koik-tegevusalad") ||
-    text.includes("valdkondadeülene") ||
-    text.includes("valdkondadeulene")
-  );
-}
+import { isInternalFallbackActivity } from "@/lib/activities";
 
 function ChipGroup({
   options,
@@ -51,18 +42,15 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
-  const tegevusalaOptions = options.tegevusalad.filter((option) => !isGenericSectorOption(option));
+  const tegevusalaOptions = options.tegevusalad.filter((option) => !isInternalFallbackActivity(option));
   const tegevusalaSlugs = new Set(tegevusalaOptions.map((option) => option.slug));
 
   const [tegevusala, setTegevusala] = useState<string[]>(
     listParam("tegevusala").filter((slug) => tegevusalaSlugs.has(slug))
   );
   const [valdkond, setValdkond] = useState<string[]>(listParam("valdkond"));
-  const [recipient, setRecipient] = useState<string[]>(listParam("recipient"));
   const [showSectorError, setShowSectorError] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(
-    listParam("valdkond").length > 0 || listParam("recipient").length > 0
-  );
+  const [showAdvanced, setShowAdvanced] = useState(listParam("valdkond").length > 0);
 
   const toggle = (list: string[], set: (v: string[]) => void) => (slug: string) =>
     set(list.includes(slug) ? list.filter((s) => s !== slug) : [...list, slug]);
@@ -81,11 +69,6 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
       label: nameOf(options.valdkonnad, s),
       remove: () => setValdkond((v) => v.filter((x) => x !== s)),
     })),
-    ...recipient.map((s) => ({
-      key: `r-${s}`,
-      label: nameOf(options.recipients, s),
-      remove: () => setRecipient((v) => v.filter((x) => x !== s)),
-    })),
   ];
 
   function submit(e: React.FormEvent) {
@@ -94,7 +77,7 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
     // the user may search by Teema / valdkond (or recipient) alone. Only block a
     // completely empty search, and reveal the advanced section so the topic
     // filter is visible when prompting.
-    const hasAnyFilter = tegevusala.length > 0 || valdkond.length > 0 || recipient.length > 0;
+    const hasAnyFilter = tegevusala.length > 0 || valdkond.length > 0;
     if (!hasAnyFilter) {
       setShowSectorError(true);
       setShowAdvanced(true);
@@ -103,7 +86,6 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
     const p = new URLSearchParams();
     if (tegevusala.length) p.set("tegevusala", tegevusala.join(","));
     if (valdkond.length) p.set("valdkond", valdkond.join(","));
-    if (recipient.length) p.set("recipient", recipient.join(","));
     router.push(`/tulemused?${p.toString()}`);
   }
 
@@ -169,22 +151,6 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
             </fieldset>
           )}
 
-          {options.recipients.length > 0 && (
-            <fieldset>
-              <legend>Adressaat / ministeerium</legend>
-              <p className="field-hint">
-                Kellele koda pöördus (valikuline, täpsem filter). Ei mõjuta teema määramist.
-              </p>
-              <ChipGroup
-                options={options.recipients}
-                selected={recipient}
-                onToggle={(slug) => {
-                  setShowSectorError(false);
-                  toggle(recipient, setRecipient)(slug);
-                }}
-              />
-            </fieldset>
-          )}
         </>
       )}
 
