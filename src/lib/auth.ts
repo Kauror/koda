@@ -38,6 +38,11 @@ export function verifyAdminPassword(email: string, password: string): boolean {
 }
 
 export async function isAdmin(): Promise<boolean> {
+  // No admin password configured ⇒ admin is disabled. verifyAdminPassword()
+  // already refuses login in this case; refuse here too so a session cookie
+  // forged from the public "dev-secret" HMAC fallback (see hash.ts) cannot grant
+  // access when ADMIN_PASSWORD is empty.
+  if (!process.env.ADMIN_PASSWORD) return false;
   const store = await cookies();
   const value = store.get(ADMIN_COOKIE)?.value;
   return !!value && value === adminCookieValue();

@@ -1,5 +1,8 @@
 /**
- * DB-backed verification of the structured v0.9.4 replacement import.
+ * DB-backed verification of the structured merge-ready replacement import.
+ *
+ * Invariant labels are derived from EXPECTED_ROWS (scripts/lib/merge-ready.ts)
+ * so the printed expectation can never drift from the value actually asserted.
  */
 import { loadEnv } from "./env";
 import { makePrismaClient, usingPglite } from "./lib/prisma-client";
@@ -80,19 +83,20 @@ async function main() {
     console.log(`  total: ${linkTotal}`);
 
     console.log("\n=== Invariants ===");
-    invariant("web rows = 3804", web === EXPECTED_ROWS.web, `${web}`);
-    invariant("opinion rows = 759", opinions === EXPECTED_ROWS.opinions, `${opinions}`);
-    invariant("toovoidud rows = 97", toovoidud === EXPECTED_ROWS.toovoidud, `${toovoidud}`);
-    invariant("total content rows = 4660", total === EXPECTED_ROWS.totalContentBeforeExclusions, `${total}`);
-    invariant("web public rows = 1530", publicByDataset.web === EXPECTED_ROWS.webPublic, `${publicByDataset.web}`);
-    invariant("opinion public rows = 432", publicByDataset.opinions === EXPECTED_ROWS.opinionsPublic, `${publicByDataset.opinions}`);
-    invariant("toovoidud public rows = 72", publicByDataset.toovoidud === EXPECTED_ROWS.toovoidudPublic, `${publicByDataset.toovoidud}`);
-    invariant("web support-only rows = 1951", supportOnly === EXPECTED_ROWS.webSupportOnly, `${supportOnly}`);
-    invariant("staging-only rows = 573", stagingOnly === EXPECTED_ROWS.webStagingOnly + EXPECTED_ROWS.opinionsStagingOnly, `${stagingOnly}`);
-    invariant("web do-not-import rows = 77", webDoNotImport === EXPECTED_ROWS.webDoNotImportPublic, `${webDoNotImport}`);
-    invariant("held toovoidud rows = 25", heldToovoidud === EXPECTED_ROWS.toovoidudHold, `${heldToovoidud}`);
-    invariant("toovoidud enrichment rows = 97", enrichment === EXPECTED_ROWS.toovoidud, `${enrichment}`);
-    invariant("achievement content rows = 97", achievements === EXPECTED_ROWS.toovoidud, `${achievements}`);
+    const stagingOnlyExpected = EXPECTED_ROWS.webStagingOnly + EXPECTED_ROWS.opinionsStagingOnly;
+    invariant(`web rows = ${EXPECTED_ROWS.web}`, web === EXPECTED_ROWS.web, `${web}`);
+    invariant(`opinion rows = ${EXPECTED_ROWS.opinions}`, opinions === EXPECTED_ROWS.opinions, `${opinions}`);
+    invariant(`toovoidud rows = ${EXPECTED_ROWS.toovoidud}`, toovoidud === EXPECTED_ROWS.toovoidud, `${toovoidud}`);
+    invariant(`total content rows = ${EXPECTED_ROWS.totalContentBeforeExclusions}`, total === EXPECTED_ROWS.totalContentBeforeExclusions, `${total}`);
+    invariant(`web public rows = ${EXPECTED_ROWS.webPublic}`, publicByDataset.web === EXPECTED_ROWS.webPublic, `${publicByDataset.web}`);
+    invariant(`opinion public rows = ${EXPECTED_ROWS.opinionsPublic}`, publicByDataset.opinions === EXPECTED_ROWS.opinionsPublic, `${publicByDataset.opinions}`);
+    invariant(`toovoidud public rows = ${EXPECTED_ROWS.toovoidudPublic}`, publicByDataset.toovoidud === EXPECTED_ROWS.toovoidudPublic, `${publicByDataset.toovoidud}`);
+    invariant(`web support-only rows = ${EXPECTED_ROWS.webSupportOnly}`, supportOnly === EXPECTED_ROWS.webSupportOnly, `${supportOnly}`);
+    invariant(`staging-only rows = ${stagingOnlyExpected}`, stagingOnly === stagingOnlyExpected, `${stagingOnly}`);
+    invariant(`web do-not-import rows = ${EXPECTED_ROWS.webDoNotImportPublic}`, webDoNotImport === EXPECTED_ROWS.webDoNotImportPublic, `${webDoNotImport}`);
+    invariant(`held toovoidud rows = ${EXPECTED_ROWS.toovoidudHold}`, heldToovoidud === EXPECTED_ROWS.toovoidudHold, `${heldToovoidud}`);
+    invariant(`toovoidud enrichment rows = ${EXPECTED_ROWS.toovoidud}`, enrichment === EXPECTED_ROWS.toovoidud, `${enrichment}`);
+    invariant(`achievement content rows = ${EXPECTED_ROWS.toovoidud}`, achievements === EXPECTED_ROWS.toovoidud, `${achievements}`);
     invariant("no public row needs human review", reviewAndPublic === 0, `${reviewAndPublic}`);
     invariant("no public row needs numeric review", numericReviewPublic === 0, `${numericReviewPublic}`);
     invariant("no support-only row is public", supportPublic === 0, `${supportPublic}`);

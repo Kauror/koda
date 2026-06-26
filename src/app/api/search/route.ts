@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { anonymizeIp, hashUserAgent } from "@/lib/hash";
-import { parseSearchParams, search } from "@/lib/search";
+import { parseSearchParams, search, type ResultCard } from "@/lib/search";
 
 export const dynamic = "force-dynamic";
+
+/** Internal ranking score must not be exposed to public API consumers. */
+function publicCard({ score, ...rest }: ResultCard): Omit<ResultCard, "score"> {
+  void score;
+  return rest;
+}
 
 /**
  * GET /api/search?q=maksud&valdkond=...&tegevusala=...&tapsustus=...&type=toovoit
@@ -39,5 +45,12 @@ export async function GET(req: NextRequest) {
   }
 
   const results = await search(query);
-  return NextResponse.json({ sessionId, ...results });
+  return NextResponse.json({
+    sessionId,
+    ...results,
+    achievements: results.achievements.map(publicCard),
+    positions: results.positions.map(publicCard),
+    news: results.news.map(publicCard),
+    context: results.context.map(publicCard),
+  });
 }

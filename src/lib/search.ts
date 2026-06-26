@@ -271,6 +271,11 @@ export type ResultCard = {
    */
   recipient: { slug: string; name: string } | null;
   evidence: EvidenceHint;
+  /**
+   * Internal ranking total. Used by internal audit tooling (audit-freshness) and
+   * server-side ordering only — it must NOT be exposed to public users. The
+   * public /api/search route strips this field before responding.
+   */
   score: number;
 };
 
@@ -340,7 +345,9 @@ function compareByDateThenScore(a: { c: Candidate; total: number }, b: { c: Cand
   const ad = verifiedDateMs(a.c);
   const bd = verifiedDateMs(b.c);
   if (ad !== bd) return bd - ad;
-  return b.total - a.total;
+  if (b.total !== a.total) return b.total - a.total;
+  // Stable final tie-break so order does not depend on the unordered DB fetch.
+  return (a.c.externalId ?? a.c.id).localeCompare(b.c.externalId ?? b.c.id);
 }
 
 export async function search(query: SearchQuery): Promise<SearchResults> {

@@ -502,7 +502,16 @@ export function compareRankedCandidates(a: RankedCandidate, b: RankedCandidate):
 
   const byScore = b.total - a.total;
   if (byScore !== 0) return byScore;
-  return dateMs(b.c) - dateMs(a.c);
+  const byDate = dateMs(b.c) - dateMs(a.c);
+  if (byDate !== 0) return byDate;
+  // Fully tied: break by a stable id so ordering does not depend on the
+  // (unordered) DB fetch order — keeps ranking deterministic across runs.
+  return stableKey(a.c).localeCompare(stableKey(b.c));
+}
+
+/** Stable per-row key for deterministic final tie-breaking. */
+function stableKey(c: Candidate): string {
+  return c.externalId ?? c.id;
 }
 
 // ---------------------------------------------------------------------------

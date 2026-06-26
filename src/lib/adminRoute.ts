@@ -44,10 +44,20 @@ function isLocalHost(host: string): boolean {
   return host.startsWith("localhost") || host.startsWith("127.0.0.1") || host.startsWith("[::1]");
 }
 
+/**
+ * A safe same-site redirect target: an absolute path with a single leading
+ * slash. Protocol-relative (`//evil.com`) and backslash (`/\evil.com`) forms are
+ * rejected — `new URL("//evil.com", base)` would otherwise resolve to an
+ * off-site origin (open redirect).
+ */
+function isSafeInternalPath(path: string): boolean {
+  return path.startsWith("/") && !path.startsWith("//") && !path.startsWith("/\\");
+}
+
 /** Redirect back to an explicit _redirect field, the referring page, or a fallback. */
 export function redirectBack(req: NextRequest, form: FormData, fallback: string): NextResponse {
   const explicit = form.get("_redirect");
-  if (typeof explicit === "string" && explicit.startsWith("/")) {
+  if (typeof explicit === "string" && isSafeInternalPath(explicit)) {
     return redirectTo(req, explicit);
   }
   const referer = req.headers.get("referer");
