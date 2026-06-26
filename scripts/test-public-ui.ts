@@ -12,6 +12,7 @@ import {
 } from "../src/lib/content-display";
 import { displayablePublicActivities, isInternalFallbackActivity } from "../src/lib/activities";
 import { shouldShowRecipientChip } from "../src/lib/search-core";
+import { buildLawChips } from "../src/lib/law-match";
 
 let passed = 0;
 let failed = 0;
@@ -268,9 +269,14 @@ check("result cards use one internal 'Loe lähemalt' CTA and recipient chips", (
   // Internal CTA renamed everywhere on the results page.
   assert.ok(source.includes("Loe lähemalt"));
   assert.ok(!source.includes("Vaata kokkuvõtet"));
-  // Recipient/ministry shows as a non-clickable chip next to law chips.
+  // Recipient/ministry shows as a clickable chip (filters by recipient) next to laws.
   assert.ok(source.includes("card.recipient"));
   assert.ok(source.includes("tag-recipient"));
+  assert.ok(source.includes("recipient=$"));
+  // Law chips link to /seadused when a page exists, else to a filtered search.
+  assert.ok(source.includes("law.hasPage"));
+  assert.ok(source.includes("/seadused/"));
+  assert.ok(source.includes("q=$"));
   // Töövõit and news cards drop the external source link (one CTA only); the
   // generic koda.ee work-wins listing is never linked.
   assert.ok(source.includes("isGenericWorkWinUrl"));
@@ -320,6 +326,30 @@ check("shouldShowRecipientChip: opinions/news with a recipient only", () => {
   // Work wins and background never show recipient chips.
   assert.equal(shouldShowRecipientChip({ kind: "toovoit", hasRecipient: true }), false);
   assert.equal(shouldShowRecipientChip({ kind: "kontekst", hasRecipient: true }), false);
+});
+
+check("buildLawChips uses confirmed tags (incl. non-dictionary) + dictionary mentions", () => {
+  // Confirmed tag for a law OUTSIDE the 20-law dictionary still becomes a chip,
+  // flagged hasPage:false (no /seadused page) — this is the missing-law fix.
+  const offDict = buildLawChips({
+    title: "Raamatupidamise seaduse ja audiitortegevuse seaduse muutmine",
+    oigusaktid: [{ slug: "raamatupidamise-seadus", name: "Raamatupidamise seadus" }],
+  });
+  assert.deepEqual(offDict, [
+    { slug: "raamatupidamise-seadus", canonicalName: "Raamatupidamise seadus", hasPage: false },
+  ]);
+
+  // Confirmed tag for a dictionary law → hasPage:true (links to /seadused).
+  const dict = buildLawChips({ title: "x", oigusaktid: [{ slug: "riigihangete-seadus", name: "Riigihangete seadus" }] });
+  assert.equal(dict.length, 1);
+  assert.equal(dict[0].hasPage, true);
+
+  // Dictionary text-mention with no confirmed tag is still surfaced.
+  const mention = buildLawChips({ title: "Pakendiseadus muutub taas", oigusaktid: [] });
+  assert.ok(mention.some((l) => l.slug === "pakendiseadus" && l.hasPage));
+
+  // No laws → empty.
+  assert.deepEqual(buildLawChips({ title: "Üldine uudis ettevõtjatele", oigusaktid: [] }), []);
 });
 
 check("isGenericWorkWinUrl matches the generic koda.ee work-wins listing only", () => {

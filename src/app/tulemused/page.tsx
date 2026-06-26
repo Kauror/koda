@@ -55,11 +55,22 @@ function Card({
       {!compact && (card.laws.length > 0 || card.recipient) && (
         <div className="card-tags">
           {card.laws.map((law) => (
-            <Link key={law.slug} href={`/seadused/${law.slug}`} className="tag tag-law">
+            <Link
+              key={law.slug}
+              href={law.hasPage ? `/seadused/${law.slug}` : `/tulemused?q=${encodeURIComponent(law.canonicalName)}`}
+              className="tag tag-law"
+            >
               {law.canonicalName}
             </Link>
           ))}
-          {card.recipient && <span className="tag tag-recipient">{card.recipient}</span>}
+          {card.recipient && (
+            <Link
+              href={`/tulemused?recipient=${encodeURIComponent(card.recipient.slug)}`}
+              className="tag tag-recipient"
+            >
+              {card.recipient.name}
+            </Link>
+          )}
         </div>
       )}
       <p className="card-links">
@@ -201,12 +212,14 @@ export default async function ResultsPage({
 
   const nameOf = (opts: { slug: string; name: string }[], slug: string) =>
     opts.find((option) => option.slug === slug)?.name ?? slug;
-  // Recipient/ministry is no longer a public global filter, so it is not echoed
-  // as an active-filter chip here (it still works as background search metadata).
+  // Recipient/ministry is not a search-form filter, but a recipient-filtered view
+  // (reached by clicking a recipient chip) is echoed here so the active filter is
+  // visible. The form still offers no recipient checkbox.
   const activeFilters = [
     ...query.valdkond.map((slug) => nameOf(options.valdkonnad, slug)),
     ...query.tegevusala.map((slug) => nameOf(options.tegevusalad, slug)),
     ...query.tapsustus.map((slug) => nameOf(options.tapsustused, slug)),
+    ...query.recipient.map((slug) => nameOf(options.recipients, slug)),
   ];
 
   const editParams = new URLSearchParams();

@@ -140,6 +140,32 @@ export function extractLawMentions(fields: LawTextFields): LawMention[] {
   return out;
 }
 
+/** A law chip for public display, with whether a dedicated /seadused page exists. */
+export type LawChip = { slug: string; canonicalName: string; hasPage: boolean };
+
+/**
+ * Law chips for a card / detail page. The authoritative ties are the row's
+ * CONFIRMED õigusakt tags (`oigusaktid`, from the importer's law_tags_confirmed),
+ * which include laws outside the 20-law dictionary (e.g. "Raamatupidamise
+ * seadus"). Dictionary text-mentions (medium+) are added as a supplement when not
+ * already covered. `hasPage` marks the laws that have a public /seadused/[slug]
+ * page; others are still shown and link to a filtered search instead.
+ */
+export function buildLawChips(
+  row: LawTextFields & { oigusaktid?: { slug: string; name: string }[] }
+): LawChip[] {
+  const bySlug = new Map<string, LawChip>();
+  for (const t of row.oigusaktid ?? []) {
+    if (!t.slug) continue;
+    bySlug.set(t.slug, { slug: t.slug, canonicalName: t.name, hasPage: getLawBySlug(t.slug) !== null });
+  }
+  for (const m of extractLawMentions(row)) {
+    if (m.confidence === "low" || bySlug.has(m.slug)) continue;
+    bySlug.set(m.slug, { slug: m.slug, canonicalName: m.canonicalName, hasPage: true });
+  }
+  return [...bySlug.values()];
+}
+
 /**
  * Detect the law a free-text query refers to. Weak (low-confidence) matches are
  * ignored so broad/topical words fall back to normal keyword search. Returns the

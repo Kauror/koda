@@ -147,19 +147,46 @@ export default async function ContentDetailPage({
             {!item.displayDate && item.reportYear && <span className="badge-date">{item.reportYear}</span>}
           </p>
           <h1>{item.title}</h1>
-          {(item.valdkonnad.length > 0 || item.tegevusalad.length > 0 || item.recipient) && (
+          {(item.valdkonnad.length > 0 ||
+            item.tegevusalad.length > 0 ||
+            item.laws.length > 0 ||
+            item.recipient) && (
             <div className="filter-summary">
               {item.valdkonnad.map((t) => (
-                <span key={`v-${t.slug}`} className="tag accent">
+                <Link
+                  key={`v-${t.slug}`}
+                  href={`/tulemused?valdkond=${encodeURIComponent(t.slug)}`}
+                  className="tag accent"
+                >
                   {t.name}
-                </span>
+                </Link>
               ))}
               {item.tegevusalad.map((t) => (
-                <span key={`s-${t.slug}`} className="tag">
+                <Link
+                  key={`s-${t.slug}`}
+                  href={`/tulemused?tegevusala=${encodeURIComponent(t.slug)}`}
+                  className="tag"
+                >
                   {t.name}
-                </span>
+                </Link>
               ))}
-              {item.recipient && <span className="tag tag-recipient">{item.recipient}</span>}
+              {item.laws.map((law) => (
+                <Link
+                  key={`l-${law.slug}`}
+                  href={law.hasPage ? `/seadused/${law.slug}` : `/tulemused?q=${encodeURIComponent(law.canonicalName)}`}
+                  className="tag tag-law"
+                >
+                  {law.canonicalName}
+                </Link>
+              ))}
+              {item.recipient && (
+                <Link
+                  href={`/tulemused?recipient=${encodeURIComponent(item.recipient.slug)}`}
+                  className="tag tag-recipient"
+                >
+                  {item.recipient.name}
+                </Link>
+              )}
             </div>
           )}
         </div>

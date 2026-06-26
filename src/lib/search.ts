@@ -7,7 +7,7 @@
 import { Prisma, TagType } from "@prisma/client";
 import { prisma } from "./db";
 import { isPublicSearchEligible } from "./eligibility";
-import { detectLaw, extractLawMentions, lawMentionForSlug } from "./law-match";
+import { buildLawChips, detectLaw, lawMentionForSlug, type LawChip } from "./law-match";
 import { slugify } from "./slug";
 import { firstTopic } from "./taxonomy-split";
 import { PUBLIC_TOPIC_FILTERS, canonicalTopicId } from "./topics";
@@ -257,14 +257,19 @@ export type ResultCard = {
   badges: string[];
   valdkonnad: { slug: string; name: string }[];
   tegevusalad: { slug: string; name: string }[];
-  /** Confirmed legal acts (õigusaktid) mentioned by this row; link to /seadused/[slug]. */
-  laws: { slug: string; canonicalName: string }[];
   /**
-   * Recipient/ministry display chip text (e.g. "Rahandusministeerium"), shown
-   * next to law chips on opinion / opinion-related news cards. Null when it must
-   * not be shown (töövõidud, background, generic news, or no recipient).
+   * Laws this row ties to: confirmed õigusakt tags (authoritative) merged with
+   * dictionary text-mentions. `hasPage` ⇒ a /seadused/[slug] page exists; others
+   * link to a filtered search. See buildLawChips.
    */
-  recipient: string | null;
+  laws: LawChip[];
+  /**
+   * Recipient/ministry chip (opinions / opinion-related news only): `name` is the
+   * display label (e.g. "Rahandusministeerium"), `slug` is the recipient filter
+   * group for the "same recipient" search link. Null when it must not be shown
+   * (töövõidud, background, generic news, or no recipient).
+   */
+  recipient: { slug: string; name: string } | null;
   evidence: EvidenceHint;
   score: number;
 };
@@ -426,12 +431,11 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
     badges: buildBadges(s.c),
     valdkonnad: s.c.valdkonnad,
     tegevusalad: s.c.tegevusalad,
-    laws: extractLawMentions(s.c)
-      .filter((m) => m.confidence !== "low")
-      .map((m) => ({ slug: m.slug, canonicalName: m.canonicalName })),
-    recipient: shouldShowRecipientChip({ kind, hasRecipient: !!s.c.recipientNormalized })
-      ? s.c.recipientNormalized ?? null
-      : null,
+    laws: buildLawChips(s.c),
+    recipient:
+      shouldShowRecipientChip({ kind, hasRecipient: !!s.c.recipientNormalized }) && s.c.recipientNormalized
+        ? { slug: s.c.recipientFilterGroup ?? slugify(s.c.recipientNormalized), name: s.c.recipientNormalized }
+        : null,
     evidence: evidence.get(s.c.id) ?? { annualContext: false, relatedOpinions: 0 },
     score: s.total,
     };

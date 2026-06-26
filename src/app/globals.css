@@ -536,10 +536,27 @@ a.tag.tag-law:hover {
   color: #fff;
 }
 
-/* Non-clickable recipient/ministry display chip (opinions / opinion-related
-   news only). Same blue family as law chips, but not a link. */
+/* Recipient/ministry chip (opinions / opinion-related news only). Same blue
+   family as law chips; links to a "same recipient" filtered search. */
 .tag.tag-recipient {
   background: var(--color-primary-soft);
+  border-color: var(--color-primary);
+  color: var(--color-primary-dark);
+  text-decoration: none;
+}
+
+a.tag.tag-recipient:hover {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+/* Clickable topic/sector chips (detail page) link to a filtered search. */
+a.tag {
+  text-decoration: none;
+  cursor: pointer;
+}
+
+a.tag:hover {
   border-color: var(--color-primary);
   color: var(--color-primary-dark);
 }

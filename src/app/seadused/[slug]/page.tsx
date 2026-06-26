@@ -28,7 +28,12 @@ function LawCard({ card }: { card: ResultCard }) {
       {card.summary && <p className="item-excerpt small">{card.summary}</p>}
       {card.recipient && (
         <div className="card-tags">
-          <span className="tag tag-recipient">{card.recipient}</span>
+          <Link
+            href={`/tulemused?recipient=${encodeURIComponent(card.recipient.slug)}`}
+            className="tag tag-recipient"
+          >
+            {card.recipient.name}
+          </Link>
         </div>
       )}
       <p className="card-links">

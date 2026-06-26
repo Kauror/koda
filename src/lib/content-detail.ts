@@ -26,6 +26,8 @@ import {
 import { candidateInclude, toCandidate } from "./search";
 import { canonicalPublicValdkonnad } from "./topics";
 import { displayablePublicActivities } from "./activities";
+import { buildLawChips, type LawChip } from "./law-match";
+import { slugify } from "./slug";
 import { computePublicDate } from "./public-date";
 import { qualifiesAsLawTopicRelation } from "./related";
 
@@ -85,8 +87,10 @@ export type ContentDetail = {
   valdkonnad: { slug: string; name: string }[];
   tegevusalad: { slug: string; name: string }[];
   tapsustused: { slug: string; name: string }[];
-  /** Recipient/ministry display chip (opinions / opinion-related news only), or null. */
-  recipient: string | null;
+  /** Laws this row ties to (confirmed õigusakt tags + dictionary mentions). */
+  laws: LawChip[];
+  /** Recipient/ministry chip (opinions / opinion-related news only), or null. */
+  recipient: { slug: string; name: string } | null;
   enrichment: AchievementEnrichmentView | null;
   evidence: {
     annualContext: EvidenceRow[];
@@ -171,9 +175,11 @@ export async function getContentDetail(id: string): Promise<ContentDetail | null
     // Never expose the internal cross-sector fallback activity as a public chip.
     tegevusalad: displayablePublicActivities(c.tegevusalad),
     tapsustused: c.tapsustused,
-    recipient: shouldShowRecipientChip({ kind: assignKind(c), hasRecipient: !!c.recipientNormalized })
-      ? c.recipientNormalized ?? null
-      : null,
+    laws: buildLawChips(c),
+    recipient:
+      shouldShowRecipientChip({ kind: assignKind(c), hasRecipient: !!c.recipientNormalized }) && c.recipientNormalized
+        ? { slug: c.recipientFilterGroup ?? slugify(c.recipientNormalized), name: c.recipientNormalized }
+        : null,
     enrichment: enr
       ? {
           outcome: outcomeLabel(enr.outcomeStatus) ?? enr.outcomeStatus,
