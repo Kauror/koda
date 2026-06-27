@@ -62,6 +62,9 @@ export type RecognizedLaw = {
 export const candidateInclude = { tags: { include: { tag: true } } } satisfies Prisma.ContentItemInclude;
 type ContentWithTags = Prisma.ContentItemGetPayload<{ include: typeof candidateInclude }>;
 
+const CANDIDATE_CACHE_TTL_MS = 5 * 60 * 1000;
+let candidateCache: { expiresAt: number; candidates: Candidate[] } | null = null;
+
 export function toCandidate(row: ContentWithTags): Candidate {
   const byType = (t: TagType) =>
     row.tags.filter((ct) => ct.tag.type === t).map((ct) => ({ slug: ct.tag.slug, name: ct.tag.name }));
@@ -116,6 +119,9 @@ export function toCandidate(row: ContentWithTags): Candidate {
 
 /** All rows that pass the public eligibility gate (defence-in-depth in TS). */
 export async function fetchEligibleCandidates(): Promise<Candidate[]> {
+  const now = Date.now();
+  if (candidateCache && candidateCache.expiresAt > now) return candidateCache.candidates;
+
   // Broad pre-filter; the TS gate makes the final decision. We do NOT add
   // `NOT: { adminVisibilityOverride: false }` here: on a nullable boolean that
   // SQL predicate also drops every row where the override IS NULL (almost all
@@ -124,7 +130,9 @@ export async function fetchEligibleCandidates(): Promise<Candidate[]> {
     where: { OR: [{ isPublic: true }, { adminVisibilityOverride: true }] },
     include: candidateInclude,
   });
-  return rows.filter((r) => isPublicSearchEligible(r)).map(toCandidate);
+  const candidates = rows.filter((r) => isPublicSearchEligible(r)).map(toCandidate);
+  candidateCache = { expiresAt: now + CANDIDATE_CACHE_TTL_MS, candidates };
+  return candidates;
 }
 
 // ---------------------------------------------------------------------------
