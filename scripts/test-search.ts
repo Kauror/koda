@@ -128,8 +128,8 @@ check("public opinion rows pass under explicit v0.9.4 gates", () =>
   assert.equal(isPublicSearchEligible(elig({ sourceDataset: "opinions" })), true));
 check("support-only rows are not public", () =>
   assert.equal(isPublicSearchEligible(elig({ importAction: "import_support_only" })), false));
-check("numeric-review rows are not public", () =>
-  assert.equal(isPublicSearchEligible(elig({ numericClaimNeedsReview: true })), false));
+check("v1: numeric-review rows stay public when import-approved (producer diagnostic only)", () =>
+  assert.equal(isPublicSearchEligible(elig({ numericClaimNeedsReview: true })), true));
 check("admin hidden override hides a row", () =>
   assert.equal(isPublicSearchEligible(elig({ adminVisibilityOverride: false })), false));
 check("admin visible override surfaces a supporting opinion", () =>

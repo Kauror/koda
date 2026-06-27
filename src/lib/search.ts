@@ -105,7 +105,9 @@ export function toCandidate(row: ContentWithTags): Candidate {
     year: row.year,
     reportYear: row.reportYear,
     classificationConfidence: row.classificationConfidence,
-    topicGroupCandidate: row.topicGroupCandidate,
+    displayDatePrecision: row.displayDatePrecision,
+    dateConfidence: row.dateConfidence,
+    topicGroupCandidate: row.canonicalPolicyThreadId ?? row.topicGroupCandidate,
     recipientFilterGroup: row.recipientFilterGroup,
     recipientNormalized: row.recipientNormalized,
   };
@@ -336,6 +338,8 @@ function verifiedDateMs(c: Candidate): number {
       year: c.year ?? null,
       reportYear: c.reportYear ?? null,
       classificationConfidence: c.classificationConfidence ?? null,
+      displayDatePrecision: c.displayDatePrecision ?? null,
+      dateConfidence: c.dateConfidence ?? null,
     }).rankingDate?.getTime() ?? 0
   );
 }
@@ -430,6 +434,8 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
       year: s.c.year ?? null,
       reportYear: s.c.reportYear ?? null,
       classificationConfidence: s.c.classificationConfidence ?? null,
+      displayDatePrecision: s.c.displayDatePrecision ?? null,
+      dateConfidence: s.c.dateConfidence ?? null,
     }).text,
     kind,
     type: primaryType(s.c),

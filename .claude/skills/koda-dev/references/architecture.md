@@ -47,7 +47,7 @@ Manual, allowlisted (`www.koda.ee` /et/ only), staging-only — never publishes,
 
 ## Importer (`scripts/`)
 
-- `scripts/lib/merge-ready.ts` — reads the v0.9.4 workbooks (`web_content_v0_9`, `opinions_v0_9`, `toovoidud_v0_9`) + link sheets; `stage*Row` mappers; `computeVisibility` (the importer's gate); `makeTaxonomy` (uses `splitTopics`); `splitMulti` (`;|` only, for non-topic multi-values like situation/law tags).
+- `scripts/lib/merge-ready.ts` — reads the v1 app-import sheets (`opinions_app_import`, `web_app_import`, `toovoidud_app_import`) + `koda_content_links_v1.xlsx` link sheets via alias helpers (`firstPresent`/`requiredField`/`parseBoolFlexible`/`parseDateFlexible`); `stage*Row` mappers; `computeVisibility` (the importer's gate = import flag + summary present); `makeTopicTags`/`makeActivityTags` (use `splitTopics`); `splitMulti` (`;|` only, for non-topic multi-values like situation/law tags).
 - `scripts/import-merge-ready.ts` — `npm run import:merge-ready [-- --dry-run|--force]`; backup → clear content tables → import → write `data/import/reports/import-report.{json,md}`. Materializes `Tag`/`ContentTag` via `slugify(name)` (same `slugify` the runtime uses, so `activityPrimarySlug` matches tag slugs).
 - `scripts/lib/prisma-client.ts` — CLI Prisma client; `KODA_DB_DRIVER=pglite` path for local, server-less DB runs.
 - `scripts/db-setup-pglite.ts` — apply all `prisma/migrations/*/migration.sql` to a fresh PGlite DB (migration sanity check).

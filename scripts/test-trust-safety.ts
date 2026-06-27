@@ -89,6 +89,45 @@ check("A — past year-end placeholder (31.12.2019) degrades to year '2019'", ()
   assert.equal(pd.precision, "year");
 });
 
+// === A(v1): producer-supplied display_date_precision is authoritative ===
+check("A(v1) — year precision renders the year only, never a day (börsi soolise tasakaalu töövõit)", () => {
+  const pd = computePublicDate(
+    { date: d("2026-01-01"), displayDatePrecision: "year", dateConfidence: "medium" },
+    NOW
+  );
+  assert.equal(pd.precision, "year");
+  assert.equal(pd.text, "2026");
+  assert.equal(pd.iso, null, "no precise ISO day for year precision");
+  assert.equal(pd.rankingDate, null, "year precision earns no recency boost");
+});
+check("A(v1) — day precision + high confidence keeps the full day (panditulumaks 19.06.2017)", () => {
+  const pd = computePublicDate(
+    { date: d("2017-06-19"), displayDatePrecision: "day", dateConfidence: "high" },
+    NOW
+  );
+  assert.equal(pd.precision, "day");
+  assert.equal(pd.iso, "2017-06-19");
+  assert.ok(pd.rankingDate instanceof Date);
+});
+check("A(v1) — day precision but low confidence degrades to the year (no precise day)", () => {
+  const pd = computePublicDate(
+    { date: d("2021-04-01"), displayDatePrecision: "day", dateConfidence: "low" },
+    NOW
+  );
+  assert.equal(pd.precision, "year");
+  assert.equal(pd.text, "2021");
+  assert.equal(pd.rankingDate, null);
+});
+check("A(v1) — month precision renders month + year, never a day", () => {
+  const pd = computePublicDate(
+    { date: d("2024-03-10"), displayDatePrecision: "month", dateConfidence: "high" },
+    NOW
+  );
+  assert.equal(pd.precision, "month");
+  assert.equal(pd.iso, null);
+  assert.ok((pd.text ?? "").includes("2024"));
+});
+
 // =========================================================== B: ranking + recency
 check("B — a placeholder/import date does not buy a recency boost over a verified recent date", () => {
   const placeholder = cand({ date: d("2026-06-24") }); // import placeholder

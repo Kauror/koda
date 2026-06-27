@@ -46,7 +46,9 @@ export function isPublicSearchEligible(item: EligibilityFields): boolean {
   if (!item.isPublic) return false;
   if (item.isHidden) return false; // hidden / supporting-only
   if (item.needsHumanReview) return false;
-  if (item.numericClaimNeedsReview) return false;
+  // numeric_claim_needs_review is NOT a v1 publish blocker: it is a producer-side
+  // diagnostic that the layer import flag already cleared (see merge-ready
+  // computeVisibility). isPublic is authoritative for the numeric dimension.
   if (item.publicDisplayAllowed === false) return false;
   if (item.importStatus === "do_not_import_yet") return false;
   if (item.importAction === "import_support_only") return false;
@@ -82,7 +84,7 @@ export type EvidenceFields = {
 export function isEvidenceEligible(item: EvidenceFields): boolean {
   if (item.adminVisibilityOverride === false) return false;
   if (item.needsHumanReview) return false;
-  if (item.numericClaimNeedsReview) return false;
+  // numeric_claim_needs_review is a producer diagnostic, not a v1 evidence gate.
   if (item.extractionQuality === "failed" || item.extractionQuality === "weak") return false;
   return true;
 }

@@ -95,32 +95,52 @@ npm run dev                 # http://localhost:3000
 | `npm run prisma:migrate` | `prisma migrate dev` (arendus)                           |
 | `npm run prisma:deploy`  | `prisma migrate deploy` (server)                         |
 
-## Merge-ready import (v1 andmemudel)
+## App-import (v1 andmemudel)
 
-Rakenduse v1 sisu **tõeallikas** on neli puhastatud merge-ready Exceli faili
-(`data/import/`), mitte crawler ega seed. Vt täielikku juhendit:
+Rakenduse v1 sisu **tõeallikas** on **v1 app-import pakett** (`data/import/`),
+mitte crawler ega seed. Vt täielikku juhendit:
 [`docs/import-merge-ready.md`](docs/import-merge-ready.md).
+
+v1 failid ja impordilehed (ainult need):
+
+| Fail | Impordileht | Väljajäetud/ülevaatuse leht | Read |
+| --- | --- | --- | ---: |
+| `koda_opinions_v1.0.xlsx` | `opinions_app_import` | `excluded_rows` | 750 |
+| `koda_web_content_v1.xlsx` | `web_app_import` | `web_excluded_review` | 1131 |
+| `koda_toovoidud_v1.xlsx` | `toovoidud_app_import` | `toovoidud_excluded_review` | 90 |
+| `koda_content_links_v1.xlsx` | `public_related_links` (+ valideerimise lehed) | — | — |
+| `koda_taxonomy_rules_v1_0.txt` | — (reegistik, ei impordita) | — | — |
 
 ```bash
 # Failid kausta data/import/ (vt data/import/README.md), siis:
 npm run import:validate        # valideeri (ilma andmebaasita)
-npm run prisma:deploy          # rakenda skeem (sh merge-ready migratsioonid)
-npm run import:merge-ready     # impordi (idempotentne)
+npm run prisma:deploy          # rakenda skeem (sh v1 migratsioon)
+npm run import:merge-ready     # impordi (asendav import)
 npm run import:verify-db       # kontrolli andmebaasi invariandid
 ```
 
-- Sisuread: web **3937** + arvamused **759** + aastaaruanded **237** = **4933**
-  (enne avalikkuse väljajätte). Töövõidud-rikastusfail on **ainult rikastus** ja
-  **ei loo** uusi sisuridu (kui import tekitab 5009 rida, on see vale).
-- 76 kanoonilist töövõidu-rida rikastatakse standalone failist pealkirjavõtme
-  alusel; rikastus läheb `AchievementEnrichment` tabelisse.
+- Imporditavad sisuread: web **1131** + arvamused **750** + töövõidud **90** =
+  **1971**. Väljajäetud/ülevaatuse read **ei impordita** kunagi avaliku sisuna
+  (web 1, arvamused 9, töövõidud 7).
+- Avaliku kuvamise värav v1-s: rida on impordilehel, kihipõhine impordilipp on
+  TRUE (`final_app_import_eligible` / `final_web_import_candidate` /
+  `work_win_import_candidate`) ja avalik kokkuvõte on olemas.
+- Avalikud "Veel samal teemal" / tõenduslingid tulevad **ainult**
+  `koda_content_links_v1.xlsx` lehelt `public_related_links` (→
+  `ContentEvidenceLink`). Kandidaat-/ülevaatuse-/blokeeritud lingid ei lähe
+  avalikku kuvamisse.
+- Töövõidud salvestavad struktuursed väljad (`whatChangedEt`, `kodaRoleEt`,
+  `businessValueEt`, `beforeAfterEt`) ning kuupäeva täpsuse
+  (`displayDatePrecision`/`dateConfidence`/`dateBasis`); avalik kuupäev austab
+  täpsust (aasta-tasemel kindlust ei kuvata päeva täpsusena).
 - QA raport: `data/import/reports/import-report.{json,md}`.
-- Import on **idempotentne** (upsert `externalId` järgi); teine jooks annab
-  `created=0 updated=4933` ilma ridade paljunemiseta.
+- Import on **asendav** (vana imporditud sisu varundatakse `data/import/backups/`
+  ja kustutatakse enne uut paketti); ära jooksuta seda andmebaasil, kus on
+  admin-muudatusi, ilma neid taastamata.
 - Lokaalseks verifitseerimiseks ilma Postgresita on PGlite-haru
   (`KODA_DB_DRIVER=pglite`) — vt [`docs/import-merge-ready.md`](docs/import-merge-ready.md).
-- Allikapõhised väljad kirjutatakse importimisel üle; admin-väljad
-  (`manualWeight`, AI, `admin*Override`) säilivad. Vt impordilepingut dokumendis.
+- **Legacy:** vanad v0.9.x töövihikud ja `*_merge_ready.xlsx` failid **ei ole**
+  enam tõeallikas; crawler jääb legacy/mitteproduktsiooniliseks.
 - AI jääb väljalülitatuks ja pole impordiks vajalik.
 
 ## Otsing ja järjestus (v1)

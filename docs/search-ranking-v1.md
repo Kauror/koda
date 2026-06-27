@@ -29,13 +29,18 @@ Otherwise (default), **all** must hold:
 - `isPublic === true`
 - `isHidden !== true`
 - `needsHumanReview !== true`
-- `importStatus !== "do_not_import_yet"`
-- `publicDisplayStatus` is not `admin_only` and not `hide_or_review`
-- `sourceDataset !== "opinions"` (opinions are supporting evidence by default)
+- `publicDisplayAllowed !== false`
 
-This yields **803** eligible rows (76 achievements, 695 public web, 108 annual;
-0 opinions) — matching the import's `isPublic` count. The gate is redundant with
-the import-time `isPublic` flag on purpose (defence in depth).
+`numeric_claim_needs_review` is **not** a gate in v1 (it is a producer
+diagnostic the layer import flag already cleared). The legacy v0.9.x
+`import_action` / `publicDisplayStatus` string checks remain only as harmless
+defence-in-depth — the v1 package never produces those blocking values.
+
+With the **v1** package this yields **1971** eligible rows (web 1131, opinions
+750, töövõidud 90) — matching the import's `isPublic` count. Unlike v0.9.x,
+**opinions are a first-class public layer in v1** (the "Koja seisukohad" group),
+not supporting-only. The gate is redundant with the import-time `isPublic` flag
+on purpose (defence in depth).
 
 ## Taxonomy mapping
 
@@ -166,17 +171,25 @@ hints (no N+1):
 
 - `ContentEvidenceLink` (annual context) → "Aastaaruande kontekst olemas".
 - Hidden opinion rows sharing a `valdkond` tag (capped at 3) → "Lisaks N seotud
-  allikat".
+  allikat" (mostly a no-op in v1, where opinions are public, not hidden).
 
-Full evidence detail (listing the actual linked rows on a detail/expandable
-view) is deferred — only counts/flags are shown for now.
+## Related content ("Veel samal teemal") in v1
 
-## Why opinions are supporting by default
+Related content on the detail page comes from **imported public related links**
+(`koda_content_links_v1.xlsx` → `public_related_links` → `ContentEvidenceLink`),
+ordered by the curated `sortPriority`, **not** from broad topic overlap. Each
+target layer maps to a relation type (`related_opinion` / `related_news` /
+`related_work_win`) and carries the producer label ("Koja seisukoht" / "Selgitav
+uudis" / "Seotud töövõit"). The conservative law+topic+text fallback in
+`related.ts` remains only as a secondary, strict signal.
 
-The 759 opinion-file rows are mostly background/legal evidence and were imported
-as `import_hidden` / `supporting_source` (0 public). Surfacing them all would
-flood the result list, so they only appear as evidence for a public result —
-unless an admin sets `adminVisibilityOverride = true` on a specific one.
+## Opinions as a public layer (v1)
+
+In v1 the **750** opinion rows are a first-class public layer (the "Koja
+seisukohad" group), surfaced as the `arvamus` result group. Töövõidud keep the
+strongest source boost so they are not outranked by generic newer web/news, and
+recency only uses verified dates (the public-date gate), so placeholder/low-
+confidence dates never buy a recency boost.
 
 ## Deferred to future orders
 

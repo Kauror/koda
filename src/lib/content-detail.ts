@@ -75,6 +75,11 @@ export type ContentDetail = {
   reportYear: number | null;
   isAchievement: boolean;
   isNews: boolean;
+  // Töövõit value fields (v1). Rendered on the achievement detail page.
+  whatChanged: string | null;
+  kodaRole: string | null;
+  businessValue: string | null;
+  beforeAfter: string | null;
   badges: string[];
   sourceLabel: string;
   datasetLabel: string;
@@ -110,6 +115,8 @@ function toEvidenceRow(c: Candidate, isPublic: boolean): EvidenceRow {
     year: c.year ?? null,
     reportYear: c.reportYear ?? null,
     classificationConfidence: c.classificationConfidence ?? null,
+    displayDatePrecision: c.displayDatePrecision ?? null,
+    dateConfidence: c.dateConfidence ?? null,
   });
   return {
     id: c.id,
@@ -154,11 +161,17 @@ export async function getContentDetail(id: string): Promise<ContentDetail | null
       year: item.year,
       reportYear: item.reportYear,
       classificationConfidence: item.classificationConfidence,
+      displayDatePrecision: item.displayDatePrecision,
+      dateConfidence: item.dateConfidence,
     }).text,
     year: item.year,
     reportYear: item.reportYear,
     isAchievement: isAchievement(c),
     isNews: isKodaNews(c),
+    whatChanged: item.whatChangedEt,
+    kodaRole: item.kodaRoleEt ?? c.kodaPosition,
+    businessValue: item.businessValueEt ?? c.companyRelevance,
+    beforeAfter: item.beforeAfterEt,
     badges: buildBadges(c),
     sourceLabel: sourceLabel(c.sourceLayer, c.sourceTypeDetail),
     datasetLabel: datasetLabel(c.sourceDataset),
@@ -223,20 +236,26 @@ export async function getEvidenceForContent(parent: Candidate): Promise<ContentD
   // they are trustworthy related content (unlike a broad topic query).
   const links = await prisma.contentEvidenceLink.findMany({
     where: { OR: [{ fromContentId: parent.id }, { toContentId: parent.id }] },
-    select: { fromContentId: true, toContentId: true, linkType: true },
+    select: { fromContentId: true, toContentId: true, linkType: true, sortPriority: true },
   });
   const annualIds = new Set<string>();
   const duplicateIds = new Set<string>();
   const linkedRelatedIds = new Set<string>();
+  // Order related ids by the v1 link sort_priority (higher first), falling back
+  // to DB order. public_related_links carries a curated sort_priority (10–40).
+  const priorityOf = new Map<string, number>();
   for (const link of links) {
     const other = link.fromContentId === parent.id ? link.toContentId : link.fromContentId;
     if (other === parent.id) continue;
     if (link.linkType === "annual_context") annualIds.add(other);
     else if (link.linkType === "duplicate_canonical") duplicateIds.add(other);
-    // supporting_opinion / topic_history / annual_context / duplicate_canonical
-    // are all explicit relations worth surfacing as "same theme".
+    // supporting_opinion / topic_history / annual_context / duplicate_canonical and
+    // the v1 cross-layer relation types (related_opinion/related_news/
+    // related_work_win/...) are all explicit curated relations worth surfacing.
     linkedRelatedIds.add(other);
+    priorityOf.set(other, Math.max(priorityOf.get(other) ?? -1, link.sortPriority ?? 0));
   }
+  const linkedRelatedOrdered = [...linkedRelatedIds].sort((a, b) => (priorityOf.get(b) ?? 0) - (priorityOf.get(a) ?? 0));
 
   // (2) Same policy thread (canonical_policy_thread_id) — a deliberate cluster.
   const threadId = parent.topicGroupCandidate?.trim() || null;
@@ -315,7 +334,7 @@ export async function getEvidenceForContent(parent: Candidate): Promise<ContentD
     seen.add(entry.c.id);
     ordered.push(entry);
   };
-  for (const id of linkedRelatedIds) pushUnique(rowById.get(id)); // (1) curated/cluster
+  for (const id of linkedRelatedOrdered) pushUnique(rowById.get(id)); // (1) curated/cluster (sort_priority)
   for (const id of threadIds) pushUnique(rowById.get(id)); // (2) policy thread
   for (const entry of lawTopicMatches) pushUnique(entry); // (3) law + topic + text
   const topicHistory = ordered.slice(0, TOPIC_HISTORY_CAP).map((x) => toEvidenceRow(x.c, x.eligible));

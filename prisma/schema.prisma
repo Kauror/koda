@@ -57,6 +57,15 @@ enum EvidenceLinkType {
   topic_history // public result -> earlier item on the same topic
   duplicate_canonical // duplicate row -> its canonical row
   achievement_enrichment // achievement row -> its enrichment record source
+  // v1 cross-layer relation types (koda_content_links_v1.xlsx public_related_links).
+  same_policy_thread // two layers in the same canonical policy thread
+  public_explanation // opinion/work-win -> news that publicly explains it
+  achieved_result // opinion/news -> the resulting work-win
+  source_evidence // content -> its source/evidence row
+  related_work_win // related töövõit ("Seotud töövõit")
+  related_opinion // related Koda opinion ("Koja seisukoht")
+  related_news // related explanatory news ("Selgitav uudis")
+  background_context // general related background
 }
 
 model ContentItem {
@@ -147,6 +156,37 @@ model ContentItem {
   canonicalContentId String? // canonical_content_id (external id of the canonical row)
   duplicateStatus    String? // unique | possible_duplicate | ...
 
+  // --- v1 app-import fields (koda_*_v1 slim import sheets) ---
+  // Web visibility / ranking (null for opinions/töövõidud).
+  contentRoleFinal              String? // content_role_final / content_role
+  publicActivityFilterTags      String? // public_activity_filter_tags (search/ranking; cross-sector kept)
+  publicActivityDisplayTags     String? // public_activity_display_tags (UI; cross-sector stripped)
+  publicSectorPageAllowed       String? // TRUE | LIMITED | FALSE
+  sectorResultEligibility       String? // sector_result_eligibility
+  generalSearchEligibility      String? // general_search_eligibility
+  recommendedAppVisibilityFinal String? // recommended_app_visibility_final
+  publicSectorRankScore         Int? // public_sector_rank_score
+  generalSearchRankScore        Int? // general_search_rank_score
+
+  // Date safety (töövõidud carry precision/confidence/basis; web carries confidence).
+  displayDatePrecision String? // day | month | year
+  dateConfidence       String? // high | medium | low | unverified
+  dateBasis            String? // machine reason for the date
+  effectiveDate        DateTime? // legal effective date — NOT the achievement date
+  deadlineDate         DateTime? // future compliance/deadline date
+
+  // Töövõidu value fields (rendered on the achievement detail page).
+  whatChangedEt       String? // what_changed_ee
+  kodaRoleEt          String? // koda_role_ee
+  businessValueEt     String? // business_value_ee
+  beforeAfterEt       String? // before_after_ee
+  workWinTypePrimary  String? // work_win_type_primary
+  workWinTypeSecondary String? // work_win_type_secondary
+
+  // Policy-thread identity (preserved so one thread can span opinion/news/work-win).
+  canonicalPolicyThreadId String? // canonical_policy_thread_id
+  policyThreadId          String? // policy_thread_id (if distinct)
+
   // --- Admin-owned override fields ---
   // The merge-ready import is the source of truth for the imported fields above
   // and overwrites them on every re-run. These override fields are NEVER written
@@ -191,6 +231,7 @@ model ContentItem {
   @@index([publicDisplayAllowed])
   @@index([lawSearchAllowed])
   @@index([recipientFilterGroup])
+  @@index([canonicalPolicyThreadId])
 }
 
 model TopicGroup {
@@ -338,11 +379,20 @@ model ContentEvidenceLink {
   note          String?
   createdAt     DateTime         @default(now())
 
+  // v1 relation metadata (from koda_content_links_v1.xlsx public_related_links).
+  relationRole            String? // relationship_role (public_explanation, achieved_result, ...)
+  relationLabelEt         String? // app_relation_label_ee (Koja seisukoht / Selgitav uudis / Seotud töövõit)
+  linkConfidence          String? // high | curated_medium
+  linkBasis               String? // link_basis (provenance)
+  canonicalPolicyThreadId String? // policy thread the relation belongs to
+  sortPriority            Int? // sort_priority for ordering related cards
+
   from ContentItem @relation("EvidenceFrom", fields: [fromContentId], references: [id], onDelete: Cascade)
   to   ContentItem @relation("EvidenceTo", fields: [toContentId], references: [id], onDelete: Cascade)
 
   @@unique([fromContentId, toContentId, linkType])
   @@index([toContentId])
+  @@index([canonicalPolicyThreadId])
 }
 
 /// Achievement (töövõit) enrichment. One row per canonical web achievement

@@ -146,6 +146,10 @@ export type Candidate = {
   reportYear?: number | null;
   /** Classification confidence (high|medium|...|low), degrades date trust. */
   classificationConfidence?: string | null;
+  /** v1 producer date precision (töövõit display_date_precision: day|month|year). */
+  displayDatePrecision?: string | null;
+  /** v1 producer date confidence (date_confidence: high|medium|low). */
+  dateConfidence?: string | null;
   /** Policy-thread id (canonical_policy_thread_id), for strict related content. */
   topicGroupCandidate?: string | null;
   /** Recipient/ministry filter bucket (metadata only — never affects topic). */
@@ -365,6 +369,8 @@ export function scoreCandidate(c: Candidate, q: SearchQuery): ScoreBreakdown {
     year: c.year ?? null,
     reportYear: c.reportYear ?? null,
     classificationConfidence: c.classificationConfidence ?? null,
+    displayDatePrecision: c.displayDatePrecision ?? null,
+    dateConfidence: c.dateConfidence ?? null,
   });
   if (verifiedDate) boost += recencyBoost(verifiedDate);
   else if (c.date) boost -= 4;
@@ -479,6 +485,8 @@ function dateMs(c: Candidate): number {
     year: c.year ?? null,
     reportYear: c.reportYear ?? null,
     classificationConfidence: c.classificationConfidence ?? null,
+    displayDatePrecision: c.displayDatePrecision ?? null,
+    dateConfidence: c.dateConfidence ?? null,
   });
   return verified?.getTime() ?? 0;
 }

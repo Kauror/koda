@@ -41,6 +41,17 @@ export type PublicDateInput = {
   year?: number | null;
   reportYear?: number | null;
   classificationConfidence?: string | null;
+  /**
+   * v1 producer-supplied date precision (töövõidud: display_date_precision).
+   * When set, it is authoritative for how precisely the date may be shown:
+   * "year" never renders a day, "month" renders month+year, "day" may render a
+   * full day (still subject to the placeholder/future/low-confidence guards).
+   */
+  displayDatePrecision?: string | null;
+  /** v1 producer-supplied date confidence (date_confidence: high|medium|low). */
+  dateConfidence?: string | null;
+  /** v1 machine reason for the date (date_basis), passed through to `basis`. */
+  dateBasis?: string | null;
 };
 
 /**
@@ -72,7 +83,26 @@ function formatFull(d: Date): string {
   return d.toLocaleDateString("et-EE", { day: "numeric", month: "long", year: "numeric" });
 }
 
+function formatMonth(d: Date): string {
+  return d.toLocaleDateString("et-EE", { month: "long", year: "numeric" });
+}
+
 const LOW_CONFIDENCE_CLASSIFICATION = new Set(["low", "medium-low"]);
+
+function mapDateConfidence(raw: string | null | undefined): DateConfidence {
+  switch ((raw ?? "").toLowerCase()) {
+    case "high":
+      return "high";
+    case "medium":
+    case "medium-high":
+      return "medium";
+    case "low":
+    case "medium-low":
+      return "low";
+    default:
+      return "unverified";
+  }
+}
 
 /**
  * Compute the safe public date for a content row.
@@ -115,11 +145,44 @@ export function computePublicDate(input: PublicDateInput, now: Date = new Date()
 
   const isFuture = startOfUtcDay(d) > todayMs;
   // 31.12 / year-end is the documented "happened sometime this year" placeholder.
-  // (Jan-1 is intentionally NOT treated as a placeholder: it is a real calendar
-  // day and the task's placeholder list is import-date / 31.12 / future only.)
   const isYearEnd = month === 12 && day === 31;
   const isImportPlaceholder = placeholders.has(iso);
 
+  // v1 explicit-precision branch (töövõidud display_date_precision). When the
+  // producer states the precision, it is authoritative for how precisely we may
+  // render — we never upgrade a year-level date to a day. We still suppress
+  // import-placeholder dates and (for day precision) future dates.
+  const precision = (input.displayDatePrecision ?? "").toLowerCase();
+  if (precision === "year" || precision === "month" || precision === "day") {
+    const conf = mapDateConfidence(input.dateConfidence);
+    const basisTag = input.dateBasis ? `precision-${precision}:${input.dateBasis}` : `precision-${precision}`;
+    const lowConf = conf === "low" || conf === "unverified";
+    if (isImportPlaceholder && explicitYear == null) return suppressed(`import-placeholder-${basisTag}`);
+    if (precision === "year") {
+      const y = dYear >= MIN_YEAR && dYear <= curYear ? dYear : explicitYear;
+      return y != null ? yearOnly(y, conf, basisTag) : suppressed(`year-out-of-range-${basisTag}`);
+    }
+    if (precision === "month") {
+      if (isFuture || dYear < MIN_YEAR) {
+        return explicitYear != null ? yearOnly(explicitYear, conf, `future-${basisTag}`) : suppressed(`future-${basisTag}`);
+      }
+      // Month precision: never a precise day; recency uses month-level date.
+      return { iso: null, year: dYear, precision: "month", confidence: conf, basis: basisTag, text: formatMonth(d), rankingDate: lowConf ? null : d };
+    }
+    // precision === "day"
+    if (isFuture || isImportPlaceholder) {
+      return explicitYear != null ? yearOnly(explicitYear, conf, `degraded-${basisTag}`) : suppressed(`degraded-${basisTag}`);
+    }
+    if (lowConf) {
+      // Day stated but low confidence → show the year only, no recency boost.
+      const y = dYear >= MIN_YEAR ? dYear : explicitYear;
+      return y != null ? yearOnly(y, conf, `low-confidence-${basisTag}`) : suppressed(`low-confidence-${basisTag}`);
+    }
+    return { iso, year: dYear, precision: "day", confidence: conf, basis: basisTag, text: formatFull(d), rankingDate: d };
+  }
+
+  // (Jan-1 is intentionally NOT treated as a placeholder: it is a real calendar
+  // day and the task's placeholder list is import-date / 31.12 / future only.)
   // Trusted exact day: real-looking date, not future, not a year-end placeholder,
   // not an import default, and classification confidence is not low.
   if (!isFuture && !isYearEnd && !isImportPlaceholder && !lowClassification && dYear >= MIN_YEAR) {

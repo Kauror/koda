@@ -5,8 +5,8 @@ description: >-
   Kaubandus-Tööstuskoja liikmeväärtuse tööriist; github.com/Kauror/koda; the
   Next.js/Prisma/Postgres app behind koda.orgusaar.ee). Use this whenever working
   in this repo or on anything Koda-specific: public search, result grouping
-  (Töövõidud / Koja seisukohad / Uudised / Taust), the v0.9.4 import + explicit
-  visibility gates (importAction / publicDisplayAllowed), eligibility, tegevusala
+  (Töövõidud / Koja seisukohad / Uudised / Taust), the v1 app-import + import-flag
+  visibility gates (final_*_import_candidate / final_app_import_eligible), eligibility, tegevusala
   /valdkond /tapsustus /õigusakt tags, cross-sector "Kõik tegevusalad" logic,
   law/õigusakt search, /seadused pages, the /admin/* tools, koda.ee ingestion,
   the merge-ready importer, or running its tests/build. Read it before editing so
@@ -57,12 +57,12 @@ Read `references/architecture.md` for the full file-by-file map. The essentials:
 - **`src/lib/taxonomy-split.ts`** — `splitTopics`/`firstTopic`; repairs the `;`-for-`,` corruption in compound topic/activity names. Shared by importer and runtime.
 - **`src/lib/admin-dates.ts`**, **`admin-bundle.ts`**, **`admin-status.ts`**, **`admin-review-ui.ts`** — admin tooling helpers.
 - **`src/lib/ingestion/*`** — koda.ee ingestion (allowlist, parse, classify, orchestrator, staging-view).
-- **`scripts/lib/merge-ready.ts` + `scripts/import-merge-ready.ts`** — the v0.9.4 importer (web/opinions/töövõidud + link sheets). Writes `data/import/reports/import-report.json`.
+- **`scripts/lib/merge-ready.ts` + `scripts/import-merge-ready.ts`** — the v1 app-import importer (opinions/web/töövõidud slim sheets + `koda_content_links_v1.xlsx` public_related_links). Writes `data/import/reports/import-report.json`.
 - **Pages**: public `src/app/{page,tulemused,sisu/[id],seadused/[slug]}.tsx`; admin under `src/app/admin/(dash)/*` (landing, content, content-items, data-bundle, data-review[/id], taxonomy, laws, ingestion[/items], status, site-texts, tags, topics). APIs under `src/app/api/`.
 
 ## Data model & visibility (the load-bearing mental model)
 
-The v0.9.4 package is **layered**: `web` (news/background/public web), `opinions` (official positions — now **public**, not just supporting), `toovoidud` (enrichment / value cards). Keep these roles visible in the UI; a töövõit is not a normal news card.
+The v1 package is **layered**: `web` (news/background/public web), `opinions` (official positions — **public** in v1), `toovoidud` (value cards / what changed for companies). Keep these roles visible in the UI; a töövõit is not a normal news card.
 
 **Visibility is an explicit per-row gate, never inferred.** Public = the importer's `isPublic` (computed in `computeVisibility`) AND it survives `isPublicSearchEligible`, which blocks on: `importAction` ∉ {`import_public`,`enrichment_public`}, `publicDisplayAllowed !== true`, `needsHumanReview`, `numericClaimNeedsReview`, and blocking `publicDisplayStatus` (`support_only`/`numeric_review_hold`/`duplicate_only`/`source_quality_hold`/`blocked`/`admin_only`/`hide_or_review`/`review_required`). `adminVisibilityOverride` wins both directions. Internal states kept-but-hidden: `import_support_only`, `import_staging_only`, `do_not_import_public`, `enrichment_hold`.
 
@@ -75,7 +75,7 @@ The v0.9.4 package is **layered**: `web` (news/background/public web), `opinions
 ## Hard-won gotchas
 
 - **No prod/server/DB access, and no live crawl.** Don't deploy, don't run the crawler against the live site, don't run destructive DB ops.
-- **Private workbooks are gitignored.** `import:merge-ready`, `import:test`, `data:bundle` need the v0.9.x `.xlsx` files in `data/import/` — absent in dev → report "requires private data files," don't fabricate. The importer already does backup → clear → import (repeatable replace) and writes `import-report.json` (the source for `/admin/status`).
+- **Private workbooks are gitignored.** `import:merge-ready`, `import:test`, `data:bundle` need the v1 `.xlsx` files in `data/import/` — absent in dev → report "requires private data files," don't fabricate. The importer already does backup → clear → import (repeatable replace) and writes `import-report.json` (the source for `/admin/status`).
 - **Smoke-testing pages without a DB**: `npm run build`, then start with a throwaway env and curl, e.g. `APP_URL=http://localhost:3030 DATABASE_URL='postgresql://koda:koda@127.0.0.1:5432/koda' ADMIN_EMAIL=admin@example.com ADMIN_PASSWORD=test npx next start -p 3030`. Auth redirect (`/admin` → `/admin/login`) and DB-down-degrading pages work without a DB; pages that query Prisma will 500 unless a real DB is up. Log in via `POST /api/admin/login` (form-encoded email+password) to get the `koda_admin` cookie. Kill the port via PowerShell `Get-NetTCPConnection -LocalPort <p> | Stop-Process`.
 - **Prisma engine**: the schema uses `engineType = "client"` (engine-free), so queries and the PGlite integration tests run even on the Windows dev box. (Older sessions hit `query_engine-windows.dll.node` errors — that's resolved by the client engine.)
 - **Admin auth**: every `src/app/api/admin/*` route must call `requireAdmin`; admin pages are guarded by the `(dash)/layout.tsx` `isAdmin()` redirect. `login`/`logout` are intentionally open.

@@ -1,12 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getContentDetail, type ContentDetail, type EvidenceRow } from "@/lib/content-detail";
-import {
-  compactText,
-  isGenericWorkWinUrl,
-  isUnsafePublicDetailText,
-  uniquePublicTexts,
-} from "@/lib/content-display";
+import { compactText, isGenericWorkWinUrl, isUnsafePublicDetailText } from "@/lib/content-display";
 
 export const dynamic = "force-dynamic";
 
@@ -50,20 +45,16 @@ function TopicHistory({ rows }: { rows: EvidenceRow[] }) {
 }
 
 function AchievementDetail({ item }: { item: ContentDetail }) {
-  const explanation = uniquePublicTexts([
-    item.enrichment?.sourceEvidence,
-    item.kodaPosition,
-    item.summary,
-    item.companyRelevance,
-    item.sourceEvidence,
-  ]).filter((text) => !isUnsafePublicDetailText(text));
+  // v1 töövõidu value fields (what_changed_ee / koda_role_ee / business_value_ee)
+  // are the primary structured content; fall back to the summary when absent.
+  const summary = item.summary && !isUnsafePublicDetailText(item.summary) ? item.summary : null;
   const field = item.enrichment?.regulatoryArea || item.valdkonnad[0]?.name || null;
-  const impact = item.enrichment?.numericImpactStatement || null;
 
   return (
     <>
       <section className="card achievement-block">
         <h2>Koja töövõit</h2>
+        {summary && <p>{summary}</p>}
         <dl className="detail-dl">
           {field && (
             <>
@@ -71,16 +62,28 @@ function AchievementDetail({ item }: { item: ContentDetail }) {
               <dd>{field}</dd>
             </>
           )}
-          {impact && (
+          {item.whatChanged && (
             <>
-              <dt>Mõju</dt>
-              <dd>{impact}</dd>
+              <dt>Mis muutus?</dt>
+              <dd>{item.whatChanged}</dd>
             </>
           )}
-          {explanation.length > 0 && (
+          {item.kodaRole && (
             <>
-              <dt>Mida saavutati?</dt>
-              <dd>{explanation.join(" ")}</dd>
+              <dt>Koja roll</dt>
+              <dd>{item.kodaRole}</dd>
+            </>
+          )}
+          {item.businessValue && (
+            <>
+              <dt>Väärtus ettevõttele</dt>
+              <dd>{item.businessValue}</dd>
+            </>
+          )}
+          {item.beforeAfter && (
+            <>
+              <dt>Enne ja pärast</dt>
+              <dd>{item.beforeAfter}</dd>
             </>
           )}
         </dl>

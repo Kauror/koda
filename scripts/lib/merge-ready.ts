@@ -1,14 +1,24 @@
 /**
- * Shared logic for the structured v0.9.10 Koda app-upload package.
+ * Shared logic for the **v1** Koda app-import package (production source of truth).
  *
  * The active source package is:
- *   - koda_web_content_v0_9_10_app_clean.xlsx (web_content_v0_9)       1132 rows
- *   - koda_opinions_v0_9_8_app_clean.xlsx     (opinions_v0_9)           428 rows
- *   - koda_toovoidud_enrichment_v0_9_10_app_clean.xlsx (toovoidud_v0_9)  73 rows
- *   - koda_taxonomy_rules_v0_9_2.txt           (taxonomy reference only)
+ *   - koda_opinions_v1.0.xlsx     sheet `opinions_app_import`        750 rows
+ *   - koda_web_content_v1.xlsx    sheet `web_app_import`            1131 rows
+ *   - koda_toovoidud_v1.xlsx      sheet `toovoidud_app_import`        90 rows
+ *   - koda_content_links_v1.xlsx  cross-layer relation/manifest workbook
+ *   - koda_taxonomy_rules_v1_0.txt (taxonomy reference only — never imported)
  *
- * Total content rows = 1633. Quarantine/report/readme sheets are never
- * imported as public content.
+ * Total importable content rows = 1971. The `excluded_rows` /
+ * `*_excluded_review` sheets and the candidate/blocked/missing link sheets are
+ * never imported as public content or public relations.
+ *
+ * The v1 import sheets are "slim": every row in an import sheet has already
+ * passed the producer's QA gate (the layer import flag is TRUE), so the public
+ * gate here is deliberately simple and defensive — see computeVisibility().
+ *
+ * Column names can drift slightly between producer revisions, so all field
+ * reads go through alias-based helpers (firstPresent / requiredField). Genuinely
+ * required public fields (id, title, summary) fail fast with a clear error.
  */
 import { existsSync, statSync } from "fs";
 import { resolve } from "path";
@@ -22,37 +32,49 @@ export const IMPORT_DIR = resolve(process.cwd(), "data", "import");
 
 export type DatasetKey = "web" | "opinions" | "toovoidud";
 
+/** v1 production source files. Listed as alias arrays for resilience. */
 export const FILES = {
-  web: ["koda_web_content_v0_9_10_app_clean.xlsx"],
-  opinions: ["koda_opinions_v0_9_8_app_clean.xlsx"],
-  toovoidud: ["koda_toovoidud_enrichment_v0_9_10_app_clean.xlsx"],
-  taxonomy: ["koda_taxonomy_rules_v0_9_2.txt"],
+  opinions: ["koda_opinions_v1.0.xlsx", "koda_opinions_v1_0.xlsx"],
+  web: ["koda_web_content_v1.xlsx"],
+  toovoidud: ["koda_toovoidud_v1.xlsx"],
+  links: ["koda_content_links_v1.xlsx"],
+  taxonomy: ["koda_taxonomy_rules_v1_0.txt", "koda_taxonomy_rules_v1.0.txt"],
 } as const;
 
+/** v1 import + excluded/review + link sheet names. */
 export const SHEETS = {
-  web: "web_content_v0_9",
-  opinions: "opinions_v0_9",
-  toovoidud: "toovoidud_v0_9",
-  approvedLinks: "approved_links_v0_9",
-  candidateLinks: "candidate_links_v0_9",
-  opinionLinkStatus: "opinion_link_status_v0_9",
+  opinions: "opinions_app_import",
+  opinionsExcluded: "excluded_rows",
+  web: "web_app_import",
+  webExcluded: "web_excluded_review",
+  toovoidud: "toovoidud_app_import",
+  toovoidudExcluded: "toovoidud_excluded_review",
+  // Cross-layer link workbook (koda_content_links_v1.xlsx).
+  publicRelatedLinks: "public_related_links",
+  crossLayerLinks: "cross_layer_links",
+  policyThreads: "policy_threads",
+  candidateLinks: "candidate_or_review_links",
+  blockedLinks: "blocked_or_rejected_links",
+  missingTargets: "missing_or_excluded_targets",
+  smokeTest: "cross_layer_smoke_test",
+  contentManifest: "content_manifest",
 } as const;
 
+/**
+ * Expected v1 counts. Content-row and excluded-row counts are hard invariants.
+ * The public-related-link count is informational only: the exact number comes
+ * from the link workbook and must NOT hard-fail unless the workbook's own smoke
+ * test reports a blocker (see analyze()).
+ */
 export const EXPECTED_ROWS = {
-  web: 1132,
-  opinions: 428,
-  toovoidud: 73,
-  totalContentBeforeExclusions: 1633,
-  webPublic: 1132,
-  webSupportOnly: 0,
-  webStagingOnly: 0,
-  webDoNotImportPublic: 0,
-  opinionsPublic: 428,
-  opinionsStagingOnly: 0,
-  toovoidudPublic: 73,
-  toovoidudHold: 0,
-  approvedLinks: 0,
-  candidateLinks: 0,
+  web: 1131,
+  opinions: 750,
+  toovoidud: 90,
+  totalImportable: 1971,
+  webExcluded: 1,
+  opinionsExcluded: 9,
+  toovoidudExcluded: 7,
+  publicRelatedLinks: 182, // informational, from koda_content_links_v1.xlsx
 } as const;
 
 export function filePath(name: string): string {
@@ -71,39 +93,9 @@ export function activeInputFileName(names: readonly string[]): string {
   return resolveImportFile(names).split(/[\\/]/).pop() ?? names[0];
 }
 
-export const ALLOWED = {
-  webImportAction: new Set(["import_public", "import_support_only", "import_staging_only", "do_not_import_public"]),
-  opinionImportAction: new Set(["import_public", "import_staging_only"]),
-  toovoitImportAction: new Set(["enrichment_public", "enrichment_hold", "import"]),
-  publicDisplayStatus: new Set([
-    "public_candidate",
-    "public_ready",
-    "support_only",
-    "review_required",
-    "numeric_review_hold",
-    "duplicate_only",
-    "source_quality_hold",
-    "blocked",
-  ]),
-  sourceQualityFlag: new Set([
-    "ok",
-    "duplicate_risk",
-    "not_policy_relevant",
-    "needs_review",
-    "supporting_document_not_opinion",
-    "manual_source_checked_v0_9_7",
-  ]),
-  classificationConfidence: new Set(["high", "medium-high", "medium", "medium-low", "low"]),
-} as const;
-
-const PUBLIC_BLOCKING_DISPLAY = new Set([
-  "review_required",
-  "numeric_review_hold",
-  "duplicate_only",
-  "source_quality_hold",
-  "blocked",
-]);
-const BAD_SOURCE_QUALITY = new Set(["not_policy_relevant", "needs_review", "supporting_document_not_opinion"]);
+// ---------------------------------------------------------------------------
+// Cell + alias helpers
+// ---------------------------------------------------------------------------
 
 export type Row = Record<string, string>;
 
@@ -120,25 +112,63 @@ export function orNull(s: string): string | null {
   return s === "" ? null : s;
 }
 
-export function parseBool(s: string): boolean {
-  return ["true", "1", "yes", "jah"].includes(s.trim().toLowerCase());
+/** First non-empty value among the given column aliases, trimmed; "" if none. */
+export function firstPresent(row: Row, keys: readonly string[]): string {
+  for (const k of keys) {
+    const v = cellText(row[k]);
+    if (v !== "") return v;
+  }
+  return "";
 }
+
+/** Like firstPresent but throws a clear validation error when nothing is found. */
+export function requiredField(row: Row, keys: readonly string[], context: string): string {
+  const v = firstPresent(row, keys);
+  if (v === "") {
+    throw new Error(`Missing required field for ${context}: expected one of [${keys.join(", ")}]`);
+  }
+  return v;
+}
+
+/** Boolean parser tolerant of TRUE/True/1/yes/jah and numeric 1/0. */
+export function parseBoolFlexible(value: unknown): boolean {
+  const s = cellText(value).trim().toLowerCase();
+  return ["true", "1", "1.0", "yes", "y", "jah"].includes(s);
+}
+
+/** Back-compat alias used by older call sites. */
+export const parseBool = parseBoolFlexible;
 
 export function parseYear(s: string): number | null {
   const m = s.match(/\b(19|20)\d{2}\b/);
   return m ? parseInt(m[0], 10) : null;
 }
 
-export function parseDate(s: string): Date | null {
+/**
+ * Date parser tolerant of ISO (2016-12-01), dotted EE (01.12.2016), slashed,
+ * year-only (2016 → 1 Jan) and Date objects. Returns null when unparseable.
+ * Year-only values are returned as the 1 Jan of that year; callers must use the
+ * accompanying *date precision* to avoid rendering a precise day.
+ */
+export function parseDateFlexible(value: unknown): Date | null {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  const s = cellText(value);
   if (!s) return null;
-  const iso = s.match(/(\d{4})-(\d{2})-(\d{2})/);
+  const iso = s.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
   if (iso) return new Date(Date.UTC(+iso[1], +iso[2] - 1, +iso[3]));
   const dotted = s.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
   if (dotted) return new Date(Date.UTC(+dotted[3], +dotted[2] - 1, +dotted[1]));
+  const slashed = s.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (slashed) return new Date(Date.UTC(+slashed[3], +slashed[1] - 1, +slashed[2]));
+  const monthOnly = s.match(/^(\d{4})-(\d{1,2})$/);
+  if (monthOnly) return new Date(Date.UTC(+monthOnly[1], +monthOnly[2] - 1, 1));
   const yearOnly = s.match(/^(\d{4})$/);
   if (yearOnly) return new Date(Date.UTC(+yearOnly[1], 0, 1));
   return null;
 }
+
+/** Back-compat alias. */
+export const parseDate = parseDateFlexible;
 
 export function splitMulti(s: string): string[] {
   return s
@@ -155,7 +185,7 @@ function joinSearchText(values: Array<string | null | undefined>): string | null
   return text || null;
 }
 
-export async function readSheet(fileNames: readonly string[], sheetName: string): Promise<{ headers: string[]; rows: Row[] }> {
+export function readSheet(fileNames: readonly string[], sheetName: string): { headers: string[]; rows: Row[] } {
   const path = resolveImportFile(fileNames);
   const wb = XLSX.readFile(path, { cellDates: true, raw: false });
   const ws = wb.Sheets[sheetName];
@@ -182,22 +212,20 @@ export async function readSheet(fileNames: readonly string[], sheetName: string)
   return { headers, rows };
 }
 
-export type CompatSourceType =
-  | "opinion"
-  | "archive_opinion"
-  | "news"
-  | "currently_handled"
-  | "service"
-  | "event"
-  | "achievement"
-  | "unknown";
-
-function sourceKindFromWebType(type: string): { layer: string; detail: string; compat: CompatSourceType } {
-  if (type === "koda_public_opinion_article") return { layer: "koda_public_opinion", detail: "meie_arvamus_article", compat: "opinion" };
-  if (type === "event_or_training") return { layer: "koda_news", detail: "event_or_training", compat: "event" };
-  if (type === "service_or_tool_page") return { layer: "koda_news", detail: "service_or_tool_page", compat: "service" };
-  return { layer: "koda_news", detail: "meie_uudis", compat: "news" };
+export function sheetNames(fileNames: readonly string[]): string[] {
+  const path = resolveImportFile(fileNames);
+  return XLSX.readFile(path, { bookSheets: true }).SheetNames;
 }
+
+export function hasSheet(fileNames: readonly string[], sheetName: string): boolean {
+  return sheetNames(fileNames).includes(sheetName);
+}
+
+// ---------------------------------------------------------------------------
+// Staged content model
+// ---------------------------------------------------------------------------
+
+export type CompatSourceType = "opinion" | "news" | "achievement" | "unknown";
 
 export type StagedContent = {
   externalId: string;
@@ -212,6 +240,12 @@ export type StagedContent = {
   date: Date | null;
   year: number | null;
   reportYear: number | null;
+  // v1 date safety fields (töövõidud, but stored for all layers).
+  displayDatePrecision: string | null; // day | month | year
+  dateConfidence: string | null; // high | medium | low | unverified
+  dateBasis: string | null; // machine reason
+  effectiveDate: Date | null; // legal effective date (NOT achievement date)
+  deadlineDate: Date | null; // future compliance/deadline date
   sourceFileName: string | null;
   sourceSection: string | null;
   sourcePageLocation: string | null;
@@ -222,14 +256,30 @@ export type StagedContent = {
   companyRelevance: string | null;
   sourceEvidence: string | null;
   outcomeStatus: string | null;
-  importStatus: string | null;
-  publicDisplayStatus: string | null;
+  // v1 visibility / ranking fields (web; null elsewhere).
+  contentRoleFinal: string | null;
+  publicActivityFilterTags: string | null;
+  publicActivityDisplayTags: string | null;
+  publicSectorPageAllowed: string | null; // TRUE | LIMITED | FALSE
+  sectorResultEligibility: string | null;
+  generalSearchEligibility: string | null;
+  recommendedAppVisibilityFinal: string | null;
+  publicSectorRankScore: number | null;
+  generalSearchRankScore: number | null;
+  // Töövõidu value fields.
+  whatChangedEt: string | null;
+  kodaRoleEt: string | null;
+  businessValueEt: string | null;
+  beforeAfterEt: string | null;
+  workWinTypePrimary: string | null;
+  workWinTypeSecondary: string | null;
+  // Policy thread identity (preserved across layers).
+  canonicalPolicyThreadId: string | null;
+  policyThreadId: string | null;
+  // Import / review gating.
+  importEligible: boolean; // the layer-specific v1 import flag (TRUE)
   importAction: string | null;
-  publicDisplayAllowed: boolean | null;
-  publicDisplayRole: string | null;
-  mergeReadiness: string | null;
-  mergeNotes: string | null;
-  extractionQuality: string | null;
+  publicDisplayStatus: string | null;
   needsHumanReview: boolean;
   numericClaimNeedsReview: boolean;
   reviewReason: string | null;
@@ -248,7 +298,7 @@ export type StagedContent = {
   lawTagsConfirmed: string | null;
   lawTagsCandidate: string | null;
   lawSearchAllowed: boolean;
-  // Recipient / ministry metadata (taxonomy v2.1.6) — never affects topic.
+  // Recipient / ministry metadata (never affects topic).
   recipientRaw: string | null;
   recipientNormalized: string | null;
   recipientFilterGroup: string | null;
@@ -275,15 +325,11 @@ export type StagedContent = {
 type StageInput = Omit<
   StagedContent,
   "contentHash" | "isAchievement" | "titleKey" | "isPublic" | "isHidden" | "language"
-> & {
-  hashText: string | null;
-};
+> & { hashText: string | null };
 
 /**
- * Topic labels (valdkonnad) that the importer could not map to a canonical
- * taxonomy topic. They are kept as internal classification but never become
- * public filter options (the public filter is the canonical allowlist). The
- * import script logs these as warnings for review.
+ * Topic labels (valdkonnad) the importer could not map to a canonical taxonomy
+ * topic. Kept as internal classification but never exposed as public filters.
  */
 export const unknownTopicLabels = new Map<string, number>();
 
@@ -298,35 +344,32 @@ type RecipientFields = Pick<
 >;
 
 /**
- * Map recipient/ministry columns to normalized metadata fields. Recipient is an
- * advanced-filter dimension only — it never feeds topic classification. Explicit
- * recipient_normalized / recipient_filter_group / recipient_type columns win;
- * otherwise values are derived from recipient_raw via normalizeRecipient().
+ * Map recipient/ministry columns to normalized metadata. v1 opinions carry
+ * `recipient` / `recipient_filter_group` / `recipient_type`; older revisions
+ * used `recipient_raw` / `recipient_normalized`. Recipient is an advanced-filter
+ * dimension only — it never feeds topic classification.
  */
 function recipientFields(r: Row): RecipientFields {
-  const raw = cellText(r["recipient_raw"]) || cellText(r["recipient"]);
+  const raw = firstPresent(r, ["recipient_raw", "recipient"]);
   const norm = normalizeRecipient(raw, {
-    normalized: orNull(cellText(r["recipient_normalized"])),
-    filterGroup: orNull(cellText(r["recipient_filter_group"])),
-    type: orNull(cellText(r["recipient_type"])),
+    normalized: orNull(firstPresent(r, ["recipient_normalized"])),
+    filterGroup: orNull(firstPresent(r, ["recipient_filter_group"])),
+    type: orNull(firstPresent(r, ["recipient_type"])),
   });
-  const reviewCol = cellText(r["recipient_normalization_review_required"]);
+  const reviewCol = firstPresent(r, ["recipient_normalization_review_required"]);
   return {
     recipientRaw: norm?.raw ?? orNull(raw),
     recipientNormalized: norm?.normalized ?? null,
     recipientFilterGroup: norm?.filterGroup ?? null,
     recipientType: norm?.type ?? null,
-    recipientSecondary: orNull(cellText(r["recipient_secondary"])),
-    recipientNormalizationReviewRequired: reviewCol ? parseBool(reviewCol) : norm?.reviewRequired ?? false,
+    recipientSecondary: orNull(firstPresent(r, ["recipient_secondary"])),
+    recipientNormalizationReviewRequired: reviewCol ? parseBoolFlexible(reviewCol) : norm?.reviewRequired ?? false,
   };
 }
 
-function makeTaxonomy(primary: string | null, secondary: string | null): string[] {
-  // Topics/activities are canonical names that may contain commas, so use the
-  // topic-aware splitter that repairs ";"-for-"," corruption (see splitTopics).
+/** Topic tags: canonicalize labels (aliases fold in), record unknowns. */
+function makeTopicTags(primary: string | null, secondary: string | null): string[] {
   const raw = [...new Set([...splitTopics(primary ?? ""), ...splitTopics(secondary ?? "")])];
-  // Normalize each label to its canonical taxonomy label (aliases fold in);
-  // unknown labels are kept as-is but recorded as a warning.
   const out: string[] = [];
   const seen = new Set<string>();
   for (const value of raw) {
@@ -338,6 +381,31 @@ function makeTaxonomy(primary: string | null, secondary: string | null): string[
     }
   }
   return out;
+}
+
+/**
+ * Activity (tegevusala) tags. Built from the app-safe public activity tags when
+ * present (web), else from activity_primary/secondary (opinions/töövõidud). The
+ * cross-sector label IS kept here for search/ranking matching (it is stripped at
+ * display time by activities.ts), so it must NOT be filtered out at import.
+ */
+function makeActivityTags(...values: Array<string | null>): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    for (const label of splitTopics(value ?? "")) {
+      if (!seen.has(label)) {
+        seen.add(label);
+        out.push(label);
+      }
+    }
+  }
+  return out;
+}
+
+function toIntOrNull(s: string): number | null {
+  const n = parseInt(s, 10);
+  return Number.isNaN(n) ? null : n;
 }
 
 function finalize(input: StageInput): StagedContent {
@@ -358,91 +426,107 @@ function finalize(input: StageInput): StagedContent {
   return staged;
 }
 
+// ---------------------------------------------------------------------------
+// Per-layer staging (v1 field mapping with aliases)
+// ---------------------------------------------------------------------------
+
 export function stageWebRow(r: Row): StagedContent {
-  const sourceTypeRaw = cellText(r["source_type"]);
-  const mapped = sourceKindFromWebType(sourceTypeRaw);
-  const title =
-    cellText(r["title"]) ||
-    cellText(r["page_title"]) ||
-    cellText(r["canonical_url"]) ||
-    cellText(r["url"]) ||
-    cellText(r["web_content_id"]);
-  const topicPrimary = orNull(cellText(r["topic_primary"]));
-  const topicSecondary = orNull(cellText(r["topic_secondary"]));
-  const activityPrimary = orNull(cellText(r["activity_primary"]));
-  const activitySecondary = orNull(cellText(r["activity_secondary"]));
-  const lawTagsConfirmed = orNull(cellText(r["law_tags_confirmed"]));
-  const summary = orNull(cellText(r["public_readable_summary"]) || cellText(r["article_summary"]));
-  const excerpt = orNull(cellText(r["first_substantive_paragraph"]) || cellText(r["lead_text"]));
-  const sourceEvidence = orNull(cellText(r["evidence_short"]) || cellText(r["law_evidence_text"]));
-  const bodyText = joinSearchText([
-    summary,
-    excerpt,
-    sourceEvidence,
-    topicPrimary,
-    topicSecondary,
-    activityPrimary,
-    activitySecondary,
-    lawTagsConfirmed,
-  ]);
+  const externalId = requiredField(r, ["web_content_id", "content_id"], "web row id");
+  const title = requiredField(r, ["title", "page_title", "canonical_url", "url"], `web ${externalId} title`);
+  const topicPrimary = orNull(firstPresent(r, ["topic_primary"]));
+  const topicSecondary = orNull(firstPresent(r, ["topic_secondary"]));
+  const lawTagsConfirmed = orNull(firstPresent(r, ["law_tags_confirmed"]));
+  // v1: prefer the curated app summary; never use lead_text / first paragraph.
+  const summary = orNull(firstPresent(r, ["app_public_summary_ee", "article_summary"]));
+  const sourceEvidence = orNull(firstPresent(r, ["evidence_short", "law_evidence_text"]));
+  // v1 app-safe activity tags (filter form drives search; display form is for UI).
+  // The curated `public_activity_filter_tags` is the ONLY source of web activity:
+  // we never fall back to raw activity_primary/secondary, so rows the producer
+  // intentionally cleared (e.g. organization news such as the Oliver Väärtnõu
+  // appointment, public_sector_page_allowed=FALSE) get NO sector relationship.
+  const filterTags = orNull(firstPresent(r, ["public_activity_filter_tags"]));
+  const displayTags = orNull(firstPresent(r, ["public_activity_display_tags"]));
+  const filterTagList = splitTopics(filterTags ?? "");
+  const activityPrimary = filterTagList[0] ?? null;
+  const activitySecondary = filterTagList.length > 1 ? filterTagList.slice(1).join("; ") : null;
+  const contentRoleFinal = orNull(firstPresent(r, ["content_role_final", "content_role", "web_content_role"]));
+  const bodyText = joinSearchText([summary, sourceEvidence, topicPrimary, topicSecondary, activityPrimary, activitySecondary, lawTagsConfirmed]);
 
   return finalize({
-    externalId: cellText(r["web_content_id"]),
+    externalId,
     sourceDataset: "web",
-    sourceLayer: mapped.layer,
-    sourceTypeDetail: mapped.detail,
-    sourceType: mapped.compat,
-    sourceUrl: orNull(cellText(r["url"])),
-    canonicalUrl: orNull(cellText(r["canonical_url"])),
+    sourceLayer: "koda_news",
+    sourceTypeDetail: "meie_uudis",
+    sourceType: "news",
+    sourceUrl: orNull(firstPresent(r, ["url"])),
+    canonicalUrl: orNull(firstPresent(r, ["canonical_url"])),
     title,
     displayTitle: title,
-    date: parseDate(cellText(r["sort_date"]) || cellText(r["published_date"]) || cellText(r["updated_date"])),
-    year: parseYear(cellText(r["source_year"]) || cellText(r["published_date"]) || cellText(r["sort_date"])),
+    date: parseDateFlexible(firstPresent(r, ["sort_date", "published_date", "document_date", "updated_date"])),
+    year: parseYear(firstPresent(r, ["source_year", "published_date", "sort_date"])),
     reportYear: null,
-    sourceFileName: orNull(cellText(r["body_text_source_file"])),
-    sourceSection: orNull(cellText(r["source_type"])),
+    displayDatePrecision: null,
+    dateConfidence: orNull(firstPresent(r, ["date_confidence"])),
+    dateBasis: null,
+    effectiveDate: null,
+    deadlineDate: null,
+    sourceFileName: null,
+    sourceSection: orNull(firstPresent(r, ["source_type"])),
     sourcePageLocation: null,
     bodyText,
-    excerpt,
+    excerpt: summary,
     summary,
-    kodaPosition: orNull(cellText(r["stance"])),
-    companyRelevance: orNull(cellText(r["value_type"])),
+    kodaPosition: orNull(firstPresent(r, ["stance"])),
+    companyRelevance: orNull(firstPresent(r, ["value_type"])),
     sourceEvidence,
-    outcomeStatus: orNull(cellText(r["work_win_status"])),
-    importStatus: orNull(cellText(r["import_action"])),
-    publicDisplayStatus: orNull(cellText(r["public_display_status"])),
-    importAction: orNull(cellText(r["import_action"])),
-    publicDisplayAllowed: parseBool(cellText(r["public_display_allowed"])),
-    publicDisplayRole: orNull(cellText(r["public_display_role"])),
-    mergeReadiness: null,
-    mergeNotes: orNull(cellText(r["notes"])),
-    extractionQuality: null,
-    needsHumanReview: parseBool(cellText(r["review_required"])),
-    numericClaimNeedsReview:
-      cellText(r["public_display_status"]) === "numeric_review_hold" && parseBool(cellText(r["numeric_claim_needs_review"])),
-    reviewReason: orNull(cellText(r["review_reason"]) || cellText(r["public_block_reason"])),
-    publicPriority: orNull(cellText(r["public_preference_rank"])),
-    sourceQualityFlag: orNull(cellText(r["source_quality_flag"])),
-    classificationConfidence: orNull(cellText(r["classification_confidence"])),
+    outcomeStatus: null,
+    contentRoleFinal,
+    publicActivityFilterTags: filterTags,
+    publicActivityDisplayTags: displayTags,
+    publicSectorPageAllowed: orNull(firstPresent(r, ["public_sector_page_allowed"])),
+    sectorResultEligibility: orNull(firstPresent(r, ["sector_result_eligibility"])),
+    generalSearchEligibility: orNull(firstPresent(r, ["general_search_eligibility"])),
+    recommendedAppVisibilityFinal: orNull(firstPresent(r, ["recommended_app_visibility_final"])),
+    publicSectorRankScore: toIntOrNull(firstPresent(r, ["public_sector_rank_score"])),
+    generalSearchRankScore: toIntOrNull(firstPresent(r, ["general_search_rank_score"])),
+    whatChangedEt: null,
+    kodaRoleEt: null,
+    businessValueEt: null,
+    beforeAfterEt: null,
+    workWinTypePrimary: orNull(firstPresent(r, ["work_win_type_primary"])),
+    workWinTypeSecondary: orNull(firstPresent(r, ["work_win_type_secondary"])),
+    canonicalPolicyThreadId: orNull(firstPresent(r, ["canonical_policy_thread_id", "canonical_policy_thread_id_provisional"])),
+    policyThreadId: orNull(firstPresent(r, ["policy_thread_id"])),
+    importEligible: parseBoolFlexible(firstPresent(r, ["final_web_import_candidate"])),
+    importAction: orNull(firstPresent(r, ["final_web_import_decision", "import_action"])),
+    publicDisplayStatus: orNull(firstPresent(r, ["recommended_app_visibility_final", "public_display_status"])),
+    needsHumanReview: parseBoolFlexible(firstPresent(r, ["review_required", "final_web_import_review_required"])),
+    numericClaimNeedsReview: parseBoolFlexible(firstPresent(r, ["numeric_claim_needs_review"])),
+    reviewReason: orNull(firstPresent(r, ["review_reason", "final_web_import_review_reason"])),
+    publicPriority: null,
+    sourceQualityFlag: orNull(firstPresent(r, ["source_quality_flag"])),
+    classificationConfidence: orNull(firstPresent(r, ["classification_confidence"])),
     primaryCategory: topicPrimary,
     secondaryCategories: topicSecondary,
-    topicGroupCandidate: orNull(cellText(r["canonical_policy_thread_id_provisional"])),
+    topicGroupCandidate: orNull(firstPresent(r, ["canonical_policy_thread_id", "canonical_policy_thread_id_provisional"])),
     topicPrimary,
     topicSecondary,
     activityPrimary,
     activitySecondary,
-    sectorScope: orNull(cellText(r["sector_scope"])),
-    situationTags: orNull(cellText(r["situation_tags"])),
+    sectorScope: orNull(firstPresent(r, ["sector_scope"])),
+    situationTags: orNull(firstPresent(r, ["situation_tags"])),
     lawTagsConfirmed,
-    lawTagsCandidate: orNull(cellText(r["law_tags_candidate"])),
-    lawSearchAllowed: !!lawTagsConfirmed && cellText(r["law_match_confidence"]).toLowerCase() !== "low",
-    canonicalContentId: orNull(cellText(r["duplicate_of_web_content_id"])),
-    duplicateStatus: orNull(cellText(r["duplicate_status"])),
+    lawTagsCandidate: orNull(firstPresent(r, ["law_tags_candidate"])),
+    lawSearchAllowed: !!lawTagsConfirmed && firstPresent(r, ["law_match_confidence"]).toLowerCase() !== "low",
+    canonicalContentId: orNull(firstPresent(r, ["duplicate_of_web_content_id"])),
+    duplicateStatus: orNull(firstPresent(r, ["duplicate_status"])),
     isEvergreen: false,
     ...recipientFields(r),
-    valdkonnad: makeTaxonomy(topicPrimary, topicSecondary),
-    tegevusalad: makeTaxonomy(activityPrimary, activitySecondary),
-    tapsustused: splitMulti(cellText(r["situation_tags"])),
+    valdkonnad: makeTopicTags(topicPrimary, topicSecondary),
+    // Search/ranking activity tags from the curated filter tags only (cross-sector
+    // kept for matching; empty filter tags ⇒ no sector tags at all).
+    tegevusalad: makeActivityTags(filterTags ?? ""),
+    tapsustused: splitMulti(firstPresent(r, ["situation_tags"])),
     oigusaktid: splitMulti(lawTagsConfirmed ?? ""),
     matchedWebContentId: null,
     matchedOpinionContentId: null,
@@ -451,17 +535,26 @@ export function stageWebRow(r: Row): StagedContent {
 }
 
 export function stageOpinionRow(r: Row): StagedContent {
-  const title = cellText(r["title"]) || cellText(r["title_extracted_from_pdf"]) || cellText(r["source_file"]) || cellText(r["content_id"]);
-  const topicPrimary = orNull(cellText(r["topic_primary"]));
-  const topicSecondary = orNull(cellText(r["topic_secondary"]));
-  const activityPrimary = orNull(cellText(r["activity_primary"]));
-  const activitySecondary = orNull(cellText(r["activity_secondary"]));
-  const lawTagsConfirmed = orNull(cellText(r["law_tags_confirmed"]));
-  const summary = orNull(cellText(r["first_substantive_paragraph_corrected"]) || cellText(r["first_substantive_paragraph"]));
-  const sourceEvidence = orNull(cellText(r["evidence_short"]) || cellText(r["law_evidence_text"]));
+  const externalId = requiredField(r, ["content_id", "opinion_content_id"], "opinion row id");
+  const title = requiredField(
+    r,
+    ["title", "title_extracted_from_pdf", "source_file_name", "source_file"],
+    `opinion ${externalId} title`
+  );
+  const topicPrimary = orNull(firstPresent(r, ["topic_primary"]));
+  const topicSecondary = orNull(firstPresent(r, ["topic_secondary"]));
+  const activityPrimary = orNull(firstPresent(r, ["activity_primary"]));
+  const activitySecondary = orNull(firstPresent(r, ["activity_secondary"]));
+  const lawTagsConfirmed = orNull(firstPresent(r, ["law_tags_confirmed"]));
+  // v1 slim sheet uses `public_summary` (= executive_summary_ee_final).
+  const summary = orNull(
+    firstPresent(r, ["public_summary", "executive_summary_ee_final", "first_substantive_paragraph_corrected", "first_substantive_paragraph"])
+  );
+  const sourceEvidence = orNull(firstPresent(r, ["evidence_short", "summary_evidence_note", "evidence_quote_1", "law_evidence_text"]));
   const bodyText = joinSearchText([
     summary,
     sourceEvidence,
+    firstPresent(r, ["key_points", "chamber_position", "why_it_matters"]) || null,
     topicPrimary,
     topicSecondary,
     activityPrimary,
@@ -470,83 +563,115 @@ export function stageOpinionRow(r: Row): StagedContent {
   ]);
 
   return finalize({
-    externalId: cellText(r["content_id"]),
+    externalId,
     sourceDataset: "opinions",
     sourceLayer: "koda_public_opinion",
     sourceTypeDetail: "meie_arvamus_article",
     sourceType: "opinion",
-    sourceUrl: null,
+    sourceUrl: orNull(firstPresent(r, ["related_koda_news_url"])),
     canonicalUrl: null,
     title,
     displayTitle: title,
-    date: parseDate(cellText(r["sort_date"]) || cellText(r["document_date"])),
-    year: parseYear(cellText(r["source_year"]) || cellText(r["document_date"]) || cellText(r["sort_date"])),
+    date: parseDateFlexible(firstPresent(r, ["document_date", "sort_date"])),
+    year: parseYear(firstPresent(r, ["source_year", "document_date", "sort_date"])),
     reportYear: null,
-    sourceFileName: orNull(cellText(r["source_file"])),
-    // Recipient is now mapped to dedicated recipient* fields (see recipientFields);
-    // sourceSection holds the actual section only.
-    sourceSection: orNull(cellText(r["source_section"])),
+    displayDatePrecision: null,
+    dateConfidence: null,
+    dateBasis: null,
+    effectiveDate: null,
+    deadlineDate: null,
+    sourceFileName: orNull(firstPresent(r, ["source_file", "source_file_name"])),
+    sourceSection: orNull(firstPresent(r, ["source_section"])),
     sourcePageLocation: null,
     bodyText,
     excerpt: summary,
     summary,
-    kodaPosition: orNull(cellText(r["stance"])),
-    companyRelevance: orNull(cellText(r["value_type"])),
+    kodaPosition: orNull(firstPresent(r, ["chamber_position", "stance"])),
+    companyRelevance: orNull(firstPresent(r, ["business_impact", "value_type"])),
     sourceEvidence,
     outcomeStatus: null,
-    importStatus: orNull(cellText(r["import_action"])),
-    publicDisplayStatus: orNull(cellText(r["public_display_status"])),
-    importAction: orNull(cellText(r["import_action"])),
-    publicDisplayAllowed: parseBool(cellText(r["public_display_allowed"])),
-    publicDisplayRole: null,
-    mergeReadiness: null,
-    mergeNotes: orNull(cellText(r["notes"])),
-    extractionQuality: null,
-    needsHumanReview: parseBool(cellText(r["review_required"])),
-    numericClaimNeedsReview: parseBool(cellText(r["numeric_claim_needs_review"])),
-    reviewReason: orNull(cellText(r["review_reason"]) || cellText(r["public_block_reason"])),
+    contentRoleFinal: null,
+    publicActivityFilterTags: null,
+    publicActivityDisplayTags: null,
+    publicSectorPageAllowed: null,
+    sectorResultEligibility: null,
+    generalSearchEligibility: null,
+    recommendedAppVisibilityFinal: null,
+    publicSectorRankScore: null,
+    generalSearchRankScore: null,
+    whatChangedEt: null,
+    kodaRoleEt: orNull(firstPresent(r, ["koda_request", "chamber_position"])),
+    businessValueEt: orNull(firstPresent(r, ["business_impact"])),
+    beforeAfterEt: null,
+    workWinTypePrimary: null,
+    workWinTypeSecondary: null,
+    canonicalPolicyThreadId: orNull(firstPresent(r, ["canonical_policy_thread_id"])),
+    policyThreadId: orNull(firstPresent(r, ["policy_thread_id"])),
+    importEligible: parseBoolFlexible(firstPresent(r, ["final_app_import_eligible"])),
+    importAction: orNull(firstPresent(r, ["readiness", "import_action"])),
+    publicDisplayStatus: orNull(firstPresent(r, ["readiness", "public_display_status"])),
+    needsHumanReview: parseBoolFlexible(firstPresent(r, ["review_required"])) || !parseBoolFlexibleDefaultTrue(r, "final_quality_passed"),
+    numericClaimNeedsReview: parseBoolFlexible(firstPresent(r, ["numeric_claim_needs_review"])),
+    reviewReason: orNull(firstPresent(r, ["review_reason"])),
     publicPriority: null,
-    sourceQualityFlag: orNull(cellText(r["source_quality_flag"])),
-    classificationConfidence: orNull(cellText(r["classification_confidence"])),
+    sourceQualityFlag: orNull(firstPresent(r, ["source_quality_flag"])),
+    classificationConfidence: orNull(firstPresent(r, ["classification_confidence"])),
     primaryCategory: topicPrimary,
     secondaryCategories: topicSecondary,
-    topicGroupCandidate: null,
+    topicGroupCandidate: orNull(firstPresent(r, ["canonical_policy_thread_id"])),
     topicPrimary,
     topicSecondary,
     activityPrimary,
     activitySecondary,
-    sectorScope: orNull(cellText(r["sector_scope"])),
-    situationTags: orNull(cellText(r["situation_tags"])),
+    sectorScope: orNull(firstPresent(r, ["sector_scope"])),
+    situationTags: orNull(firstPresent(r, ["situation_tags"])),
     lawTagsConfirmed,
-    lawTagsCandidate: orNull(cellText(r["law_tags_candidate"])),
-    lawSearchAllowed: !!lawTagsConfirmed && !["low", "none"].includes(cellText(r["law_match_confidence"]).toLowerCase()),
+    lawTagsCandidate: orNull(firstPresent(r, ["law_tags_candidate"])),
+    lawSearchAllowed: !!lawTagsConfirmed && !["low", "none"].includes(firstPresent(r, ["law_match_confidence"]).toLowerCase()),
     canonicalContentId: null,
     duplicateStatus: null,
     isEvergreen: false,
     ...recipientFields(r),
-    valdkonnad: makeTaxonomy(topicPrimary, topicSecondary),
-    tegevusalad: makeTaxonomy(activityPrimary, activitySecondary),
-    tapsustused: splitMulti(cellText(r["situation_tags"])),
+    valdkonnad: makeTopicTags(topicPrimary, topicSecondary),
+    tegevusalad: makeActivityTags(activityPrimary, activitySecondary),
+    tapsustused: splitMulti(firstPresent(r, ["situation_tags"])),
     oigusaktid: splitMulti(lawTagsConfirmed ?? ""),
-    matchedWebContentId: null,
+    matchedWebContentId: orNull(firstPresent(r, ["related_koda_news_content_id"])),
     matchedOpinionContentId: null,
     hashText: bodyText,
   });
 }
 
+/** Helper: a 0/1/TRUE QA-pass column defaults to "passed" when absent. */
+function parseBoolFlexibleDefaultTrue(r: Row, key: string): boolean {
+  const v = firstPresent(r, [key]);
+  return v === "" ? true : parseBoolFlexible(v);
+}
+
 export function stageToovoitRow(r: Row): StagedContent {
-  const title = cellText(r["public_title"]) || cellText(r["title"]) || cellText(r["source_title"]) || cellText(r["toovoit_id"]);
-  const topicPrimary = orNull(cellText(r["topic_primary"]));
-  const topicSecondary = orNull(cellText(r["topic_secondary"]));
-  const activityPrimary = orNull(cellText(r["activity_primary"]));
-  const activitySecondary = orNull(cellText(r["activity_secondary"]));
-  const lawTagsConfirmed = orNull(cellText(r["law_tags_confirmed"]));
-  const summary = orNull(cellText(r["public_summary"]) || cellText(r["summary"]) || cellText(r["why_it_matters"]));
-  const sourceEvidence = orNull(cellText(r["impact_statement"]) || cellText(r["law_evidence_text"]));
+  const externalId = requiredField(r, ["toovoit_id", "work_win_id"], "töövõit row id");
+  const title = requiredField(
+    r,
+    ["work_win_title_public", "public_title", "title", "source_title"],
+    `töövõit ${externalId} title`
+  );
+  const topicPrimary = orNull(firstPresent(r, ["topic_primary"]));
+  const topicSecondary = orNull(firstPresent(r, ["topic_secondary"]));
+  const activityPrimary = orNull(firstPresent(r, ["activity_primary"]));
+  const activitySecondary = orNull(firstPresent(r, ["activity_secondary"]));
+  const lawTagsConfirmed = orNull(firstPresent(r, ["law_tags_confirmed"]));
+  const summary = orNull(firstPresent(r, ["work_win_summary_ee", "app_public_summary", "public_summary", "summary"]));
+  const whatChangedEt = orNull(firstPresent(r, ["what_changed_ee"]));
+  const kodaRoleEt = orNull(firstPresent(r, ["koda_role_ee"]));
+  const businessValueEt = orNull(firstPresent(r, ["business_value_ee"]));
+  const beforeAfterEt = orNull(firstPresent(r, ["before_after_ee"]));
+  const sourceEvidence = orNull(firstPresent(r, ["source_match_evidence", "evidence_short", "law_evidence_text"]));
   const bodyText = joinSearchText([
     summary,
+    whatChangedEt,
+    businessValueEt,
+    kodaRoleEt,
     sourceEvidence,
-    cellText(r["why_it_matters"]),
     topicPrimary,
     topicSecondary,
     activityPrimary,
@@ -555,200 +680,294 @@ export function stageToovoitRow(r: Row): StagedContent {
   ]);
 
   return finalize({
-    externalId: cellText(r["toovoit_id"]),
+    externalId,
     sourceDataset: "toovoidud",
     sourceLayer: "koda_achievement",
     sourceTypeDetail: "toovoit",
     sourceType: "achievement",
-    sourceUrl: orNull(cellText(r["source_url"]) || cellText(r["matched_web_url"])),
+    // Use a specific public source URL; do not fall back to the generic listing page here.
+    sourceUrl: orNull(firstPresent(r, ["primary_work_win_source_url", "source_url", "matched_web_url"])),
     canonicalUrl: null,
     title,
     displayTitle: title,
-    date: parseDate(cellText(r["sort_date"]) || cellText(r["published_date"])),
-    year: parseYear(cellText(r["source_year"]) || cellText(r["sort_date"])),
+    // Achievement display date is display_date (+ precision). effective/deadline are kept separate.
+    date: parseDateFlexible(firstPresent(r, ["display_date", "source_date", "achievement_year", "source_year"])),
+    year: parseYear(firstPresent(r, ["achievement_year", "source_year", "display_date"])),
     reportYear: null,
+    displayDatePrecision: orNull(firstPresent(r, ["display_date_precision"])),
+    dateConfidence: orNull(firstPresent(r, ["date_confidence"])),
+    dateBasis: orNull(firstPresent(r, ["date_basis"])),
+    effectiveDate: parseDateFlexible(firstPresent(r, ["effective_date"])),
+    deadlineDate: parseDateFlexible(firstPresent(r, ["deadline_date"])),
     sourceFileName: null,
-    sourceSection: orNull(cellText(r["source_section"])),
+    sourceSection: orNull(firstPresent(r, ["primary_work_win_source"])),
     sourcePageLocation: null,
     bodyText,
     excerpt: summary,
     summary,
-    kodaPosition: orNull(cellText(r["impact_statement"])),
-    companyRelevance: orNull(cellText(r["affected_company_profile"]) || cellText(r["beneficiary_scope"])),
+    kodaPosition: kodaRoleEt,
+    companyRelevance: orNull(firstPresent(r, ["business_value_ee", "affected_company_profile", "beneficiary_scope"])),
     sourceEvidence,
-    outcomeStatus: orNull(cellText(r["work_win_status"])),
-    importStatus: orNull(cellText(r["import_action"])),
-    publicDisplayStatus: orNull(cellText(r["public_display_status"])),
-    importAction: orNull(cellText(r["import_action"])),
-    publicDisplayAllowed: parseBool(cellText(r["public_display_allowed"])),
-    publicDisplayRole: null,
-    mergeReadiness: null,
-    mergeNotes: orNull(cellText(r["notes"])),
-    extractionQuality: null,
-    needsHumanReview: parseBool(cellText(r["review_required"])),
-    numericClaimNeedsReview: parseBool(cellText(r["numeric_claim_needs_review"])),
-    reviewReason: orNull(cellText(r["review_reason"]) || cellText(r["public_block_reason"])),
-    publicPriority: orNull(cellText(r["source_preference_rank"])),
-    sourceQualityFlag: orNull(cellText(r["source_quality_flag"])),
-    classificationConfidence: orNull(cellText(r["classification_confidence"])),
+    outcomeStatus: orNull(firstPresent(r, ["work_win_status"])),
+    contentRoleFinal: null,
+    publicActivityFilterTags: orNull(firstPresent(r, ["public_activity_filter_tags"])),
+    publicActivityDisplayTags: orNull(firstPresent(r, ["public_activity_display_tags"])),
+    publicSectorPageAllowed: null,
+    sectorResultEligibility: null,
+    generalSearchEligibility: null,
+    recommendedAppVisibilityFinal: null,
+    publicSectorRankScore: null,
+    generalSearchRankScore: null,
+    whatChangedEt,
+    kodaRoleEt,
+    businessValueEt,
+    beforeAfterEt,
+    workWinTypePrimary: orNull(firstPresent(r, ["work_win_type_primary"])),
+    workWinTypeSecondary: orNull(firstPresent(r, ["work_win_type_secondary"])),
+    canonicalPolicyThreadId: orNull(firstPresent(r, ["canonical_policy_thread_id"])),
+    policyThreadId: orNull(firstPresent(r, ["policy_thread_id"])),
+    importEligible: parseBoolFlexible(firstPresent(r, ["work_win_import_candidate", "final_work_win_import_candidate"])),
+    importAction: orNull(firstPresent(r, ["import_action"])),
+    publicDisplayStatus: orNull(firstPresent(r, ["work_win_public_readiness", "public_display_status"])),
+    needsHumanReview: parseBoolFlexible(firstPresent(r, ["review_required", "work_win_review_required"])),
+    numericClaimNeedsReview: parseBoolFlexible(firstPresent(r, ["numeric_claim_needs_review"])),
+    reviewReason: orNull(firstPresent(r, ["review_reason", "work_win_review_reason", "public_block_reason"])),
+    publicPriority: null,
+    sourceQualityFlag: orNull(firstPresent(r, ["source_quality_flag"])),
+    classificationConfidence: orNull(firstPresent(r, ["classification_confidence"])),
     primaryCategory: topicPrimary,
     secondaryCategories: topicSecondary,
-    topicGroupCandidate: orNull(cellText(r["canonical_policy_thread_id"])),
+    topicGroupCandidate: orNull(firstPresent(r, ["canonical_policy_thread_id"])),
     topicPrimary,
     topicSecondary,
     activityPrimary,
     activitySecondary,
-    sectorScope: orNull(cellText(r["sector_scope"])),
-    situationTags: orNull(cellText(r["situation_tags"])),
+    sectorScope: orNull(firstPresent(r, ["sector_scope"])),
+    situationTags: orNull(firstPresent(r, ["situation_tags"])),
     lawTagsConfirmed,
-    lawTagsCandidate: orNull(cellText(r["law_tags_candidate"])),
+    lawTagsCandidate: orNull(firstPresent(r, ["law_tags_candidate"])),
     lawSearchAllowed: !!lawTagsConfirmed,
-    canonicalContentId: orNull(cellText(r["canonical_toovoit_id"])),
-    duplicateStatus: parseBool(cellText(r["is_duplicate"])) ? "possible_duplicate" : null,
+    canonicalContentId: orNull(firstPresent(r, ["canonical_toovoit_id"])),
+    duplicateStatus: parseBoolFlexible(firstPresent(r, ["is_duplicate"])) ? "possible_duplicate" : null,
     isEvergreen: true,
     ...recipientFields(r),
-    valdkonnad: makeTaxonomy(topicPrimary, topicSecondary),
-    tegevusalad: makeTaxonomy(activityPrimary, activitySecondary),
-    tapsustused: splitMulti(cellText(r["situation_tags"])),
+    valdkonnad: makeTopicTags(topicPrimary, topicSecondary),
+    tegevusalad: makeActivityTags(firstPresent(r, ["public_activity_filter_tags"]) || `${activityPrimary ?? ""};${activitySecondary ?? ""}`),
+    tapsustused: splitMulti(firstPresent(r, ["situation_tags"])),
     oigusaktid: splitMulti(lawTagsConfirmed ?? ""),
-    matchedWebContentId: orNull(cellText(r["matched_web_content_id"])),
-    matchedOpinionContentId: orNull(cellText(r["matched_opinion_content_id"])),
+    matchedWebContentId: orNull(firstPresent(r, ["matched_web_content_id"])),
+    matchedOpinionContentId: orNull(firstPresent(r, ["matched_opinion_content_id"])),
     hashText: bodyText,
   });
 }
 
+/**
+ * v1 public gate. A staged import-sheet row is public when:
+ *   1. it is in the official import sheet (guaranteed — we only stage those);
+ *   2. the layer-specific import flag is TRUE;
+ *   3. a public summary exists;
+ *   4. no explicit human-review/blocked flag is set.
+ * Excluded/review-sheet rows are never staged here, so (the spec's "not in
+ * excluded sheet") holds by construction.
+ *
+ * Note: `numeric_claim_needs_review` is NOT a publish blocker in v1. It is a
+ * producer-side diagnostic; the layer import flag (final_web_import_candidate /
+ * final_app_import_eligible / work_win_import_candidate) is the authoritative
+ * final gate and already incorporates it, so rows kept in the import sheet are
+ * public. The flag is still stored on the row for audit.
+ */
 export function computeVisibility(s: StagedContent): boolean {
-  const actionOk =
-    s.sourceDataset === "toovoidud"
-      ? s.importAction === "enrichment_public" || s.importAction === "import"
-      : s.importAction === "import_public";
-  if (!actionOk) return false;
-  if (s.publicDisplayAllowed !== true) return false;
+  if (!s.importEligible) return false;
+  if (!s.summary || s.summary.trim() === "") return false;
   if (s.needsHumanReview) return false;
-  if (s.numericClaimNeedsReview) return false;
-  if (s.publicDisplayStatus && PUBLIC_BLOCKING_DISPLAY.has(s.publicDisplayStatus)) return false;
-  if (s.sourceQualityFlag && BAD_SOURCE_QUALITY.has(s.sourceQualityFlag)) return false;
-  if (s.duplicateStatus === "possible_duplicate") return false;
   return true;
 }
 
-export async function stageAllContent(): Promise<{
+// ---------------------------------------------------------------------------
+// Staging entry points
+// ---------------------------------------------------------------------------
+
+export function stageAllContent(): {
   web: StagedContent[];
   opinions: StagedContent[];
   toovoidud: StagedContent[];
   all: StagedContent[];
-}> {
-  const web = (await readSheet(FILES.web, SHEETS.web)).rows.map(stageWebRow);
-  const opinions = (await readSheet(FILES.opinions, SHEETS.opinions)).rows.map(stageOpinionRow);
-  const toovoidud = (await readSheet(FILES.toovoidud, SHEETS.toovoidud)).rows.map(stageToovoitRow);
+} {
+  const web = readSheet(FILES.web, SHEETS.web).rows.map(stageWebRow);
+  const opinions = readSheet(FILES.opinions, SHEETS.opinions).rows.map(stageOpinionRow);
+  const toovoidud = readSheet(FILES.toovoidud, SHEETS.toovoidud).rows.map(stageToovoitRow);
   return { web, opinions, toovoidud, all: [...web, ...opinions, ...toovoidud] };
 }
 
-export type StagedLink = {
-  webContentId: string;
-  opinionContentId: string;
-  publicLinkAllowed: boolean;
-  linkImportAction: string | null;
-  relationStatus: string | null;
-  confidence: string | null;
-  evidence: string | null;
-};
-
-function stageLinkRow(r: Row): StagedLink {
+/** Ids present in each excluded/review sheet (never public content). */
+export function stageExcludedIds(): { web: string[]; opinions: string[]; toovoidud: string[] } {
+  const ids = (file: readonly string[], sheet: string, key: readonly string[]): string[] => {
+    if (!hasSheet(file, sheet)) return [];
+    return readSheet(file, sheet).rows.map((r) => firstPresent(r, key)).filter(Boolean);
+  };
   return {
-    webContentId: cellText(r["web_content_id"]),
-    opinionContentId: cellText(r["opinion_content_id"]),
-    publicLinkAllowed: parseBool(cellText(r["public_link_allowed"])),
-    linkImportAction: orNull(cellText(r["link_import_action"])),
-    relationStatus: orNull(cellText(r["relation_status"])),
-    confidence: orNull(cellText(r["confidence"])),
-    evidence: orNull(cellText(r["evidence"])),
+    web: ids(FILES.web, SHEETS.webExcluded, ["web_content_id", "content_id"]),
+    opinions: ids(FILES.opinions, SHEETS.opinionsExcluded, ["content_id"]),
+    toovoidud: ids(FILES.toovoidud, SHEETS.toovoidudExcluded, ["toovoit_id"]),
   };
 }
 
-export async function stageLinks(): Promise<{ approved: StagedLink[]; candidate: StagedLink[] }> {
-  const webFile = resolveImportFile(FILES.web);
-  const wb = XLSX.readFile(webFile, { cellDates: true, raw: false });
-  const approved = wb.SheetNames.includes(SHEETS.approvedLinks)
-    ? (await readSheet(FILES.web, SHEETS.approvedLinks)).rows.map(stageLinkRow)
-    : [];
-  const candidate = wb.SheetNames.includes(SHEETS.candidateLinks)
-    ? (await readSheet(FILES.web, SHEETS.candidateLinks)).rows.map(stageLinkRow)
-    : [];
-  return { approved, candidate };
+// ---------------------------------------------------------------------------
+// Cross-layer link workbook (koda_content_links_v1.xlsx)
+// ---------------------------------------------------------------------------
+
+/** A public "Veel samal teemal" / evidence relation (source → target). */
+export type PublicRelatedLink = {
+  sourceContentId: string;
+  sourceLayer: string;
+  targetContentId: string;
+  targetLayer: string;
+  relationLabelEt: string | null;
+  canonicalPolicyThreadId: string | null;
+  linkConfidence: string | null;
+  linkBasis: string | null;
+  sortPriority: number | null;
+};
+
+export type SmokeTestRow = {
+  testId: string;
+  testName: string;
+  status: string;
+  issueCount: number;
+  severity: string;
+  actionRequired: string;
+  notes: string;
+};
+
+export type LinkWorkbook = {
+  publicRelated: PublicRelatedLink[];
+  smokeTest: SmokeTestRow[];
+  counts: {
+    publicRelated: number;
+    crossLayer: number;
+    policyThreads: number;
+    candidate: number;
+    blocked: number;
+    missingTargets: number;
+  };
+};
+
+const ACCEPTABLE_LINK_CONFIDENCE = new Set(["high", "curated_medium"]);
+
+export function stagePublicRelatedLink(r: Row): PublicRelatedLink {
+  return {
+    sourceContentId: firstPresent(r, ["source_content_id"]),
+    sourceLayer: firstPresent(r, ["source_layer"]),
+    targetContentId: firstPresent(r, ["target_content_id"]),
+    targetLayer: firstPresent(r, ["target_layer"]),
+    relationLabelEt: orNull(firstPresent(r, ["app_relation_label_ee"])),
+    canonicalPolicyThreadId: orNull(firstPresent(r, ["canonical_policy_thread_id"])),
+    linkConfidence: orNull(firstPresent(r, ["link_confidence"])),
+    linkBasis: orNull(firstPresent(r, ["link_basis"])),
+    sortPriority: toIntOrNull(firstPresent(r, ["sort_priority"])),
+  };
 }
+
+function countSheet(file: readonly string[], sheet: string): number {
+  return hasSheet(file, sheet) ? readSheet(file, sheet).rows.length : 0;
+}
+
+export function stageLinkWorkbook(): LinkWorkbook {
+  const publicRelated = hasSheet(FILES.links, SHEETS.publicRelatedLinks)
+    ? readSheet(FILES.links, SHEETS.publicRelatedLinks).rows.map(stagePublicRelatedLink)
+    : [];
+  const smokeTest: SmokeTestRow[] = hasSheet(FILES.links, SHEETS.smokeTest)
+    ? readSheet(FILES.links, SHEETS.smokeTest).rows.map((r) => ({
+        testId: firstPresent(r, ["test_id"]),
+        testName: firstPresent(r, ["test_name"]),
+        status: firstPresent(r, ["status"]).toUpperCase(),
+        issueCount: toIntOrNull(firstPresent(r, ["issue_count"])) ?? 0,
+        severity: firstPresent(r, ["severity"]).toLowerCase(),
+        actionRequired: firstPresent(r, ["action_required"]),
+        notes: firstPresent(r, ["notes"]),
+      }))
+    : [];
+  return {
+    publicRelated,
+    smokeTest,
+    counts: {
+      publicRelated: publicRelated.length,
+      crossLayer: countSheet(FILES.links, SHEETS.crossLayerLinks),
+      policyThreads: countSheet(FILES.links, SHEETS.policyThreads),
+      candidate: countSheet(FILES.links, SHEETS.candidateLinks),
+      blocked: countSheet(FILES.links, SHEETS.blockedLinks),
+      missingTargets: countSheet(FILES.links, SHEETS.missingTargets),
+    },
+  };
+}
+
+/** Map a public related link to an evidence-graph linkType by target layer. */
+export function evidenceLinkTypeForTarget(targetLayer: string): string {
+  switch (targetLayer) {
+    case "opinions":
+      return "related_opinion";
+    case "toovoidud":
+      return "related_work_win";
+    case "web":
+    default:
+      return "related_news";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Analysis / validation
+// ---------------------------------------------------------------------------
 
 export type Issue = { dataset: string; externalId: string; field: string; message: string };
 
 export type Analysis = {
   ok: boolean;
   errors: string[];
-  rowCounts: Record<string, number>;
+  warnings: string[];
+  rowCounts: {
+    web: number;
+    opinions: number;
+    toovoidud: number;
+    total: number;
+    publicRelatedLinks: number;
+    crossLayerLinks: number;
+    policyThreads: number;
+    candidateLinks: number;
+    blockedLinks: number;
+    missingTargets: number;
+  };
+  excludedCounts: { web: number; opinions: number; toovoidud: number };
   expected: typeof EXPECTED_ROWS;
   totalContentStaged: number;
-  visibility: {
-    public: number;
-    hiddenOrSupporting: number;
-    needsReview: number;
-    numericReview: number;
-    doNotImportPublic: number;
-    supportOnly: number;
-    stagingOnly: number;
-    heldToovoidud: number;
-  };
+  visibility: { public: number; hidden: number; needsReview: number; numericReview: number };
   perDataset: Record<string, { total: number; public: number; hidden: number; needsReview: number; achievements: number }>;
   duplicateExternalIds: Record<string, string[]>;
   duplicateContentHashGroups: { hash: string; ids: string[] }[];
-  invalidEnumValues: Issue[];
+  importFlagViolations: Issue[];
   missingRequiredFields: Issue[];
-  publicRowsWithReviewFlag: string[];
-  publicRowsWithNumericReviewFlag: string[];
-  blockers: {
-    supportOnlyPublic: string[];
-    stagingOnlyPublic: string[];
-    heldToovoidudPublic: string[];
-    candidateLinksPublic: number;
-  };
+  missingSummaryRows: Issue[];
+  rawFragmentSummaryRows: Issue[];
+  crossSectorDisplayTagRows: Issue[];
+  dateRegressions: { id: string; field: string; value: string; ok: boolean; note: string }[];
   links: {
-    approvedRows: number;
-    approvedPublicEligible: number;
-    approvedAdminOrBlocked: number;
-    candidateRows: number;
-    candidateAdminOnly: number;
+    publicRelated: number;
+    byConfidence: Record<string, number>;
+    targetsNotImported: { source: string; target: string }[];
+    targetsExcluded: { source: string; target: string }[];
+    lowOrRejected: { source: string; target: string; confidence: string }[];
+    candidate: number;
+    blocked: number;
+    missingTargets: number;
   };
-  law: {
-    publicConfirmedLawTagRows: number;
-    candidateLawTagRows: number;
-  };
-  taxonomyReference: {
-    fileName: string;
-    bytes: number;
-  };
+  smokeTest: { rows: SmokeTestRow[]; failures: SmokeTestRow[]; blockerFailures: SmokeTestRow[] };
+  law: { publicConfirmedLawTagRows: number; candidateLawTagRows: number };
+  taxonomyReference: { fileName: string; bytes: number };
 };
 
-const REQUIRED_FIELDS: (keyof StagedContent)[] = ["externalId", "title", "importAction"];
+const REQUIRED_FIELDS: (keyof StagedContent)[] = ["externalId", "title", "summary"];
 
-function checkEnum(s: StagedContent, issues: Issue[]) {
-  const ds = s.sourceDataset;
-  const actionAllowed =
-    ds === "web"
-      ? ALLOWED.webImportAction
-      : ds === "opinions"
-        ? ALLOWED.opinionImportAction
-        : ALLOWED.toovoitImportAction;
-  if (s.importAction && !actionAllowed.has(s.importAction as never)) {
-    issues.push({ dataset: ds, externalId: s.externalId, field: "import_action", message: s.importAction });
-  }
-  if (s.publicDisplayStatus && !ALLOWED.publicDisplayStatus.has(s.publicDisplayStatus as never)) {
-    issues.push({ dataset: ds, externalId: s.externalId, field: "public_display_status", message: s.publicDisplayStatus });
-  }
-  if (s.sourceQualityFlag && !ALLOWED.sourceQualityFlag.has(s.sourceQualityFlag as never)) {
-    issues.push({ dataset: ds, externalId: s.externalId, field: "source_quality_flag", message: s.sourceQualityFlag });
-  }
-  if (s.classificationConfidence && !ALLOWED.classificationConfidence.has(s.classificationConfidence as never)) {
-    issues.push({ dataset: ds, externalId: s.externalId, field: "classification_confidence", message: s.classificationConfidence });
-  }
-}
+/** Raw date/title fragment artefacts that must not leak into public summaries. */
+const RAW_FRAGMENT_RE = /\b\d{1,2},\d{1,2},\d{2,4}\b/; // e.g. 20,12,2016
 
 function countBy<T>(values: T[], key: (value: T) => string): Record<string, number> {
   const out: Record<string, number> = {};
@@ -759,30 +978,84 @@ function countBy<T>(values: T[], key: (value: T) => string): Record<string, numb
   return out;
 }
 
+function containsCrossSector(value: string | null): boolean {
+  if (!value) return false;
+  const t = value.toLocaleLowerCase("et-EE");
+  return t.includes("kõik tegevusalad") || t.includes("koik tegevusalad") || t.includes("valdkondadeülene") || t.includes("valdkondadeulene");
+}
+
+/** Known töövõit date regressions (must stay safe). */
+function dateRegressionChecks(toovoidud: StagedContent[]): Analysis["dateRegressions"] {
+  const out: Analysis["dateRegressions"] = [];
+  const iso = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : "");
+  const byTitle = (needle: string) =>
+    toovoidud.find((s) => s.title.toLocaleLowerCase("et-EE").includes(needle));
+
+  const pandi = byTitle("panditulumaks");
+  if (pandi) {
+    out.push({
+      id: pandi.externalId,
+      field: "display_date",
+      value: iso(pandi.date),
+      ok: iso(pandi.date) !== "2026-06-24",
+      note: "panditulumaks must not use 2026-06-24 as display/achievement date",
+    });
+  }
+  const sooline = toovoidud.find((s) => {
+    const t = s.title.toLocaleLowerCase("et-EE");
+    return t.includes("soolise tasakaalu") || (t.includes("börsiettevõte") && t.includes("aruandlus"));
+  });
+  if (sooline) {
+    out.push({
+      id: sooline.externalId,
+      field: "display_date",
+      value: iso(sooline.date),
+      ok: iso(sooline.date) !== "2026-12-31",
+      note: "börsiettevõtete soolise tasakaalu töövõit must not use 2026-12-31 as display/achievement date",
+    });
+    out.push({
+      id: sooline.externalId,
+      field: "deadline_date",
+      value: iso(sooline.deadlineDate),
+      ok: sooline.deadlineDate == null || iso(sooline.deadlineDate) === "2026-06-30",
+      note: "30.06.2026 must remain a deadline_date, not the achievement/display date",
+    });
+  }
+  return out;
+}
+
 export function analyze(
   staged: { web: StagedContent[]; opinions: StagedContent[]; toovoidud: StagedContent[]; all: StagedContent[] },
-  links: { approved: StagedLink[]; candidate: StagedLink[] }
+  links: LinkWorkbook,
+  excluded: { web: string[]; opinions: string[]; toovoidud: string[] }
 ): Analysis {
   const errors: string[] = [];
+  const warnings: string[] = [];
+
   const rowCounts = {
     web: staged.web.length,
     opinions: staged.opinions.length,
     toovoidud: staged.toovoidud.length,
-    approvedLinks: links.approved.length,
-    candidateLinks: links.candidate.length,
+    total: staged.all.length,
+    publicRelatedLinks: links.counts.publicRelated,
+    crossLayerLinks: links.counts.crossLayer,
+    policyThreads: links.counts.policyThreads,
+    candidateLinks: links.counts.candidate,
+    blockedLinks: links.counts.blocked,
+    missingTargets: links.counts.missingTargets,
   };
+  const excludedCounts = { web: excluded.web.length, opinions: excluded.opinions.length, toovoidud: excluded.toovoidud.length };
 
-  if (rowCounts.web !== EXPECTED_ROWS.web) errors.push(`web rows ${rowCounts.web} != ${EXPECTED_ROWS.web}`);
-  if (rowCounts.opinions !== EXPECTED_ROWS.opinions) errors.push(`opinions rows ${rowCounts.opinions} != ${EXPECTED_ROWS.opinions}`);
-  if (rowCounts.toovoidud !== EXPECTED_ROWS.toovoidud) errors.push(`toovoidud rows ${rowCounts.toovoidud} != ${EXPECTED_ROWS.toovoidud}`);
-  if (rowCounts.approvedLinks !== EXPECTED_ROWS.approvedLinks) errors.push(`approved links ${rowCounts.approvedLinks} != ${EXPECTED_ROWS.approvedLinks}`);
-  if (rowCounts.candidateLinks !== EXPECTED_ROWS.candidateLinks) errors.push(`candidate links ${rowCounts.candidateLinks} != ${EXPECTED_ROWS.candidateLinks}`);
+  // (3) Import-row count invariants (hard).
+  if (rowCounts.web !== EXPECTED_ROWS.web) errors.push(`web import rows ${rowCounts.web} != ${EXPECTED_ROWS.web}`);
+  if (rowCounts.opinions !== EXPECTED_ROWS.opinions) errors.push(`opinions import rows ${rowCounts.opinions} != ${EXPECTED_ROWS.opinions}`);
+  if (rowCounts.toovoidud !== EXPECTED_ROWS.toovoidud) errors.push(`toovoidud import rows ${rowCounts.toovoidud} != ${EXPECTED_ROWS.toovoidud}`);
+  if (rowCounts.total !== EXPECTED_ROWS.totalImportable) errors.push(`total importable rows ${rowCounts.total} != ${EXPECTED_ROWS.totalImportable}`);
+  if (excludedCounts.web !== EXPECTED_ROWS.webExcluded) warnings.push(`web excluded rows ${excludedCounts.web} != ${EXPECTED_ROWS.webExcluded}`);
+  if (excludedCounts.opinions !== EXPECTED_ROWS.opinionsExcluded) warnings.push(`opinions excluded rows ${excludedCounts.opinions} != ${EXPECTED_ROWS.opinionsExcluded}`);
+  if (excludedCounts.toovoidud !== EXPECTED_ROWS.toovoidudExcluded) warnings.push(`toovoidud excluded rows ${excludedCounts.toovoidud} != ${EXPECTED_ROWS.toovoidudExcluded}`);
 
-  const totalContentStaged = staged.all.length;
-  if (totalContentStaged !== EXPECTED_ROWS.totalContentBeforeExclusions) {
-    errors.push(`total content ${totalContentStaged} != ${EXPECTED_ROWS.totalContentBeforeExclusions}`);
-  }
-
+  // Duplicate external IDs (hard).
   const duplicateExternalIds: Record<string, string[]> = {};
   for (const [ds, rows] of Object.entries({ web: staged.web, opinions: staged.opinions, toovoidud: staged.toovoidud })) {
     const seen = new Set<string>();
@@ -797,36 +1070,69 @@ export function analyze(
     }
   }
 
-  const invalidEnumValues: Issue[] = [];
+  // (4) Import sheets must not contain FALSE import flags.
+  const importFlagViolations: Issue[] = staged.all
+    .filter((s) => !s.importEligible)
+    .map((s) => ({ dataset: s.sourceDataset, externalId: s.externalId, field: "import_flag", message: "import flag is not TRUE" }));
+  if (importFlagViolations.length) errors.push(`${importFlagViolations.length} import-sheet row(s) have a FALSE import flag`);
+
+  // (5) Excluded rows must not appear in the import sheets.
+  const importIds = new Set(staged.all.map((s) => s.externalId));
+  for (const [ds, ids] of Object.entries(excluded)) {
+    const leaked = ids.filter((id) => importIds.has(id));
+    if (leaked.length) errors.push(`${leaked.length} ${ds} excluded/review row(s) also appear in the import sheet`);
+  }
+
+  // (6) Required public fields.
   const missingRequiredFields: Issue[] = [];
+  const missingSummaryRows: Issue[] = [];
   for (const s of staged.all) {
-    checkEnum(s, invalidEnumValues);
     for (const f of REQUIRED_FIELDS) {
       if (!s[f]) missingRequiredFields.push({ dataset: s.sourceDataset, externalId: s.externalId || "(blank)", field: f as string, message: "missing" });
     }
+    if (!s.summary || s.summary.trim() === "") {
+      missingSummaryRows.push({ dataset: s.sourceDataset, externalId: s.externalId, field: "summary", message: "empty public summary" });
+    }
   }
-  if (invalidEnumValues.length) errors.push(`${invalidEnumValues.length} invalid enum value(s)`);
-  if (missingRequiredFields.length) errors.push(`${missingRequiredFields.length} missing required field(s)`);
+  if (missingSummaryRows.length) errors.push(`${missingSummaryRows.length} import row(s) have an empty public summary`);
 
+  // (7) Web summaries should not contain raw date/title fragments (e.g. 20,12,2016
+  // or 24,02,22). Reported as a warning, not a hard failure: the producer package
+  // is the QA'd source of truth, so a rare residual fragment is surfaced for
+  // cleanup without blocking the whole production import.
+  const rawFragmentSummaryRows: Issue[] = staged.all
+    .filter((s) => s.summary && RAW_FRAGMENT_RE.test(s.summary))
+    .map((s) => ({ dataset: s.sourceDataset, externalId: s.externalId, field: "summary", message: "raw date/title fragment in summary" }));
+  if (rawFragmentSummaryRows.length) {
+    warnings.push(
+      `${rawFragmentSummaryRows.length} row(s) have a raw date fragment in the public summary: ${rawFragmentSummaryRows.map((i) => i.externalId).join(", ")}`
+    );
+  }
+
+  // (8) Public activity DISPLAY tags must not contain the cross-sector label.
+  const crossSectorDisplayTagRows: Issue[] = staged.all
+    .filter((s) => containsCrossSector(s.publicActivityDisplayTags))
+    .map((s) => ({ dataset: s.sourceDataset, externalId: s.externalId, field: "public_activity_display_tags", message: "contains Kõik tegevusalad / valdkondadeülene" }));
+  if (crossSectorDisplayTagRows.length) errors.push(`${crossSectorDisplayTagRows.length} row(s) expose the cross-sector label as a public display tag`);
+
+  // (9) Töövõit date regressions.
+  const dateRegressions = dateRegressionChecks(staged.toovoidud);
+  for (const dr of dateRegressions) if (!dr.ok) errors.push(`date regression (${dr.id} ${dr.field}=${dr.value}): ${dr.note}`);
+
+  // Content-hash duplicates (informational).
   const byHash = new Map<string, string[]>();
   for (const s of staged.all) {
     const list = byHash.get(s.contentHash) ?? [];
     list.push(s.externalId);
     byHash.set(s.contentHash, list);
   }
-  const duplicateContentHashGroups = [...byHash.entries()]
-    .filter(([, ids]) => ids.length > 1)
-    .map(([hash, ids]) => ({ hash, ids }));
+  const duplicateContentHashGroups = [...byHash.entries()].filter(([, ids]) => ids.length > 1).map(([hash, ids]) => ({ hash, ids }));
 
   const visibility = {
     public: staged.all.filter((s) => s.isPublic).length,
-    hiddenOrSupporting: staged.all.filter((s) => !s.isPublic).length,
+    hidden: staged.all.filter((s) => !s.isPublic).length,
     needsReview: staged.all.filter((s) => s.needsHumanReview).length,
     numericReview: staged.all.filter((s) => s.numericClaimNeedsReview).length,
-    doNotImportPublic: staged.web.filter((s) => s.importAction === "do_not_import_public").length,
-    supportOnly: staged.web.filter((s) => s.importAction === "import_support_only").length,
-    stagingOnly: staged.all.filter((s) => s.importAction === "import_staging_only").length,
-    heldToovoidud: staged.toovoidud.filter((s) => s.importAction === "enrichment_hold").length,
   };
 
   const perDataset: Analysis["perDataset"] = {};
@@ -840,68 +1146,70 @@ export function analyze(
     };
   }
 
-  if (perDataset.web.public !== EXPECTED_ROWS.webPublic) errors.push(`web public ${perDataset.web.public} != ${EXPECTED_ROWS.webPublic}`);
-  if (visibility.supportOnly !== EXPECTED_ROWS.webSupportOnly) errors.push(`web support-only ${visibility.supportOnly} != ${EXPECTED_ROWS.webSupportOnly}`);
-  if (staged.web.filter((s) => s.importAction === "import_staging_only").length !== EXPECTED_ROWS.webStagingOnly) {
-    errors.push(`web staging-only count mismatch`);
+  // (10-12) Public related links: target only imported, never excluded, acceptable confidence.
+  const excludedSet = new Set([...excluded.web, ...excluded.opinions, ...excluded.toovoidud]);
+  const targetsNotImported: { source: string; target: string }[] = [];
+  const targetsExcluded: { source: string; target: string }[] = [];
+  const lowOrRejected: { source: string; target: string; confidence: string }[] = [];
+  for (const l of links.publicRelated) {
+    if (!importIds.has(l.sourceContentId) || !importIds.has(l.targetContentId)) {
+      targetsNotImported.push({ source: l.sourceContentId, target: l.targetContentId });
+    }
+    if (excludedSet.has(l.sourceContentId) || excludedSet.has(l.targetContentId)) {
+      targetsExcluded.push({ source: l.sourceContentId, target: l.targetContentId });
+    }
+    if (l.linkConfidence && !ACCEPTABLE_LINK_CONFIDENCE.has(l.linkConfidence)) {
+      lowOrRejected.push({ source: l.sourceContentId, target: l.targetContentId, confidence: l.linkConfidence });
+    }
   }
-  if (visibility.doNotImportPublic !== EXPECTED_ROWS.webDoNotImportPublic) errors.push(`web do-not-import-public count mismatch`);
-  if (perDataset.opinions.public !== EXPECTED_ROWS.opinionsPublic) errors.push(`opinions public ${perDataset.opinions.public} != ${EXPECTED_ROWS.opinionsPublic}`);
-  if (staged.opinions.filter((s) => s.importAction === "import_staging_only").length !== EXPECTED_ROWS.opinionsStagingOnly) {
-    errors.push(`opinions staging-only count mismatch`);
+  if (targetsNotImported.length) errors.push(`${targetsNotImported.length} public related link(s) point to a non-imported row`);
+  if (targetsExcluded.length) errors.push(`${targetsExcluded.length} public related link(s) point to an excluded/review row`);
+  if (lowOrRejected.length) errors.push(`${lowOrRejected.length} public related link(s) have low/rejected confidence`);
+
+  // The exact public-link count is informational only.
+  if (rowCounts.publicRelatedLinks !== EXPECTED_ROWS.publicRelatedLinks) {
+    warnings.push(`public related links ${rowCounts.publicRelatedLinks} != expected ${EXPECTED_ROWS.publicRelatedLinks} (informational)`);
   }
-  if (perDataset.toovoidud.public !== EXPECTED_ROWS.toovoidudPublic) errors.push(`toovoidud public ${perDataset.toovoidud.public} != ${EXPECTED_ROWS.toovoidudPublic}`);
-  if (visibility.heldToovoidud !== EXPECTED_ROWS.toovoidudHold) errors.push(`toovoidud hold count mismatch`);
 
-  const publicRowsWithReviewFlag = staged.all.filter((s) => s.isPublic && s.needsHumanReview).map((s) => s.externalId);
-  const publicRowsWithNumericReviewFlag = staged.all.filter((s) => s.isPublic && s.numericClaimNeedsReview).map((s) => s.externalId);
-  if (publicRowsWithReviewFlag.length) errors.push(`${publicRowsWithReviewFlag.length} public row(s) still flagged for review`);
-  if (publicRowsWithNumericReviewFlag.length) errors.push(`${publicRowsWithNumericReviewFlag.length} public row(s) still flagged for numeric review`);
+  // (13) Cross-layer smoke test: any blocker FAIL is a hard error.
+  const failures = links.smokeTest.filter((t) => t.status !== "PASS" && t.status !== "WARN" && t.status !== "");
+  const blockerFailures = links.smokeTest.filter((t) => t.status === "FAIL" && ["blocker", "critical", "major"].includes(t.severity));
+  for (const f of blockerFailures) errors.push(`cross-layer smoke test ${f.testId} FAILED (${f.severity}): ${f.testName}`);
+  for (const w of links.smokeTest.filter((t) => t.status === "WARN")) warnings.push(`cross-layer smoke test ${w.testId} WARN: ${w.testName} (${w.issueCount} issue(s))`);
 
-  const blockers = {
-    supportOnlyPublic: staged.web.filter((s) => s.importAction === "import_support_only" && s.isPublic).map((s) => s.externalId),
-    stagingOnlyPublic: staged.all.filter((s) => s.importAction === "import_staging_only" && s.isPublic).map((s) => s.externalId),
-    heldToovoidudPublic: staged.toovoidud.filter((s) => s.importAction === "enrichment_hold" && s.isPublic).map((s) => s.externalId),
-    candidateLinksPublic: links.candidate.filter((l) => l.publicLinkAllowed || l.linkImportAction === "public").length,
-  };
-  if (blockers.supportOnlyPublic.length) errors.push(`${blockers.supportOnlyPublic.length} support-only rows are public`);
-  if (blockers.stagingOnlyPublic.length) errors.push(`${blockers.stagingOnlyPublic.length} staging-only rows are public`);
-  if (blockers.heldToovoidudPublic.length) errors.push(`${blockers.heldToovoidudPublic.length} held toovoidud rows are public`);
-  if (blockers.candidateLinksPublic) errors.push(`${blockers.candidateLinksPublic} candidate links look public`);
-
-  const publicIds = new Set(staged.all.filter((s) => s.isPublic).map((s) => s.externalId));
-  const approvedPublicEligible = links.approved.filter(
-    (l) => l.publicLinkAllowed && l.linkImportAction === "import_public_relation" && publicIds.has(l.webContentId) && publicIds.has(l.opinionContentId)
-  ).length;
-
+  // (14) Taxonomy rulebook file.
   const taxonomyFile = resolveImportFile(FILES.taxonomy);
-  const taxonomyReference = {
-    fileName: taxonomyFile.split(/[\\/]/).pop() ?? FILES.taxonomy[0],
-    bytes: statSync(taxonomyFile).size,
-  };
+  const taxonomyReference = { fileName: taxonomyFile.split(/[\\/]/).pop() ?? FILES.taxonomy[0], bytes: statSync(taxonomyFile).size };
 
   return {
     ok: errors.length === 0,
     errors,
+    warnings,
     rowCounts,
+    excludedCounts,
     expected: EXPECTED_ROWS,
-    totalContentStaged,
+    totalContentStaged: staged.all.length,
     visibility,
     perDataset,
     duplicateExternalIds,
     duplicateContentHashGroups,
-    invalidEnumValues,
+    importFlagViolations,
     missingRequiredFields,
-    publicRowsWithReviewFlag,
-    publicRowsWithNumericReviewFlag,
-    blockers,
+    missingSummaryRows,
+    rawFragmentSummaryRows,
+    crossSectorDisplayTagRows,
+    dateRegressions,
     links: {
-      approvedRows: links.approved.length,
-      approvedPublicEligible,
-      approvedAdminOrBlocked: links.approved.length - approvedPublicEligible,
-      candidateRows: links.candidate.length,
-      candidateAdminOnly: links.candidate.length,
+      publicRelated: links.publicRelated.length,
+      byConfidence: countBy(links.publicRelated, (l) => l.linkConfidence ?? "(none)"),
+      targetsNotImported,
+      targetsExcluded,
+      lowOrRejected,
+      candidate: links.counts.candidate,
+      blocked: links.counts.blocked,
+      missingTargets: links.counts.missingTargets,
     },
+    smokeTest: { rows: links.smokeTest, failures, blockerFailures },
     law: {
       publicConfirmedLawTagRows: staged.all.filter((s) => s.isPublic && s.lawSearchAllowed && s.lawTagsConfirmed).length,
       candidateLawTagRows: staged.all.filter((s) => s.lawTagsCandidate).length,
@@ -910,17 +1218,15 @@ export function analyze(
   };
 }
 
-export async function stageAndAnalyze(): Promise<{
-  staged: Awaited<ReturnType<typeof stageAllContent>>;
-  links: Awaited<ReturnType<typeof stageLinks>>;
+export function stageAndAnalyze(): {
+  staged: ReturnType<typeof stageAllContent>;
+  links: LinkWorkbook;
+  excluded: ReturnType<typeof stageExcludedIds>;
   analysis: Analysis;
-}> {
-  const staged = await stageAllContent();
-  const links = await stageLinks();
-  const analysis = analyze(staged, links);
-  return { staged, links, analysis };
-}
-
-export function actionCounts(rows: StagedContent[]): Record<string, number> {
-  return countBy(rows, (row) => row.importAction ?? "(blank)");
+} {
+  const staged = stageAllContent();
+  const links = stageLinkWorkbook();
+  const excluded = stageExcludedIds();
+  const analysis = analyze(staged, links, excluded);
+  return { staged, links, excluded, analysis };
 }
