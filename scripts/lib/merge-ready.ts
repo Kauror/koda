@@ -34,10 +34,26 @@ export type DatasetKey = "web" | "opinions" | "toovoidud";
 
 /** v1 production source files. Listed as alias arrays for resilience. */
 export const FILES = {
-  opinions: ["koda_opinions_v1.0.xlsx", "koda_opinions_v1_0.xlsx"],
-  web: ["koda_web_content_v1.xlsx"],
-  toovoidud: ["koda_toovoidud_v1.xlsx"],
-  links: ["koda_content_links_v1.xlsx"],
+  opinions: [
+    "koda_opinions_v1_1_SOURCE_REPAIR_PATCH_05_REMAINING_88.xlsx",
+    "koda_opinions_v1_1.xlsx",
+    "koda_opinions_v1.1.xlsx",
+    "koda_opinions_v1.0.xlsx",
+    "koda_opinions_v1_0.xlsx",
+  ],
+  web: [
+    "koda_web_content_v1_1_SOURCE_REPAIR_PATCH_05_REMAINING_88.xlsx",
+    "koda_web_content_v1_1.xlsx",
+    "koda_web_content_v1.1.xlsx",
+    "koda_web_content_v1.xlsx",
+  ],
+  toovoidud: [
+    "koda_toovoidud_v1_1_SOURCE_REPAIR_PATCH_05_REMAINING_88.xlsx",
+    "koda_toovoidud_v1_1.xlsx",
+    "koda_toovoidud_v1.1.xlsx",
+    "koda_toovoidud_v1.xlsx",
+  ],
+  links: ["koda_content_links_v1_2.xlsx", "koda_content_links_v1.2.xlsx", "koda_content_links_v1.xlsx"],
   taxonomy: ["koda_taxonomy_rules_v1_0.txt", "koda_taxonomy_rules_v1.0.txt"],
 } as const;
 
@@ -74,7 +90,8 @@ export const EXPECTED_ROWS = {
   webExcluded: 1,
   opinionsExcluded: 9,
   toovoidudExcluded: 7,
-  publicRelatedLinks: 182, // informational, from koda_content_links_v1.xlsx
+  publicRelatedLinks: 166,
+  policyThreads: 148,
 } as const;
 
 export function filePath(name: string): string {
@@ -1166,9 +1183,11 @@ export function analyze(
   if (targetsExcluded.length) errors.push(`${targetsExcluded.length} public related link(s) point to an excluded/review row`);
   if (lowOrRejected.length) errors.push(`${lowOrRejected.length} public related link(s) have low/rejected confidence`);
 
-  // The exact public-link count is informational only.
   if (rowCounts.publicRelatedLinks !== EXPECTED_ROWS.publicRelatedLinks) {
-    warnings.push(`public related links ${rowCounts.publicRelatedLinks} != expected ${EXPECTED_ROWS.publicRelatedLinks} (informational)`);
+    errors.push(`public related links ${rowCounts.publicRelatedLinks} != ${EXPECTED_ROWS.publicRelatedLinks}`);
+  }
+  if (rowCounts.policyThreads !== EXPECTED_ROWS.policyThreads) {
+    errors.push(`policy threads ${rowCounts.policyThreads} != ${EXPECTED_ROWS.policyThreads}`);
   }
 
   // (13) Cross-layer smoke test: any blocker FAIL is a hard error.

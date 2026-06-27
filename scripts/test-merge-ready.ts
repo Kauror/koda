@@ -53,7 +53,7 @@ function main() {
     assert.ok(sheetNames(FILES.web).includes(SHEETS.web), "web_app_import");
     assert.ok(sheetNames(FILES.toovoidud).includes(SHEETS.toovoidud), "toovoidud_app_import");
     assert.ok(sheetNames(FILES.links).includes(SHEETS.publicRelatedLinks), "public_related_links");
-    assert.ok(sheetNames(FILES.links).includes(SHEETS.smokeTest), "cross_layer_smoke_test");
+    assert.ok(sheetNames(FILES.links).includes(SHEETS.policyThreads), "policy_threads");
   });
   check("v1 excluded/review sheet names exist", () => {
     assert.ok(sheetNames(FILES.opinions).includes(SHEETS.opinionsExcluded));
@@ -109,11 +109,11 @@ function main() {
   });
   check("public related links have acceptable confidence (high/curated_medium)", () =>
     assert.equal(analysis.links.lowOrRejected.length, 0));
-  check("candidate/review and blocked links exist but are kept out of public links", () => {
-    assert.ok(analysis.links.candidate > 0, "candidate sheet should have rows");
-    assert.ok(analysis.links.blocked > 0, "blocked sheet should have rows");
-    // Public links come only from public_related_links, a different sheet.
-    assert.ok(analysis.links.publicRelated > 0);
+  check("public related links and policy threads match v1.2 counts", () => {
+    assert.equal(analysis.links.publicRelated, EXPECTED_ROWS.publicRelatedLinks);
+    assert.equal(analysis.rowCounts.policyThreads, EXPECTED_ROWS.policyThreads);
+    assert.equal(analysis.links.candidate, 0);
+    assert.equal(analysis.links.blocked, 0);
   });
   check("evidenceLinkTypeForTarget maps each layer", () => {
     assert.equal(evidenceLinkTypeForTarget("opinions"), "related_opinion");
