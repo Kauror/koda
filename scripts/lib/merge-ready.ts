@@ -2,13 +2,13 @@
  * Shared logic for the **v1** Koda app-import package (production source of truth).
  *
  * The active source package is:
- *   - koda_opinions_v1.0.xlsx     sheet `opinions_app_import`        750 rows
- *   - koda_web_content_v1.xlsx    sheet `web_app_import`            1131 rows
- *   - koda_toovoidud_v1.xlsx      sheet `toovoidud_app_import`        90 rows
- *   - koda_content_links_v1.xlsx  cross-layer relation/manifest workbook
- *   - koda_taxonomy_rules_v1_0.txt (taxonomy reference only — never imported)
+ *   - koda_opinions_v1_3_URL_MATCHED.xlsx  sheet `opinions_app_import`   750 rows
+ *   - koda_web_content_v1_2.xlsx           sheet `web_app_import`       1009 rows
+ *   - koda_toovoidud_v1_3_URL_MATCHED.xlsx sheet `toovoidud_app_import`   90 rows
+ *   - koda_content_links_v1_3.xlsx         cross-layer relation/manifest workbook
+ *   - koda_taxonomy_rules_v1_1.txt         taxonomy reference only — never imported
  *
- * Total importable content rows = 1971. The `excluded_rows` /
+ * Total importable content rows = 1849. The `excluded_rows` /
  * `*_excluded_review` sheets and the candidate/blocked/missing link sheets are
  * never imported as public content or public relations.
  *
@@ -35,6 +35,7 @@ export type DatasetKey = "web" | "opinions" | "toovoidud";
 /** v1 production source files. Listed as alias arrays for resilience. */
 export const FILES = {
   opinions: [
+    "koda_opinions_v1_3_URL_MATCHED.xlsx",
     "koda_opinions_v1_1_SOURCE_REPAIR_PATCH_05_REMAINING_88.xlsx",
     "koda_opinions_v1_1.xlsx",
     "koda_opinions_v1.1.xlsx",
@@ -42,19 +43,21 @@ export const FILES = {
     "koda_opinions_v1_0.xlsx",
   ],
   web: [
+    "koda_web_content_v1_2.xlsx",
     "koda_web_content_v1_1_SOURCE_REPAIR_PATCH_05_REMAINING_88.xlsx",
     "koda_web_content_v1_1.xlsx",
     "koda_web_content_v1.1.xlsx",
     "koda_web_content_v1.xlsx",
   ],
   toovoidud: [
+    "koda_toovoidud_v1_3_URL_MATCHED.xlsx",
     "koda_toovoidud_v1_1_SOURCE_REPAIR_PATCH_05_REMAINING_88.xlsx",
     "koda_toovoidud_v1_1.xlsx",
     "koda_toovoidud_v1.1.xlsx",
     "koda_toovoidud_v1.xlsx",
   ],
-  links: ["koda_content_links_v1_2.xlsx", "koda_content_links_v1.2.xlsx", "koda_content_links_v1.xlsx"],
-  taxonomy: ["koda_taxonomy_rules_v1_0.txt", "koda_taxonomy_rules_v1.0.txt"],
+  links: ["koda_content_links_v1_3.xlsx", "koda_content_links_v1_2.xlsx", "koda_content_links_v1.2.xlsx", "koda_content_links_v1.xlsx"],
+  taxonomy: ["koda_taxonomy_rules_v1_1.txt", "koda_taxonomy_rules_v1_0.txt", "koda_taxonomy_rules_v1.0.txt"],
 } as const;
 
 /** v1 import + excluded/review + link sheet names. */
@@ -83,15 +86,16 @@ export const SHEETS = {
  * test reports a blocker (see analyze()).
  */
 export const EXPECTED_ROWS = {
-  web: 1131,
+  web: 1009,
   opinions: 750,
   toovoidud: 90,
-  totalImportable: 1971,
-  webExcluded: 1,
+  totalImportable: 1849,
+  webExcluded: 123,
   opinionsExcluded: 9,
   toovoidudExcluded: 7,
   publicRelatedLinks: 166,
   policyThreads: 148,
+  publicPolicyThreads: 140,
 } as const;
 
 export function filePath(name: string): string {
@@ -839,11 +843,23 @@ export type PublicRelatedLink = {
   sourceLayer: string;
   targetContentId: string;
   targetLayer: string;
+  relationRole: string | null;
   relationLabelEt: string | null;
   canonicalPolicyThreadId: string | null;
   linkConfidence: string | null;
   linkBasis: string | null;
   sortPriority: number | null;
+};
+
+export type PolicyThread = {
+  id: string;
+  title: string;
+  summary: string | null;
+  representativeContentId: string | null;
+  memberIds: string[];
+  topicPrimary: string | null;
+  topicSecondary: string | null;
+  publicThreadEligible: boolean;
 };
 
 export type SmokeTestRow = {
@@ -858,6 +874,7 @@ export type SmokeTestRow = {
 
 export type LinkWorkbook = {
   publicRelated: PublicRelatedLink[];
+  policyThreads: PolicyThread[];
   smokeTest: SmokeTestRow[];
   counts: {
     publicRelated: number;
@@ -877,11 +894,25 @@ export function stagePublicRelatedLink(r: Row): PublicRelatedLink {
     sourceLayer: firstPresent(r, ["source_layer"]),
     targetContentId: firstPresent(r, ["target_content_id"]),
     targetLayer: firstPresent(r, ["target_layer"]),
-    relationLabelEt: orNull(firstPresent(r, ["app_relation_label_ee"])),
+    relationRole: orNull(firstPresent(r, ["relationship_role", "relation_type"])),
+    relationLabelEt: orNull(firstPresent(r, ["app_relation_label_ee", "relation_type"])),
     canonicalPolicyThreadId: orNull(firstPresent(r, ["canonical_policy_thread_id"])),
-    linkConfidence: orNull(firstPresent(r, ["link_confidence"])),
-    linkBasis: orNull(firstPresent(r, ["link_basis"])),
+    linkConfidence: orNull(firstPresent(r, ["link_confidence", "related_confidence"])),
+    linkBasis: orNull(firstPresent(r, ["link_basis", "related_basis"])),
     sortPriority: toIntOrNull(firstPresent(r, ["sort_priority"])),
+  };
+}
+
+export function stagePolicyThread(r: Row): PolicyThread {
+  return {
+    id: firstPresent(r, ["canonical_policy_thread_id", "policy_thread_id"]),
+    title: firstPresent(r, ["thread_title"]),
+    summary: orNull(firstPresent(r, ["thread_summary"])),
+    representativeContentId: orNull(firstPresent(r, ["representative_content_id"])),
+    memberIds: splitMulti(firstPresent(r, ["thread_member_ids_public_valid"])),
+    topicPrimary: orNull(firstPresent(r, ["thread_topic_primary"])),
+    topicSecondary: orNull(firstPresent(r, ["thread_topic_secondary"])),
+    publicThreadEligible: parseBoolFlexible(firstPresent(r, ["public_thread_eligible"])) && !parseBoolFlexible(firstPresent(r, ["thread_review_required"])),
   };
 }
 
@@ -892,6 +923,9 @@ function countSheet(file: readonly string[], sheet: string): number {
 export function stageLinkWorkbook(): LinkWorkbook {
   const publicRelated = hasSheet(FILES.links, SHEETS.publicRelatedLinks)
     ? readSheet(FILES.links, SHEETS.publicRelatedLinks).rows.map(stagePublicRelatedLink)
+    : [];
+  const policyThreads = hasSheet(FILES.links, SHEETS.policyThreads)
+    ? readSheet(FILES.links, SHEETS.policyThreads).rows.map(stagePolicyThread)
     : [];
   const smokeTest: SmokeTestRow[] = hasSheet(FILES.links, SHEETS.smokeTest)
     ? readSheet(FILES.links, SHEETS.smokeTest).rows.map((r) => ({
@@ -906,6 +940,7 @@ export function stageLinkWorkbook(): LinkWorkbook {
     : [];
   return {
     publicRelated,
+    policyThreads,
     smokeTest,
     counts: {
       publicRelated: publicRelated.length,
@@ -922,8 +957,11 @@ export function stageLinkWorkbook(): LinkWorkbook {
 export function evidenceLinkTypeForTarget(targetLayer: string): string {
   switch (targetLayer) {
     case "opinions":
+    case "opinion":
       return "related_opinion";
     case "toovoidud":
+    case "toovoit":
+    case "work_win":
       return "related_work_win";
     case "web":
     default:
@@ -949,6 +987,7 @@ export type Analysis = {
     publicRelatedLinks: number;
     crossLayerLinks: number;
     policyThreads: number;
+    publicPolicyThreads: number;
     candidateLinks: number;
     blockedLinks: number;
     missingTargets: number;
@@ -1060,6 +1099,7 @@ export function analyze(
     candidateLinks: links.counts.candidate,
     blockedLinks: links.counts.blocked,
     missingTargets: links.counts.missingTargets,
+    publicPolicyThreads: links.policyThreads.filter((t) => t.publicThreadEligible).length,
   };
   const excludedCounts = { web: excluded.web.length, opinions: excluded.opinions.length, toovoidud: excluded.toovoidud.length };
 
@@ -1188,6 +1228,9 @@ export function analyze(
   }
   if (rowCounts.policyThreads !== EXPECTED_ROWS.policyThreads) {
     errors.push(`policy threads ${rowCounts.policyThreads} != ${EXPECTED_ROWS.policyThreads}`);
+  }
+  if (rowCounts.publicPolicyThreads !== EXPECTED_ROWS.publicPolicyThreads) {
+    errors.push(`public policy threads ${rowCounts.publicPolicyThreads} != ${EXPECTED_ROWS.publicPolicyThreads}`);
   }
 
   // (13) Cross-layer smoke test: any blocker FAIL is a hard error.

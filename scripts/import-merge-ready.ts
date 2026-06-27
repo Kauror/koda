@@ -28,6 +28,7 @@ import {
   unknownTopicLabels,
   type Analysis,
   type LinkWorkbook,
+  type PolicyThread,
   type PublicRelatedLink,
   type StagedContent,
 } from "./lib/merge-ready";
@@ -298,6 +299,7 @@ async function importPublicRelatedLinks(
     const ok = await upsertEvidenceLink(fromId, toId, type, {
       note: l.relationLabelEt ?? undefined,
       relationLabelEt: l.relationLabelEt ?? undefined,
+      relationRole: l.relationRole ?? undefined,
       linkConfidence: l.linkConfidence ?? undefined,
       linkBasis: l.linkBasis ?? undefined,
       canonicalPolicyThreadId: l.canonicalPolicyThreadId ?? undefined,
@@ -321,6 +323,73 @@ async function importPublicRelatedLinks(
   }
 
   return { publicRelated: publicRel, duplicateLinks, skipped };
+}
+
+async function importPolicyThreads(
+  threads: PolicyThread[],
+  all: StagedContent[],
+  idByExternal: Map<string, string>,
+  tagMap: Map<string, string>
+): Promise<{ created: number; memberships: number; skipped: number }> {
+  const publicIds = new Set(all.filter((s) => s.isPublic).map((s) => s.externalId));
+  let created = 0;
+  let memberships = 0;
+  let skipped = 0;
+
+  for (const thread of threads) {
+    const memberIds = thread.memberIds.filter((id) => publicIds.has(id) && idByExternal.has(id));
+    if (!thread.publicThreadEligible || !thread.id || memberIds.length === 0) {
+      skipped++;
+      continue;
+    }
+    const slug = slugify(thread.id) || thread.id.toLowerCase();
+    const representativeId = thread.representativeContentId ? idByExternal.get(thread.representativeContentId) : null;
+    const mainContentItemId = representativeId ?? idByExternal.get(memberIds[0]) ?? null;
+    const group = await prisma.topicGroup.upsert({
+      where: { slug },
+      create: {
+        slug,
+        title: thread.title || thread.id,
+        summary: thread.summary,
+        mainContentItemId,
+        isEvergreen: true,
+        isHidden: false,
+      },
+      update: {
+        title: thread.title || thread.id,
+        summary: thread.summary,
+        mainContentItemId,
+        isEvergreen: true,
+        isHidden: false,
+      },
+    });
+    created++;
+
+    for (const topic of [thread.topicPrimary, thread.topicSecondary].filter((v): v is string => !!v)) {
+      const tagId = tagMap.get(`valdkond::${topic}`);
+      if (tagId) {
+        await prisma.topicGroupTag.createMany({ data: [{ topicGroupId: group.id, tagId }], skipDuplicates: true });
+      }
+    }
+
+    for (const externalId of memberIds) {
+      const contentItemId = idByExternal.get(externalId);
+      if (!contentItemId) continue;
+      await prisma.contentTopicGroup.createMany({
+        data: [
+          {
+            contentItemId,
+            topicGroupId: group.id,
+            relationType: externalId === thread.representativeContentId ? "main" : "related",
+          },
+        ],
+        skipDuplicates: true,
+      });
+      memberships++;
+    }
+  }
+
+  return { created, memberships, skipped };
 }
 
 async function main() {
@@ -359,6 +428,7 @@ async function main() {
       backupCounts: {},
       created: 0,
       evidenceLinks: { publicRelated: 0, duplicateLinks: 0, skipped: 0 },
+      policyThreads: { created: 0, memberships: 0, skipped: 0 },
       dbTotal: 0,
     });
     return;
@@ -387,6 +457,10 @@ async function main() {
   const evidenceLinks = await importPublicRelatedLinks(staged.all, links.publicRelated, idByExternal);
   log(`  links: publicRelated=${evidenceLinks.publicRelated} duplicateLinks=${evidenceLinks.duplicateLinks} skipped=${evidenceLinks.skipped}`);
 
+  log("Importing public policy threads...");
+  const policyThreads = await importPolicyThreads(links.policyThreads, staged.all, idByExternal, tagMap);
+  log(`  policy threads: created=${policyThreads.created} memberships=${policyThreads.memberships} skipped=${policyThreads.skipped}`);
+
   const dbTotal = await prisma.contentItem.count();
   writeReport(analysis, links, {
     dryRun: false,
@@ -394,6 +468,7 @@ async function main() {
     backupCounts: backup.counts,
     created,
     evidenceLinks,
+    policyThreads,
     dbTotal,
   });
 
@@ -406,6 +481,7 @@ type ImportResult = {
   backupCounts: Record<string, number>;
   created: number;
   evidenceLinks: { publicRelated: number; duplicateLinks: number; skipped: number };
+  policyThreads?: { created: number; memberships: number; skipped: number };
   dbTotal: number;
 };
 
@@ -451,6 +527,7 @@ function writeReport(analysis: Analysis, links: LinkWorkbook, r: ImportResult) {
     blockedLinks: analysis.links.blocked,
     missingTargets: analysis.links.missingTargets,
     evidenceLinksCreated: r.evidenceLinks,
+    policyThreadsCreated: r.policyThreads ?? null,
     smokeTest: {
       total: analysis.smokeTest.rows.length,
       pass: analysis.smokeTest.rows.filter((t) => t.status === "PASS").length,
@@ -476,10 +553,6 @@ function writeReport(analysis: Analysis, links: LinkWorkbook, r: ImportResult) {
     warnings: analysis.warnings,
     finalStatus: analysis.ok ? "PASS" : "FAIL",
     errors: analysis.errors,
-    // TODO: import policy_threads into a first-class structure (TopicGroup) so a
-    // single thread can be navigated across opinion/news/work-win. For now the
-    // canonical_policy_thread_id is preserved on content + links.
-    todo: ["Import policy_threads as a first-class TopicGroup/policy-thread structure."],
   };
 
   writeFileSync(resolve(reportsDir, "import-report.json"), JSON.stringify(report, null, 2));
@@ -509,6 +582,8 @@ function writeReport(analysis: Analysis, links: LinkWorkbook, r: ImportResult) {
 ## Cross-layer links (${report.inputFiles.links})
 - Public related links: ${analysis.links.publicRelated} (confidence ${JSON.stringify(analysis.links.byConfidence)})
 - Public relations created in DB: ${r.evidenceLinks.publicRelated}
+- Public policy threads: ${analysis.rowCounts.publicPolicyThreads}
+- Policy thread groups created in DB: ${r.policyThreads?.created ?? 0}
 - Candidate/review links (not public): ${analysis.links.candidate}
 - Blocked/rejected links (not public): ${analysis.links.blocked}
 - Missing/excluded target references: ${analysis.links.missingTargets}

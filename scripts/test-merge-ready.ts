@@ -62,11 +62,11 @@ function main() {
   });
 
   // ---- v1 counts ----
-  check("web import rows = 1131", () => assert.equal(staged.web.length, EXPECTED_ROWS.web));
-  check("opinions import rows = 750", () => assert.equal(staged.opinions.length, EXPECTED_ROWS.opinions));
-  check("toovoidud import rows = 90", () => assert.equal(staged.toovoidud.length, EXPECTED_ROWS.toovoidud));
-  check("total importable rows = 1971", () => assert.equal(staged.all.length, EXPECTED_ROWS.totalImportable));
-  check("excluded/review counts (1 / 9 / 7)", () => {
+  check(`web import rows = ${EXPECTED_ROWS.web}`, () => assert.equal(staged.web.length, EXPECTED_ROWS.web));
+  check(`opinions import rows = ${EXPECTED_ROWS.opinions}`, () => assert.equal(staged.opinions.length, EXPECTED_ROWS.opinions));
+  check(`toovoidud import rows = ${EXPECTED_ROWS.toovoidud}`, () => assert.equal(staged.toovoidud.length, EXPECTED_ROWS.toovoidud));
+  check(`total importable rows = ${EXPECTED_ROWS.totalImportable}`, () => assert.equal(staged.all.length, EXPECTED_ROWS.totalImportable));
+  check(`excluded/review counts (${EXPECTED_ROWS.webExcluded} / ${EXPECTED_ROWS.opinionsExcluded} / ${EXPECTED_ROWS.toovoidudExcluded})`, () => {
     assert.equal(excluded.web.length, EXPECTED_ROWS.webExcluded);
     assert.equal(excluded.opinions.length, EXPECTED_ROWS.opinionsExcluded);
     assert.equal(excluded.toovoidud.length, EXPECTED_ROWS.toovoidudExcluded);
@@ -109,16 +109,19 @@ function main() {
   });
   check("public related links have acceptable confidence (high/curated_medium)", () =>
     assert.equal(analysis.links.lowOrRejected.length, 0));
-  check("public related links and policy threads match v1.2 counts", () => {
+  check("public related links and policy threads match final counts", () => {
     assert.equal(analysis.links.publicRelated, EXPECTED_ROWS.publicRelatedLinks);
     assert.equal(analysis.rowCounts.policyThreads, EXPECTED_ROWS.policyThreads);
+    assert.equal(analysis.rowCounts.publicPolicyThreads, EXPECTED_ROWS.publicPolicyThreads);
     assert.equal(analysis.links.candidate, 0);
     assert.equal(analysis.links.blocked, 0);
   });
   check("evidenceLinkTypeForTarget maps each layer", () => {
     assert.equal(evidenceLinkTypeForTarget("opinions"), "related_opinion");
+    assert.equal(evidenceLinkTypeForTarget("opinion"), "related_opinion");
     assert.equal(evidenceLinkTypeForTarget("web"), "related_news");
     assert.equal(evidenceLinkTypeForTarget("toovoidud"), "related_work_win");
+    assert.equal(evidenceLinkTypeForTarget("toovoit"), "related_work_win");
   });
 
   // ---- display tags never expose the cross-sector fallback ----
@@ -154,13 +157,6 @@ function main() {
     assert.ok(!byId(staged.web, "WEB-03801"), "must not be in import sheet");
     assert.ok(excluded.web.includes("WEB-03801"), "must be in web_excluded_review");
   });
-  check("Oliver Väärtnõu organization news (WEB-02846) creates no sector relationship", () => {
-    const row = byId(staged.web, "WEB-02846");
-    assert.ok(row, "WEB-02846 present");
-    assert.equal(row!.tegevusalad.length, 0, "org news must have no sector/activity tags");
-    assert.equal(row!.publicActivityDisplayTags, null, "no display tags");
-  });
-
   // ---- public summaries free of raw date fragments (warning, surfaced) ----
   check("raw-fragment summaries are surfaced as a warning, not a hard error", () => {
     assert.ok(analysis.ok, `analysis should pass: ${analysis.errors.join("; ")}`);

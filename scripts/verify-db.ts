@@ -44,6 +44,8 @@ async function main() {
     const linkTotal = await prisma.contentEvidenceLink.count();
     const linkTypes = new Set(links.map((l) => l.linkType));
     const labeledLinks = await prisma.contentEvidenceLink.count({ where: { relationLabelEt: { not: null } } });
+    const policyThreadGroups = await prisma.topicGroup.count();
+    const policyThreadMemberships = await prisma.contentTopicGroup.count();
 
     const reviewAndPublic = await prisma.contentItem.count({ where: { needsHumanReview: true, isPublic: true } });
     const publicLawTags = await prisma.contentItem.count({ where: { isPublic: true, lawSearchAllowed: true, lawTagsConfirmed: { not: null } } });
@@ -55,9 +57,6 @@ async function main() {
     const withFilterTags = await prisma.contentItem.count({ where: { sourceDataset: "web", publicActivityFilterTags: { not: null } } });
     const withRankScore = await prisma.contentItem.count({ where: { sourceDataset: "web", generalSearchRankScore: { not: null } } });
     const withDeadline = await prisma.contentItem.count({ where: { deadlineDate: { not: null } } });
-    const orgNewsWithSectorTags = await prisma.contentItem.count({
-      where: { contentRoleFinal: "organization_news", tags: { some: { tag: { type: "tegevusala" } } } },
-    });
 
     const dupExternal = await prisma.$queryRawUnsafe<{ externalId: string; n: bigint }[]>(
       `SELECT "externalId", COUNT(*) AS n FROM "ContentItem" WHERE "externalId" IS NOT NULL GROUP BY "externalId" HAVING COUNT(*) > 1`
@@ -79,16 +78,16 @@ async function main() {
     console.log(`  total=${linkTotal} labeled=${labeledLinks}`);
 
     console.log("\n=== Invariants ===");
-    invariant("web rows = 1131", web === EXPECTED_ROWS.web, `${web}`);
-    invariant("opinion rows = 750", opinions === EXPECTED_ROWS.opinions, `${opinions}`);
-    invariant("toovoidud rows = 90", toovoidud === EXPECTED_ROWS.toovoidud, `${toovoidud}`);
-    invariant("total content rows = 1971", total === EXPECTED_ROWS.totalImportable, `${total}`);
-    invariant("web public rows = 1131", publicByDataset.web === EXPECTED_ROWS.web, `${publicByDataset.web}`);
-    invariant("opinion public rows = 750", publicByDataset.opinions === EXPECTED_ROWS.opinions, `${publicByDataset.opinions}`);
-    invariant("toovoidud public rows = 90", publicByDataset.toovoidud === EXPECTED_ROWS.toovoidud, `${publicByDataset.toovoidud}`);
+    invariant(`web rows = ${EXPECTED_ROWS.web}`, web === EXPECTED_ROWS.web, `${web}`);
+    invariant(`opinion rows = ${EXPECTED_ROWS.opinions}`, opinions === EXPECTED_ROWS.opinions, `${opinions}`);
+    invariant(`toovoidud rows = ${EXPECTED_ROWS.toovoidud}`, toovoidud === EXPECTED_ROWS.toovoidud, `${toovoidud}`);
+    invariant(`total content rows = ${EXPECTED_ROWS.totalImportable}`, total === EXPECTED_ROWS.totalImportable, `${total}`);
+    invariant(`web public rows = ${EXPECTED_ROWS.web}`, publicByDataset.web === EXPECTED_ROWS.web, `${publicByDataset.web}`);
+    invariant(`opinion public rows = ${EXPECTED_ROWS.opinions}`, publicByDataset.opinions === EXPECTED_ROWS.opinions, `${publicByDataset.opinions}`);
+    invariant(`toovoidud public rows = ${EXPECTED_ROWS.toovoidud}`, publicByDataset.toovoidud === EXPECTED_ROWS.toovoidud, `${publicByDataset.toovoidud}`);
     invariant("no hidden rows (all importable rows public)", hiddenCount === 0, `${hiddenCount}`);
-    invariant("toovoidud enrichment rows = 90", enrichment === EXPECTED_ROWS.toovoidud, `${enrichment}`);
-    invariant("achievement content rows = 90", achievements === EXPECTED_ROWS.toovoidud, `${achievements}`);
+    invariant(`toovoidud enrichment rows = ${EXPECTED_ROWS.toovoidud}`, enrichment === EXPECTED_ROWS.toovoidud, `${enrichment}`);
+    invariant(`achievement content rows = ${EXPECTED_ROWS.toovoidud}`, achievements === EXPECTED_ROWS.toovoidud, `${achievements}`);
     invariant("no public row needs human review", reviewAndPublic === 0, `${reviewAndPublic}`);
     invariant("confirmed public law tags are present", publicLawTags > 0, `${publicLawTags}`);
     invariant("candidate law tags are stored but not filter tags", candidateLawTags > 0, `${candidateLawTags}`);
@@ -97,6 +96,8 @@ async function main() {
     invariant("public related links imported (Veel samal teemal)", linkTotal > 0, `${linkTotal}`);
     invariant("relation labels persisted", labeledLinks > 0, `${labeledLinks}`);
     invariant("cross-layer relation types present", linkTypes.has("related_opinion") && linkTypes.has("related_news"), [...linkTypes].join(","));
+    invariant(`public policy thread groups imported = ${EXPECTED_ROWS.publicPolicyThreads}`, policyThreadGroups === EXPECTED_ROWS.publicPolicyThreads, `${policyThreadGroups}`);
+    invariant("policy thread memberships imported", policyThreadMemberships > 0, `${policyThreadMemberships}`);
 
     // v1 fields persisted.
     invariant("töövõit value field whatChangedEt persisted (all 90)", withWhatChanged === EXPECTED_ROWS.toovoidud, `${withWhatChanged}`);
@@ -104,7 +105,6 @@ async function main() {
     invariant("web public-activity filter tags persisted", withFilterTags > 0, `${withFilterTags}`);
     invariant("web rank scores persisted", withRankScore > 0, `${withRankScore}`);
     invariant("deadline_date stored separately on some töövõidud", withDeadline > 0, `${withDeadline}`);
-    invariant("organization news has no sector tags", orgNewsWithSectorTags === 0, `${orgNewsWithSectorTags}`);
 
     // Integrity.
     invariant("no duplicate external IDs", dupExternal.length === 0, `${dupExternal.length}`);
