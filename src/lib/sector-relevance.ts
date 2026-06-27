@@ -338,6 +338,31 @@ export function getSectorRelevanceExplanation(
     };
   }
 
+  if (exactSectorMatch || !hasOnlyGenericOrNoSector(c)) {
+    return {
+      sectorSlug,
+      ruleKey,
+      exactSectorMatch,
+      sectorTags,
+      hasGenericSectorTag: genericSectorTag,
+      hasNoSectorTags,
+      hasSpecificNonMatchingSector: specificNonMatching,
+      topicMatchedTerms: [],
+      keywordMatchedTerms: [],
+      lowerSignalKeywordMatchedTerms: [],
+      singleKeywordMatchedTerms: [],
+      anchorMatchedTerms: [],
+      exclusionMatchedTerms: [],
+      fallbackAllowed: false,
+      fallbackBlockedReason: exactSectorMatch
+        ? "exact-sector-match"
+        : specificNonMatching
+          ? "specific-nonmatching-sector-tag"
+          : "non-generic-sector-tag",
+      finalInclude: exactSectorMatch,
+    };
+  }
+
   const tagHay = sectorTagHaystack(c);
   const highHay = sectorHighSignalHaystack(c);
   const lowerHay = sectorLowerSignalHaystack(c);
@@ -357,11 +382,7 @@ export function getSectorRelevanceExplanation(
 
   let fallbackAllowed = false;
   let fallbackBlockedReason: string | null = null;
-  if (exactSectorMatch) {
-    fallbackBlockedReason = "exact-sector-match";
-  } else if (!hasOnlyGenericOrNoSector(c)) {
-    fallbackBlockedReason = specificNonMatching ? "specific-nonmatching-sector-tag" : "non-generic-sector-tag";
-  } else if (exclusionBlocks) {
+  if (exclusionBlocks) {
     fallbackBlockedReason = "sector-fallback-exclusion";
   } else if (!hasRequiredAnchor) {
     fallbackBlockedReason = "missing-required-sector-anchor";
