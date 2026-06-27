@@ -159,11 +159,11 @@ export default async function ResultsPage({
   const params = await searchParams;
   const query = parseSearchParams(params);
 
-  let sessionId: string | null = null;
-  try {
-    const h = await headers();
+  const headersPromise = headers();
+  const sessionPromise = headersPromise
+    .then(async (h) => {
     const ip = (h.get("x-forwarded-for") || "").split(",")[0].trim() || null;
-    const session = await prisma.searchSession.create({
+      return prisma.searchSession.create({
       data: {
         selectedSector: query.tegevusala.join(",") || null,
         selectedInterests: query.valdkond,
@@ -172,23 +172,22 @@ export default async function ResultsPage({
         userAgentHash: hashUserAgent(h.get("user-agent")),
       },
     });
-    sessionId = session.id;
-  } catch (error) {
-    console.error("Failed to store search session", error);
-  }
+    })
+    .catch((error) => {
+      console.error("Failed to store search session", error);
+      return null;
+    });
 
-  let results: SearchResults | null = null;
-  try {
-    results = await search(query);
-  } catch (error) {
+  const resultsPromise = search(query).catch((error) => {
     console.error("Search failed", error);
-  }
-  let options: FilterOptions = { valdkonnad: [], tegevusalad: [], tapsustused: [], recipients: [] };
-  try {
-    options = await getFilterOptions();
-  } catch (error) {
+    return null;
+  });
+  const optionsPromise = getFilterOptions().catch((error) => {
     console.error("Failed to load filter options", error);
-  }
+    return { valdkonnad: [], tegevusalad: [], tapsustused: [], recipients: [] } satisfies FilterOptions;
+  });
+  const [session, results, options] = await Promise.all([sessionPromise, resultsPromise, optionsPromise]);
+  const sessionId = session?.id ?? null;
 
   if (!results) {
     return (

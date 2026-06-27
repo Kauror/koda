@@ -26,10 +26,9 @@ export async function GET(req: NextRequest) {
   }
   const query = parseSearchParams(params);
 
-  let sessionId: string | null = null;
-  try {
+  const sessionPromise = (async () => {
     const ip = (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || null;
-    const session = await prisma.searchSession.create({
+    return prisma.searchSession.create({
       data: {
         // Reuse existing analytics columns: topics -> interests, sectors -> activities.
         selectedSector: query.tegevusala.join(",") || null,
@@ -39,12 +38,13 @@ export async function GET(req: NextRequest) {
         userAgentHash: hashUserAgent(req.headers.get("user-agent")),
       },
     });
-    sessionId = session.id;
-  } catch (e) {
+  })().catch((e) => {
     console.error("Failed to store search session", e);
-  }
+    return null;
+  });
 
-  const results = await search(query);
+  const [session, results] = await Promise.all([sessionPromise, search(query)]);
+  const sessionId = session?.id ?? null;
   return NextResponse.json({
     sessionId,
     ...results,

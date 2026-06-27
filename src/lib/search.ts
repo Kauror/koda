@@ -5,6 +5,7 @@
  * opinions. See docs/search-ranking-v1.md.
  */
 import { Prisma, TagType } from "@prisma/client";
+import { unstable_cache } from "next/cache";
 import { prisma } from "./db";
 import { isPublicSearchEligible } from "./eligibility";
 import { buildLawChips, detectLaw, lawMentionForSlug, type LawChip } from "./law-match";
@@ -153,7 +154,7 @@ export type FilterOptions = {
  *  - `tegevusalad` / `tapsustused` keep the dynamic behaviour (the activity /
  *    cross-sector filter logic must not change).
  */
-export async function getFilterOptions(): Promise<FilterOptions> {
+async function buildFilterOptions(): Promise<FilterOptions> {
   const candidates = await fetchEligibleCandidates();
 
   // Topic counts per canonical id (aliases fold into their canonical topic).
@@ -227,6 +228,10 @@ export async function getFilterOptions(): Promise<FilterOptions> {
     recipients,
   };
 }
+
+export const getFilterOptions = unstable_cache(buildFilterOptions, ["koda-public-filter-options-v1"], {
+  revalidate: 3600,
+});
 
 /** Raw tag list for a type (admin/debug; not eligibility-filtered). */
 export async function getTagsByType(type: TagType): Promise<{ slug: string; name: string }[]> {
