@@ -169,16 +169,18 @@ check("results page uses incremental batch-of-3 load-more pagination", () => {
   assert.ok(source.includes("import LoadMore"));
   assert.ok(source.includes("<LoadMore"));
   assert.ok(source.includes("batchSize={LOAD_MORE_BATCH}"));
+  assert.ok(source.includes("initialVisibleCount={initialVisibleCount}"));
+  assert.ok(source.includes("initialVisibleCount={results.achievementsInitialVisible}"));
   assert.ok(source.includes("const LOAD_MORE_BATCH = 3"));
   assert.ok(source.includes("resetKey={editQuery}"));
   // The old "show 2, dump the rest in a <details>" pattern is gone.
   assert.ok(!source.includes("hiddenCards.map"));
-  assert.ok(!source.includes("initialVisibleCount"));
 
   const loadMore = readFileSync("src/app/tulemused/LoadMore.tsx", "utf8");
   assert.ok(loadMore.includes("Näita rohkem"));
   assert.ok(loadMore.includes("\"use client\""));
   assert.ok(loadMore.includes("batchSize = 3"));
+  assert.ok(loadMore.includes("initialVisibleCount"));
   assert.ok(!loadMore.includes("kokku"));
   assert.ok(!loadMore.includes("veel {"));
 });

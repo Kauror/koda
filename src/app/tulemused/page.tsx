@@ -194,6 +194,7 @@ function Section({
   sessionId,
   fromQuery,
   resetKey,
+  initialVisibleCount,
 }: {
   title: string;
   sub?: string;
@@ -201,6 +202,7 @@ function Section({
   sessionId: string | null;
   fromQuery: string;
   resetKey: string;
+  initialVisibleCount?: number;
 }) {
   if (cards.length === 0) return null;
 
@@ -210,7 +212,7 @@ function Section({
         {title} <span className="result-count">({cards.length})</span>
       </h2>
       {sub && <p className="section-sub">{sub}</p>}
-      <LoadMore key={`${title}:${resetKey}`} batchSize={LOAD_MORE_BATCH}>
+      <LoadMore key={`${title}:${resetKey}`} batchSize={LOAD_MORE_BATCH} initialVisibleCount={initialVisibleCount}>
         {cards.map((card) => (
           <Card key={card.id} card={card} sessionId={sessionId} fromQuery={fromQuery} />
         ))}
@@ -401,6 +403,7 @@ export default async function ResultsPage({
           sessionId={sessionId}
           fromQuery={fromQuery}
           resetKey={editQuery}
+          initialVisibleCount={results.achievementsInitialVisible}
         />
         <Section
           title="Koja seisukohad"

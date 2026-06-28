@@ -16,6 +16,7 @@ import {
   type SearchQuery,
   assignKind,
   compareRankedCandidates,
+  compareRankedCandidatesForQuery,
   getRelatedTopicsForSector,
   getSectorRelevance,
   getSectorRelevanceExplanation,
@@ -598,6 +599,52 @@ check("recent relevant news wins within the news group", () => {
     { c: newNews, total: scoreCandidate(newNews, q).total },
   ].sort(compareRankedCandidates);
   assert.equal(sorted[0].c.id, "new-news");
+});
+check("category pages rank newer direct sector opinions before older broad fallback opinions", () => {
+  const q: SearchQuery = { ...EMPTY, tegevusala: ["toostus-ja-tootmine"] };
+  const oldFallback = cand({
+    id: "old-fallback",
+    sourceLayer: "koda_public_opinion",
+    sourceTypeDetail: "meie_arvamus_article",
+    publicPriority: "high",
+    date: new Date("2021-01-01"),
+    tegevusalad: [{ slug: "koik-tegevusalad-valdkondadeulene", name: "Generic sector" }],
+  });
+  const newerDirect = cand({
+    id: "new-direct",
+    sourceLayer: "koda_public_opinion",
+    sourceTypeDetail: "meie_arvamus_article",
+    date: new Date("2024-01-01"),
+    tegevusalad: [{ slug: "toostus-ja-tootmine", name: "Tööstus ja tootmine" }],
+  });
+  const sorted = [
+    { c: oldFallback, total: scoreCandidate(oldFallback, q).total },
+    { c: newerDirect, total: scoreCandidate(newerDirect, q).total },
+  ].sort(compareRankedCandidatesForQuery(q));
+  assert.equal(sorted[0].c.id, "new-direct");
+});
+check("category pages rank newest first within direct sector matches", () => {
+  const q: SearchQuery = { ...EMPTY, tegevusala: ["ehitus-ja-kinnisvara"] };
+  const oldDirect = cand({
+    id: "old-direct",
+    sourceLayer: "koda_achievement",
+    sourceTypeDetail: "toovoit",
+    outcomeStatus: "achieved",
+    date: new Date("2017-01-01"),
+    tegevusalad: [{ slug: "ehitus-ja-kinnisvara", name: "Ehitus ja kinnisvara" }],
+  });
+  const newDirect = cand({
+    id: "new-direct",
+    sourceLayer: "koda_achievement",
+    sourceTypeDetail: "toovoit",
+    date: new Date("2022-01-01"),
+    tegevusalad: [{ slug: "ehitus-ja-kinnisvara", name: "Ehitus ja kinnisvara" }],
+  });
+  const sorted = [
+    { c: oldDirect, total: scoreCandidate(oldDirect, q).total },
+    { c: newDirect, total: scoreCandidate(newDirect, q).total },
+  ].sort(compareRankedCandidatesForQuery(q));
+  assert.equal(sorted[0].c.id, "new-direct");
 });
 check("query-only search requires a text match", () => {
   const q: SearchQuery = { ...EMPTY, q: "energia" };

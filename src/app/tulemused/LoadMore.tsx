@@ -17,14 +17,17 @@ import { Children, useState, type ReactNode } from "react";
 export default function LoadMore({
   children,
   batchSize = 3,
+  initialVisibleCount,
   label = "Näita rohkem",
 }: {
   children: ReactNode;
   batchSize?: number;
+  initialVisibleCount?: number;
   label?: string;
 }) {
   const all = Children.toArray(children);
-  const [visible, setVisible] = useState(() => Math.min(batchSize, all.length));
+  const initialVisible = initialVisibleCount ?? batchSize;
+  const [visible, setVisible] = useState(() => Math.min(initialVisible, all.length));
 
   const shown = all.slice(0, visible);
   const remaining = all.length - visible;

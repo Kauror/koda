@@ -31,8 +31,8 @@ import {
   type ResultType,
   type SearchQuery,
   assignKind,
+  compareRankedCandidatesForQuery,
   buildBadges,
-  compareRankedCandidates,
   groupRankedCandidates,
   isAchievement,
   isConservativeLawQuery,
@@ -40,6 +40,7 @@ import {
   parseSearchParams,
   passesActiveFilters,
   primaryType,
+  resultCategoryRelevanceTier,
   scoreCandidate,
   shouldShowRecipientChip,
 } from "./search-core";
@@ -347,6 +348,7 @@ export type ResultCard = {
 export type SearchResults = {
   query: SearchQuery;
   achievements: ResultCard[];
+  achievementsInitialVisible: number;
   positions: ResultCard[];
   news: ResultCard[];
   context: ResultCard[];
@@ -461,8 +463,8 @@ function toNestedWorkWinCard(c: Candidate, matched: boolean): NestedWorkWinCard 
 
 /** A top-level töövõit display unit aggregated from matched rows. */
 type WorkWinUnit =
-  | { kind: "card"; parentId: string; score: number; latestDateMs: number; matchedChildIds: Set<string> }
-  | { kind: "thread"; threadKey: string; score: number; latestDateMs: number; matchedChildIds: Set<string> };
+  | { kind: "card"; parentId: string; score: number; relevanceTier: number; latestDateMs: number; matchedChildIds: Set<string> }
+  | { kind: "thread"; threadKey: string; score: number; relevanceTier: number; latestDateMs: number; matchedChildIds: Set<string> };
 
 /** Stable sort key for a unit (parent id / thread key), for deterministic ties. */
 function unitKey(u: WorkWinUnit): string {
@@ -480,12 +482,13 @@ function unitKey(u: WorkWinUnit): string {
  * Unit date = newest verified date among its matched members, used as the
  * recency tie-break so equally-relevant töövõidud show the latest one first.
  */
-function aggregateWorkWinUnits(matched: RankedCandidate[], nesting: WorkWinNesting): WorkWinUnit[] {
+function aggregateWorkWinUnits(matched: RankedCandidate[], nesting: WorkWinNesting, query: SearchQuery): WorkWinUnit[] {
   const units = new Map<string, WorkWinUnit>();
   const bump = (
     key: string,
     make: () => WorkWinUnit,
     score: number,
+    relevanceTier: number,
     dateMs: number,
     matchedChild?: string
   ) => {
@@ -495,32 +498,58 @@ function aggregateWorkWinUnits(matched: RankedCandidate[], nesting: WorkWinNesti
       units.set(key, u);
     }
     u.score = Math.max(u.score, score);
+    u.relevanceTier = Math.max(u.relevanceTier, relevanceTier);
     u.latestDateMs = Math.max(u.latestDateMs, dateMs);
     if (matchedChild) u.matchedChildIds.add(matchedChild);
   };
 
   for (const { c, total } of matched) {
     const dateMs = verifiedDateMs(c);
+    const relevanceTier = resultCategoryRelevanceTier(c, query);
     if (nesting.topLevelIds.has(c.id)) {
-      bump(`card:${c.id}`, () => ({ kind: "card", parentId: c.id, score: total, latestDateMs: dateMs, matchedChildIds: new Set() }), total, dateMs);
+      bump(
+        `card:${c.id}`,
+        () => ({ kind: "card", parentId: c.id, score: total, relevanceTier, latestDateMs: dateMs, matchedChildIds: new Set() }),
+        total,
+        relevanceTier,
+        dateMs
+      );
       continue;
     }
     const parentId = nesting.parentIdByMemberId.get(c.id);
     if (parentId) {
-      bump(`card:${parentId}`, () => ({ kind: "card", parentId, score: total, latestDateMs: dateMs, matchedChildIds: new Set() }), total, dateMs, c.id);
+      bump(
+        `card:${parentId}`,
+        () => ({ kind: "card", parentId, score: total, relevanceTier, latestDateMs: dateMs, matchedChildIds: new Set() }),
+        total,
+        relevanceTier,
+        dateMs,
+        c.id
+      );
       continue;
     }
     const threadKey = nesting.threadKeyByMemberId.get(c.id);
     if (threadKey) {
-      bump(`thread:${threadKey}`, () => ({ kind: "thread", threadKey, score: total, latestDateMs: dateMs, matchedChildIds: new Set() }), total, dateMs, c.id);
+      bump(
+        `thread:${threadKey}`,
+        () => ({ kind: "thread", threadKey, score: total, relevanceTier, latestDateMs: dateMs, matchedChildIds: new Set() }),
+        total,
+        relevanceTier,
+        dateMs,
+        c.id
+      );
     }
     // A nested row with no parent and no thread was rejected at import; skip here.
   }
 
-  // Relevance first, recency second: strongest score wins; equally-relevant
-  // töövõidud show the newest one first; a stable key keeps ties deterministic.
+  // Relevance first, recency second: direct category units beat fallback units;
+  // similarly relevant töövõidud show the newest one first.
   return [...units.values()].sort(
-    (a, b) => b.score - a.score || b.latestDateMs - a.latestDateMs || unitKey(a).localeCompare(unitKey(b))
+    (a, b) =>
+      b.relevanceTier - a.relevanceTier ||
+      b.latestDateMs - a.latestDateMs ||
+      b.score - a.score ||
+      unitKey(a).localeCompare(unitKey(b))
   );
 }
 
@@ -589,7 +618,7 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
   }
 
   // Law-aware searches surface the newest related content first.
-  const deduped = dedupe(scored).sort(recognized ? compareByDateThenScore : compareRankedCandidates);
+  const deduped = dedupe(scored).sort(recognized ? compareByDateThenScore : compareRankedCandidatesForQuery(query));
 
   // News relevance threshold for activity-specific pages (trust/safety):
   // a "Koja uudised" row may appear under a selected Tegevusala only if it has a
@@ -627,9 +656,16 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
 
   const toovoitUnits = aggregateWorkWinUnits(
     ranked.filter((s) => isAchievement(s.c)),
-    nesting
+    nesting,
+    query
   );
   const displayedToovoitUnits = toovoitUnits.slice(0, GROUP_CAPS.toovoit);
+  const categoryActive = query.valdkond.length > 0 || query.tegevusala.length > 0 || query.tapsustus.length > 0;
+  const directToovoitUnits = categoryActive ? toovoitUnits.filter((u) => u.relevanceTier >= 4).length : 0;
+  const achievementsInitialVisible =
+    categoryActive && directToovoitUnits > 0
+      ? Math.min(3, directToovoitUnits, displayedToovoitUnits.length)
+      : Math.min(3, displayedToovoitUnits.length);
 
   // Candidates whose evidence hints we need: displayed non-töövõit + the parent
   // representative of each displayed töövõit card unit.
@@ -726,6 +762,7 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
   return {
     query,
     achievements,
+    achievementsInitialVisible,
     positions: groups.arvamus.map(toCard),
     news: groups.uudis.map(toCard),
     context: groups.kontekst.map(toCard),

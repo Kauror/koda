@@ -544,6 +544,39 @@ export function compareRankedCandidates(a: RankedCandidate, b: RankedCandidate):
   return stableKey(a.c).localeCompare(stableKey(b.c));
 }
 
+function categoryRelevanceTier(q: SearchQuery, s: ScoreBreakdown): number {
+  const categoryActive = q.valdkond.length > 0 || q.tegevusala.length > 0 || q.tapsustus.length > 0;
+  if (!categoryActive) return 0;
+  if (s.valdkondMatches > 0 || s.tegevusalaMatches > 0) return 4;
+  if (s.sectorRelatedTopicMatches > 0) return 3;
+  if (s.sectorFallbackMatches > 0) return 2;
+  if (s.crossSectorMatch || s.sectorKeywordMatches > 0) return 1;
+  return 0;
+}
+
+export function resultCategoryRelevanceTier(c: Candidate, q: SearchQuery): number {
+  return categoryRelevanceTier(q, scoreCandidate(c, q));
+}
+
+export function compareRankedCandidatesForQuery(q: SearchQuery) {
+  const categoryActive = q.valdkond.length > 0 || q.tegevusala.length > 0 || q.tapsustus.length > 0;
+  if (!categoryActive) return compareRankedCandidates;
+
+  return (a: RankedCandidate, b: RankedCandidate): number => {
+    const aScore = scoreCandidate(a.c, q);
+    const bScore = scoreCandidate(b.c, q);
+    const byTier = categoryRelevanceTier(q, bScore) - categoryRelevanceTier(q, aScore);
+    if (byTier !== 0) return byTier;
+
+    const byDate = dateMs(b.c) - dateMs(a.c);
+    if (byDate !== 0) return byDate;
+
+    const byScore = b.total - a.total;
+    if (byScore !== 0) return byScore;
+    return stableKey(a.c).localeCompare(stableKey(b.c));
+  };
+}
+
 /** Stable per-row key for deterministic final tie-breaking. */
 function stableKey(c: Candidate): string {
   return c.externalId ?? c.id;
