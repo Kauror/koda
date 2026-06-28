@@ -61,6 +61,18 @@ function main() {
     console.log(`  ${dr.ok ? "ok  " : "FAIL"} ${dr.id} ${dr.field}="${dr.value}" — ${dr.note}`);
   }
 
+  console.log("\n=== Töövõidud nesting (v1.2) ===");
+  console.log(`  row origins:        ${JSON.stringify(analysis.toovoidudOrigins)}`);
+  console.log(`  top-level cards:    ${analysis.nesting.topLevel}`);
+  console.log(`  nested/timeline:    ${analysis.nesting.nested}`);
+  console.log(`  policy threads:     ${analysis.nesting.threads}`);
+  console.log(`  unresolved nested:  ${analysis.nesting.unresolved.length}`);
+  console.log(`  invalid display_type:${analysis.nesting.invalidDisplayType.length}`);
+  console.log(`  invalid row_origin: ${analysis.nesting.invalidRowOrigin.length}`);
+  console.log(`  series-not-nested:  ${analysis.nesting.seriesNotNested.length}`);
+  console.log(`  invalid parent refs:${analysis.nesting.invalidParentRefs.length}`);
+  console.log(`  news-only rows:     ${analysis.newsOnly.count} (leaked: ${analysis.newsOnly.leakedIntoImport.length})`);
+
   console.log("\n=== Public safety ===");
   console.log(`  empty public summary rows: ${analysis.missingSummaryRows.length}`);
   console.log(`  raw-fragment summary rows: ${analysis.rawFragmentSummaryRows.length}`);

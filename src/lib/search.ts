@@ -17,7 +17,15 @@ import { computePublicDate } from "./public-date";
 import { normalizeTitle } from "./hash";
 import { compactText, getCleanPublicExcerpt, publicSourceUrl, publicTitle, sourceCtaLabel } from "./content-display";
 import {
+  resolveWorkWinNesting,
+  timelineStageLabel,
+  type WorkWinNesting,
+  type WorkWinNestingInput,
+  type WorkWinThread,
+} from "./work-win-nesting";
+import {
   type Candidate,
+  type RankedCandidate,
   type ResultGroupCounts,
   type ResultKind,
   type ResultType,
@@ -114,6 +122,14 @@ export function toCandidate(row: ContentWithTags): Candidate {
     topicGroupCandidate: row.canonicalPolicyThreadId ?? row.topicGroupCandidate,
     recipientFilterGroup: row.recipientFilterGroup,
     recipientNormalized: row.recipientNormalized,
+    rowOrigin: row.rowOrigin,
+    displayType: row.displayType,
+    parentToovoitId: row.parentToovoitId,
+    parentCandidateId: row.parentCandidateId,
+    policyThreadKey: row.policyThreadKey,
+    policyThreadTitle: row.policyThreadTitle,
+    timelineYear: row.timelineYear,
+    timelineStage: row.timelineStage,
   };
 }
 
@@ -253,6 +269,28 @@ export async function getTagsByType(type: TagType): Promise<{ slug: string; name
 
 export type EvidenceHint = { annualContext: boolean; relatedOpinions: number };
 
+/**
+ * A nested/timeline töövõit item rendered inside a parent or policy-thread card
+ * (v1.2). Never a standalone top-level card. Carries enough to render the compact
+ * nested row: title, year/stage, short summary and a source link.
+ */
+export type NestedWorkWinCard = {
+  id: string;
+  detailId: string;
+  title: string;
+  summary: string | null;
+  /** Safe public date label (placeholder/future suppressed). */
+  displayDate: string | null;
+  timelineYear: number | null;
+  timelineStage: string | null;
+  /** Estonian label for the stage (e.g. "Riigikogu vastuvõtmine"), or null. */
+  timelineStageLabel: string | null;
+  url: string | null;
+  sourceCtaLabel: string;
+  /** True when this nested item itself matched the active query/filters. */
+  matched: boolean;
+};
+
 export type ResultCard = {
   id: string;
   /** Stable identifier for the public detail route /sisu/[detailId]. */
@@ -286,6 +324,15 @@ export type ResultCard = {
    */
   recipient: { slug: string; name: string } | null;
   evidence: EvidenceHint;
+  // --- v1.2 nesting / timeline ---
+  /** True when this card represents a policy-thread timeline group, not one töövõit. */
+  isThread?: boolean;
+  /** Policy thread key (thread cards + parent cards that own thread children). */
+  threadKey?: string | null;
+  /** Nested/timeline children rendered in a compact section under this card. */
+  nested?: NestedWorkWinCard[];
+  /** Estonian heading for the nested section ("Seotud arengud" / "Sama teema ajajoon"). */
+  nestedHeading?: string | null;
   /**
    * Internal ranking total. Used by internal audit tooling (audit-freshness) and
    * server-side ordering only — it must NOT be exposed to public users. The
@@ -367,6 +414,129 @@ function compareByDateThenScore(a: { c: Candidate; total: number }, b: { c: Cand
   return (a.c.externalId ?? a.c.id).localeCompare(b.c.externalId ?? b.c.id);
 }
 
+// ---------------------------------------------------------------------------
+// v1.2 töövõidud nesting: fold series/timeline rows under parent / thread cards
+// ---------------------------------------------------------------------------
+
+function toNestingInput(c: Candidate): WorkWinNestingInput {
+  return {
+    id: c.id,
+    externalId: c.externalId,
+    rowOrigin: c.rowOrigin ?? null,
+    displayType: c.displayType ?? null,
+    parentToovoitId: c.parentToovoitId ?? null,
+    parentCandidateId: c.parentCandidateId ?? null,
+    policyThreadKey: c.policyThreadKey ?? null,
+    policyThreadTitle: c.policyThreadTitle ?? null,
+    timelineYear: c.timelineYear ?? null,
+    timelineStage: c.timelineStage ?? null,
+  };
+}
+
+function toNestedWorkWinCard(c: Candidate, matched: boolean): NestedWorkWinCard {
+  return {
+    id: c.id,
+    detailId: c.externalId ?? c.id,
+    title: publicTitle(c),
+    summary: compactText(getCleanPublicExcerpt(c), 200),
+    displayDate: computePublicDate({
+      date: c.date,
+      year: c.year ?? null,
+      reportYear: c.reportYear ?? null,
+      classificationConfidence: c.classificationConfidence ?? null,
+      displayDatePrecision: c.displayDatePrecision ?? null,
+      dateConfidence: c.dateConfidence ?? null,
+    }).text,
+    timelineYear: c.timelineYear ?? null,
+    timelineStage: c.timelineStage ?? null,
+    timelineStageLabel: timelineStageLabel(c.timelineStage),
+    url: publicSourceUrl(c),
+    sourceCtaLabel: sourceCtaLabel(c),
+    matched,
+  };
+}
+
+/** A top-level töövõit display unit aggregated from matched rows. */
+type WorkWinUnit =
+  | { kind: "card"; parentId: string; score: number; matchedChildIds: Set<string> }
+  | { kind: "thread"; threadKey: string; score: number; matchedChildIds: Set<string> };
+
+/**
+ * Aggregate matched töövõit rows into top-level units so series/timeline rows
+ * never become duplicate flat cards:
+ *  - a matched standalone row → its own card unit;
+ *  - a matched nested row with a top-level parent → folds into the parent card
+ *    unit (the parent surfaces even if it did not match itself);
+ *  - a matched nested row in a policy thread → folds into that thread unit.
+ * Unit score = best matching member score, so a unit ranks by its strongest hit.
+ */
+function aggregateWorkWinUnits(matched: RankedCandidate[], nesting: WorkWinNesting): WorkWinUnit[] {
+  const units = new Map<string, WorkWinUnit>();
+  const bump = (key: string, make: () => WorkWinUnit, score: number, matchedChild?: string) => {
+    let u = units.get(key);
+    if (!u) {
+      u = make();
+      units.set(key, u);
+    }
+    u.score = Math.max(u.score, score);
+    if (matchedChild) u.matchedChildIds.add(matchedChild);
+  };
+
+  for (const { c, total } of matched) {
+    if (nesting.topLevelIds.has(c.id)) {
+      bump(`card:${c.id}`, () => ({ kind: "card", parentId: c.id, score: total, matchedChildIds: new Set() }), total);
+      continue;
+    }
+    const parentId = nesting.parentIdByMemberId.get(c.id);
+    if (parentId) {
+      bump(`card:${parentId}`, () => ({ kind: "card", parentId, score: total, matchedChildIds: new Set() }), total, c.id);
+      continue;
+    }
+    const threadKey = nesting.threadKeyByMemberId.get(c.id);
+    if (threadKey) {
+      bump(`thread:${threadKey}`, () => ({ kind: "thread", threadKey, score: total, matchedChildIds: new Set() }), total, c.id);
+    }
+    // A nested row with no parent and no thread was rejected at import; skip here.
+  }
+
+  return [...units.values()].sort((a, b) => b.score - a.score);
+}
+
+/** Build a synthetic policy-thread timeline card from its member candidates. */
+function buildThreadResultCard(
+  thread: WorkWinThread,
+  members: Candidate[],
+  score: number,
+  matchedChildIds: Set<string>
+): ResultCard {
+  const latest = members[members.length - 1];
+  return {
+    id: `thread:${thread.key}`,
+    detailId: latest.externalId ?? latest.id,
+    title: thread.title ?? publicTitle(latest),
+    summary: compactText(getCleanPublicExcerpt(latest), 220),
+    url: null,
+    sourceCtaLabel: sourceCtaLabel(latest),
+    date: null,
+    displayDate: thread.latestYear ? String(thread.latestYear) : null,
+    kind: "toovoit",
+    type: "toovoit",
+    isAchievement: true,
+    outcomeStatus: null,
+    badges: ["Töövõidu ajajoon"],
+    valdkonnad: latest.valdkonnad,
+    tegevusalad: latest.tegevusalad,
+    laws: buildLawChips(latest),
+    recipient: null,
+    evidence: { annualContext: false, relatedOpinions: 0 },
+    isThread: true,
+    threadKey: thread.key,
+    nested: members.map((m) => toNestedWorkWinCard(m, matchedChildIds.has(m.id))),
+    nestedHeading: "Sama teema ajajoon",
+    score,
+  };
+}
+
 export async function search(query: SearchQuery): Promise<SearchResults> {
   const candidates = await fetchEligibleCandidates();
   const empty = isEmptyQuery(query);
@@ -419,14 +589,37 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
     ? deduped.filter((s) => assignKind(s.c) !== "uudis" || newsRelevant(s.c))
     : deduped;
 
-  const grouped = groupRankedCandidates(ranked, GROUP_CAPS);
+  // v1.2: töövõidud are grouped into top-level UNITS (standalone cards + policy-
+  // thread cards) so the 14 series/nested rows never appear as duplicate flat
+  // cards. The other three groups keep the existing pure grouping. Nesting is
+  // resolved over ALL eligible töövõidud (not just matches) so a parent/thread
+  // surfaces even when only a child matched the query.
+  const candById = new Map(candidates.map((c) => [c.id, c]));
+  const nesting = resolveWorkWinNesting(candidates.filter((c) => isAchievement(c)).map(toNestingInput));
+
+  const rankedOther = ranked.filter((s) => !isAchievement(s.c));
+  const grouped = groupRankedCandidates(rankedOther, GROUP_CAPS);
   const groups = grouped.displayedGroups;
-  const displayed = grouped.displayed;
-  const evidence = await buildEvidence(displayed.map((s) => s.c));
+
+  const toovoitUnits = aggregateWorkWinUnits(
+    ranked.filter((s) => isAchievement(s.c)),
+    nesting
+  );
+  const displayedToovoitUnits = toovoitUnits.slice(0, GROUP_CAPS.toovoit);
+
+  // Candidates whose evidence hints we need: displayed non-töövõit + the parent
+  // representative of each displayed töövõit card unit.
+  const toovoitParentCandidates = displayedToovoitUnits
+    .filter((u): u is Extract<WorkWinUnit, { kind: "card" }> => u.kind === "card")
+    .map((u) => candById.get(u.parentId))
+    .filter((c): c is Candidate => !!c);
+  const displayedCandidates = [...grouped.displayed.map((s) => s.c), ...toovoitParentCandidates];
+
+  const evidence = await buildEvidence(displayedCandidates);
   const includesRelatedSectorMatches =
     query.tegevusala.length > 0 &&
-    displayed.some((s) => {
-      const breakdown = scoreCandidate(s.c, query);
+    displayedCandidates.some((c) => {
+      const breakdown = scoreCandidate(c, query);
       return breakdown.tegevusalaMatches === 0 && breakdown.sectorFallbackMatches > 0;
     });
 
@@ -467,16 +660,55 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
     };
   };
 
+  // Build the töövõit cards from the aggregated units: standalone/parent cards
+  // (with their nested children folded in) + synthetic policy-thread cards.
+  const threadByKey = new Map(nesting.threads.map((t) => [t.key, t]));
+  const achievements: ResultCard[] = [];
+  for (const u of displayedToovoitUnits) {
+    if (u.kind === "card") {
+      const parent = candById.get(u.parentId);
+      if (!parent) continue;
+      const card = toCard({ c: parent, total: u.score });
+      const childIds = nesting.childrenByParentId.get(u.parentId) ?? [];
+      const children = childIds.map((id) => candById.get(id)).filter((c): c is Candidate => !!c);
+      if (children.length) {
+        card.nested = children.map((c) => toNestedWorkWinCard(c, u.matchedChildIds.has(c.id)));
+        card.nestedHeading = "Seotud arengud";
+        card.threadKey = parent.policyThreadKey ?? null;
+      }
+      achievements.push(card);
+    } else {
+      const thread = threadByKey.get(u.threadKey);
+      if (!thread) continue;
+      const members = thread.memberIds.map((id) => candById.get(id)).filter((c): c is Candidate => !!c);
+      if (!members.length) continue;
+      achievements.push(buildThreadResultCard(thread, members, u.score, u.matchedChildIds));
+    }
+  }
+
+  // Merge counts: töövõit unit counts replace the (empty) toovoit group from the
+  // other-grouping; the other three groups keep their pure counts.
+  const groupCounts: typeof grouped.groupCounts = {
+    ...grouped.groupCounts,
+    toovoit: {
+      matched: toovoitUnits.length,
+      displayed: achievements.length,
+      cap: GROUP_CAPS.toovoit,
+    },
+  };
+  const totalDisplayed = grouped.totalDisplayed + achievements.length;
+  const totalMatchedBeforeCaps = grouped.totalMatchedBeforeCaps + toovoitUnits.length;
+
   return {
     query,
-    achievements: groups.toovoit.map(toCard),
+    achievements,
     positions: groups.arvamus.map(toCard),
     news: groups.uudis.map(toCard),
     context: groups.kontekst.map(toCard),
-    total: grouped.totalDisplayed,
-    totalMatchedBeforeCaps: grouped.totalMatchedBeforeCaps,
-    totalDisplayed: grouped.totalDisplayed,
-    groupCounts: grouped.groupCounts,
+    total: totalDisplayed,
+    totalMatchedBeforeCaps,
+    totalDisplayed,
+    groupCounts,
     includesRelatedSectorMatches,
     recognizedLaw: recognized
       ? {

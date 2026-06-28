@@ -30,6 +30,7 @@ import { buildLawChips, type LawChip } from "./law-match";
 import { slugify } from "./slug";
 import { computePublicDate } from "./public-date";
 import { qualifiesAsLawTopicRelation } from "./related";
+import { compareTimeline, isNestedDisplay, timelineStageLabel, type WorkWinNestingInput } from "./work-win-nesting";
 
 const TOPIC_HISTORY_CAP = 4;
 const DUPLICATE_CAP = 4;
@@ -47,6 +48,32 @@ export type EvidenceRow = {
   sourceUrl: string | null;
   sourceCtaLabel: string;
   isPublic: boolean;
+};
+
+/** A nested/timeline töövõit row shown under a parent or in a policy thread (v1.2). */
+export type NestedDetailRow = {
+  id: string;
+  detailId: string;
+  title: string;
+  summary: string | null;
+  displayDate: string | null;
+  timelineYear: number | null;
+  timelineStage: string | null;
+  timelineStageLabel: string | null;
+  sourceUrl: string | null;
+  sourceCtaLabel: string;
+  /** True when this row is the page currently being viewed. */
+  isCurrent: boolean;
+};
+
+/** v1.2 nesting context for a töövõit detail page. */
+export type WorkWinNestingDetail = {
+  /** This work win's parent card (when this row is nested under an existing one). */
+  parent: { detailId: string; title: string } | null;
+  /** Child timeline/series rows folded under this (top-level) work win. */
+  children: NestedDetailRow[];
+  /** Policy thread this row belongs to, with its full timeline (incl. this row). */
+  thread: { key: string; title: string | null; items: NestedDetailRow[] } | null;
 };
 
 export type AchievementEnrichmentView = {
@@ -97,6 +124,8 @@ export type ContentDetail = {
   /** Recipient/ministry chip (opinions / opinion-related news only), or null. */
   recipient: { slug: string; name: string } | null;
   enrichment: AchievementEnrichmentView | null;
+  /** v1.2 nesting/timeline context (töövõidud only; null otherwise). */
+  workWinNesting: WorkWinNestingDetail | null;
   evidence: {
     annualContext: EvidenceRow[];
     duplicates: EvidenceRow[];
@@ -144,6 +173,7 @@ export async function getContentDetail(id: string): Promise<ContentDetail | null
   const c = toCandidate(item);
   const enr = item.achievementEnrichment;
   const evidence = await getEvidenceForContent(c);
+  const workWinNesting = await getWorkWinNesting(c);
 
   return {
     id: c.id,
@@ -203,8 +233,97 @@ export async function getContentDetail(id: string): Promise<ContentDetail | null
           sourceEvidence: enr.sourceEvidence,
         }
       : null,
+    workWinNesting,
     evidence,
   };
+}
+
+/**
+ * v1.2 nesting/timeline context for a töövõit detail page:
+ *  - `parent`: the existing card this row is nested under (parent_toovoit_id);
+ *  - `children`: series/timeline rows folded under this (top-level) work win;
+ *  - `thread`: the policy thread this row belongs to, with its full timeline.
+ * Returns null for non-töövõidud and for standalone work wins with no relations.
+ */
+async function getWorkWinNesting(c: Candidate): Promise<WorkWinNestingDetail | null> {
+  if (!isAchievement(c)) return null;
+
+  const toInput = (cand: Candidate): WorkWinNestingInput => ({
+    id: cand.id,
+    externalId: cand.externalId,
+    rowOrigin: cand.rowOrigin ?? null,
+    displayType: cand.displayType ?? null,
+    parentToovoitId: cand.parentToovoitId ?? null,
+    parentCandidateId: cand.parentCandidateId ?? null,
+    policyThreadKey: cand.policyThreadKey ?? null,
+    policyThreadTitle: cand.policyThreadTitle ?? null,
+    timelineYear: cand.timelineYear ?? null,
+    timelineStage: cand.timelineStage ?? null,
+  });
+  const toRow = (cand: Candidate, isCurrent: boolean): NestedDetailRow => ({
+    id: cand.id,
+    detailId: detailIdOf(cand),
+    title: publicTitle(cand),
+    summary: getCleanPublicExcerpt(cand),
+    displayDate: computePublicDate({
+      date: cand.date,
+      year: cand.year ?? null,
+      reportYear: cand.reportYear ?? null,
+      classificationConfidence: cand.classificationConfidence ?? null,
+      displayDatePrecision: cand.displayDatePrecision ?? null,
+      dateConfidence: cand.dateConfidence ?? null,
+    }).text,
+    timelineYear: cand.timelineYear ?? null,
+    timelineStage: cand.timelineStage ?? null,
+    timelineStageLabel: timelineStageLabel(cand.timelineStage),
+    sourceUrl: publicSourceUrl(cand),
+    sourceCtaLabel: sourceCtaLabel(cand),
+    isCurrent,
+  });
+
+  // Parent card (when this row is nested under an existing töövõit).
+  let parent: WorkWinNestingDetail["parent"] = null;
+  if (c.parentToovoitId) {
+    const p = await prisma.contentItem.findFirst({
+      where: { externalId: c.parentToovoitId, isPublic: true },
+      include: candidateInclude,
+    });
+    if (p && isPublicSearchEligible(p)) {
+      const pc = toCandidate(p);
+      parent = { detailId: detailIdOf(pc), title: publicTitle(pc) };
+    }
+  }
+
+  // Children folded under this (top-level) work win (parent_toovoit_id === me).
+  let children: NestedDetailRow[] = [];
+  if (c.externalId) {
+    const rows = await prisma.contentItem.findMany({
+      where: { parentToovoitId: c.externalId, isPublic: true },
+      include: candidateInclude,
+    });
+    const cands = rows.filter(isEvidenceEligible).map(toCandidate);
+    cands.sort((a, b) => compareTimeline(toInput(a), toInput(b)));
+    children = cands.map((cc) => toRow(cc, false));
+  }
+
+  // Policy thread (rows sharing the same policy_thread_key) — only a real thread
+  // when there is at least one sibling beyond this row.
+  let thread: WorkWinNestingDetail["thread"] = null;
+  if (c.policyThreadKey && isNestedDisplay(c.displayType)) {
+    const rows = await prisma.contentItem.findMany({
+      where: { policyThreadKey: c.policyThreadKey, isPublic: true },
+      include: candidateInclude,
+    });
+    const cands = rows.filter(isEvidenceEligible).map(toCandidate);
+    if (cands.length > 1) {
+      cands.sort((a, b) => compareTimeline(toInput(a), toInput(b)));
+      const title = cands.map((x) => x.policyThreadTitle).find((t): t is string => !!t) ?? null;
+      thread = { key: c.policyThreadKey, title, items: cands.map((cc) => toRow(cc, cc.id === c.id)) };
+    }
+  }
+
+  if (!parent && children.length === 0 && !thread) return null;
+  return { parent, children, thread };
 }
 
 function pickBodySnippet(c: Candidate): string | null {

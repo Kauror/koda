@@ -15,6 +15,7 @@ import {
   stageAllContent,
   stageExcludedIds,
   stageLinkWorkbook,
+  stageNewsOnlyToovoitIds,
   FILES,
   type StagedContent,
 } from "./lib/merge-ready";
@@ -41,7 +42,8 @@ function main() {
   const staged2 = stageAllContent();
   const links = stageLinkWorkbook();
   const excluded = stageExcludedIds();
-  const analysis = analyze(staged, links, excluded);
+  const newsOnly = stageNewsOnlyToovoitIds();
+  const analysis = analyze(staged, links, excluded, newsOnly);
 
   const byId = (rows: StagedContent[], id: string) => rows.find((s) => s.externalId === id);
 
@@ -64,7 +66,7 @@ function main() {
   // ---- v1 counts ----
   check(`web import rows = ${EXPECTED_ROWS.web}`, () => assert.equal(staged.web.length, EXPECTED_ROWS.web));
   check(`opinions import rows = ${EXPECTED_ROWS.opinions}`, () => assert.equal(staged.opinions.length, EXPECTED_ROWS.opinions));
-  check(`toovoidud import rows = ${EXPECTED_ROWS.toovoidud}`, () => assert.equal(staged.toovoidud.length, EXPECTED_ROWS.toovoidud));
+  check(`toovoidud import rows = ${EXPECTED_ROWS.toovoidud} (v1.2)`, () => assert.equal(staged.toovoidud.length, EXPECTED_ROWS.toovoidud));
   check(`total importable rows = ${EXPECTED_ROWS.totalImportable}`, () => assert.equal(staged.all.length, EXPECTED_ROWS.totalImportable));
   check(`excluded/review counts (${EXPECTED_ROWS.webExcluded} / ${EXPECTED_ROWS.opinionsExcluded} / ${EXPECTED_ROWS.toovoidudExcluded})`, () => {
     assert.equal(excluded.web.length, EXPECTED_ROWS.webExcluded);
@@ -80,7 +82,7 @@ function main() {
   check("no import-sheet row has a FALSE import flag", () => assert.equal(analysis.importFlagViolations.length, 0));
 
   // ---- public gate ----
-  check("all import-eligible rows are public (v1 gate)", () => {
+  check("all import-eligible rows are public (v1 gate); töövõidud = 122", () => {
     assert.equal(analysis.perDataset.web.public, EXPECTED_ROWS.web);
     assert.equal(analysis.perDataset.opinions.public, EXPECTED_ROWS.opinions);
     assert.equal(analysis.perDataset.toovoidud.public, EXPECTED_ROWS.toovoidud);
@@ -138,12 +140,56 @@ function main() {
     assert.ok(pandi, "panditulumaks töövõit present");
     assert.notEqual(pandi!.date?.toISOString().slice(0, 10), "2026-06-24");
   });
-  check("börsiettevõtete soolise tasakaalu töövõit uses year precision, deadline 30.06.2026 stays a deadline", () => {
+  check("börsiettevõtete soolise tasakaalu töövõit does not use 2026-12-31 as its date", () => {
+    // The v1.5 slim sheet no longer carries display_date_precision/deadline_date;
+    // the safety invariant is that the year-end placeholder is never the date.
     const sooline = staged.toovoidud.find((s) => s.title.toLowerCase().includes("soolise tasakaalu"));
     assert.ok(sooline, "soolise tasakaalu töövõit present");
-    assert.equal(sooline!.displayDatePrecision, "year");
     assert.notEqual(sooline!.date?.toISOString().slice(0, 10), "2026-12-31");
-    assert.equal(sooline!.deadlineDate?.toISOString().slice(0, 10), "2026-06-30");
+  });
+
+  // ---- v1.2 töövõidud nesting / backfill ----
+  check("töövõit row_origin breakdown is 90 / 18 / 14", () => {
+    assert.equal(analysis.toovoidudOrigins["original_90_locked"] ?? 0, EXPECTED_ROWS.toovoidudOriginal90);
+    assert.equal(analysis.toovoidudOrigins["phase2_new_standalone"] ?? 0, EXPECTED_ROWS.toovoidudPhase2Standalone);
+    assert.equal(analysis.toovoidudOrigins["phase2_series_nested"] ?? 0, EXPECTED_ROWS.toovoidudSeriesNested);
+  });
+  check("töövõit ids are unique (no duplicate toovoit_id)", () => {
+    assert.deepEqual(analysis.duplicateExternalIds.toovoidud ?? [], []);
+    const ids = new Set(staged.toovoidud.map((s) => s.externalId));
+    assert.equal(ids.size, staged.toovoidud.length);
+  });
+  check("108 standalone top-level cards, 14 nested rows, 7 policy threads", () => {
+    assert.equal(analysis.nesting.topLevel, 108);
+    assert.equal(analysis.nesting.nested, 14);
+    assert.equal(analysis.nesting.threads, 7);
+  });
+  check("every nested row resolves to a parent or a policy thread (none unresolved)", () =>
+    assert.equal(analysis.nesting.unresolved.length, 0));
+  check("phase2_series_nested rows all use a nested display_type", () =>
+    assert.equal(analysis.nesting.seriesNotNested.length, 0));
+  check("no nested row references a missing parent töövõit", () =>
+    assert.equal(analysis.nesting.invalidParentRefs.length, 0));
+  check("no unknown display_type / row_origin values", () => {
+    assert.equal(analysis.nesting.invalidDisplayType.length, 0);
+    assert.equal(analysis.nesting.invalidRowOrigin.length, 0);
+  });
+  check("news_only_recommendations (7) are NOT imported as töövõidud", () => {
+    assert.equal(analysis.newsOnly.count, EXPECTED_ROWS.toovoidudNewsOnly);
+    assert.equal(analysis.newsOnly.leakedIntoImport.length, 0);
+  });
+  check("an unknown display_type fails validation (loud, not silent)", () => {
+    const broken = staged.toovoidud.map((s, i) => (i === 0 ? { ...s, displayType: "totally_made_up" } : s));
+    const a = analyze({ ...staged, toovoidud: broken, all: [...staged.web, ...staged.opinions, ...broken] }, links, excluded);
+    assert.ok(!a.ok, "analysis must fail on an unknown display_type");
+    assert.ok(a.errors.some((e) => e.includes("unknown display_type")));
+  });
+  check("a series/nested row left as standalone_card fails validation", () => {
+    const idx = staged.toovoidud.findIndex((s) => s.rowOrigin === "phase2_series_nested");
+    assert.ok(idx >= 0, "have a series/nested row to mutate");
+    const broken = staged.toovoidud.map((s, i) => (i === idx ? { ...s, displayType: "standalone_card" } : s));
+    const a = analyze({ ...staged, toovoidud: broken, all: [...staged.web, ...staged.opinions, ...broken] }, links, excluded);
+    assert.ok(!a.ok && a.errors.some((e) => e.includes("standalone display_type")));
   });
 
   // ---- specific regression rows ----

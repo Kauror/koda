@@ -1,9 +1,64 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getContentDetail, type ContentDetail, type EvidenceRow } from "@/lib/content-detail";
+import {
+  getContentDetail,
+  type ContentDetail,
+  type EvidenceRow,
+  type WorkWinNestingDetail,
+} from "@/lib/content-detail";
 import { compactText, isGenericWorkWinUrl, isUnsafePublicDetailText } from "@/lib/content-display";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * v1.2 nesting/timeline context on a töövõit detail page: a "part of" link to a
+ * parent card, the folded series/timeline children, or the full policy-thread
+ * timeline (current step highlighted). Each step links to its own detail page.
+ */
+function WorkWinNestingSection({ nesting, from }: { nesting: WorkWinNestingDetail; from?: string }) {
+  const href = (detailId: string) =>
+    `/sisu/${encodeURIComponent(detailId)}${from ? `?from=${encodeURIComponent(from)}` : ""}`;
+  const items = nesting.thread ? nesting.thread.items : nesting.children;
+  if (!nesting.parent && items.length === 0) return null;
+  const heading = nesting.thread
+    ? `Sama teema ajajoon${nesting.thread.title ? `: ${nesting.thread.title}` : ""}`
+    : "Töövõidu arengud";
+  return (
+    <section className="card nested-detail">
+      {nesting.parent && (
+        <p className="thread-parent">
+          Kuulub töövõidu juurde:{" "}
+          <Link href={href(nesting.parent.detailId)}>{nesting.parent.title}</Link>
+        </p>
+      )}
+      {items.length > 0 && (
+        <>
+          <h2>{heading}</h2>
+          <ol className="nested-timeline">
+            {items.map((it) => (
+              <li key={it.id} className={`nested-item${it.isCurrent ? " nested-current" : ""}`}>
+                <p className="nested-meta">
+                  {(it.timelineYear || it.displayDate) && (
+                    <span className="badge-date">{it.timelineYear ?? it.displayDate}</span>
+                  )}
+                  {it.timelineStageLabel && <span className="badge nested-stage">{it.timelineStageLabel}</span>}
+                  {it.isCurrent && <span className="badge">Praegu vaatad</span>}
+                </p>
+                <h3>{it.isCurrent ? it.title : <Link href={href(it.detailId)}>{it.title}</Link>}</h3>
+                {it.summary && <p className="item-excerpt small">{compactText(it.summary, 220)}</p>}
+                {it.sourceUrl && !isGenericWorkWinUrl(it.sourceUrl) && (
+                  <a href={it.sourceUrl} target="_blank" rel="noopener noreferrer" className="item-source-link">
+                    Allikas →
+                  </a>
+                )}
+              </li>
+            ))}
+          </ol>
+        </>
+      )}
+    </section>
+  );
+}
 
 function SourceButton({ item }: { item: Pick<ContentDetail, "sourceUrl" | "sourceCtaLabel"> }) {
   // Only show an external source button when there is a specific article/source.
@@ -197,6 +252,8 @@ export default async function ContentDetailPage({
 
       <div className="container results-body detail-body">
         {item.isAchievement ? <AchievementDetail item={item} /> : <StandardDetail item={item} />}
+
+        {item.workWinNesting && <WorkWinNestingSection nesting={item.workWinNesting} from={from} />}
 
         <p style={{ marginTop: 24 }}>
           <Link href={backHref} className="btn btn-secondary btn-small">

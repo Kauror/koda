@@ -25,6 +25,7 @@ import {
   stageAllContent,
   stageExcludedIds,
   stageLinkWorkbook,
+  stageNewsOnlyToovoitIds,
   unknownTopicLabels,
   type Analysis,
   type LinkWorkbook,
@@ -134,6 +135,15 @@ function toContentData(s: StagedContent): Prisma.ContentItemUncheckedCreateInput
     workWinTypeSecondary: s.workWinTypeSecondary,
     canonicalPolicyThreadId: s.canonicalPolicyThreadId,
     policyThreadId: s.policyThreadId,
+    // v1.2 nesting / timeline fields.
+    rowOrigin: s.rowOrigin,
+    displayType: s.displayType,
+    parentToovoitId: s.parentToovoitId,
+    parentCandidateId: s.parentCandidateId,
+    policyThreadKey: s.policyThreadKey,
+    policyThreadTitle: s.policyThreadTitle,
+    timelineYear: s.timelineYear,
+    timelineStage: s.timelineStage,
   };
 }
 
@@ -397,9 +407,13 @@ async function main() {
   const staged = stageAllContent();
   const links = stageLinkWorkbook();
   const excluded = stageExcludedIds();
-  const analysis = analyze(staged, links, excluded);
+  const newsOnly = stageNewsOnlyToovoitIds();
+  const analysis = analyze(staged, links, excluded, newsOnly);
 
   log(`Staged: web=${staged.web.length} opinions=${staged.opinions.length} toovoidud=${staged.toovoidud.length} total=${staged.all.length}`);
+  log(
+    `Töövõidud: origins=${JSON.stringify(analysis.toovoidudOrigins)} topLevel=${analysis.nesting.topLevel} nested=${analysis.nesting.nested} threads=${analysis.nesting.threads} newsOnly=${analysis.newsOnly.count}`
+  );
   log(`Public: web=${analysis.perDataset.web.public} opinions=${analysis.perDataset.opinions.public} toovoidud=${analysis.perDataset.toovoidud.public}`);
   log(`Public related links available: ${links.publicRelated.length}`);
 
@@ -535,6 +549,19 @@ function writeReport(analysis: Analysis, links: LinkWorkbook, r: ImportResult) {
       blockerFailures: analysis.smokeTest.blockerFailures.map((t) => t.testId),
     },
     dateRegressions: analysis.dateRegressions,
+    toovoidudNesting: {
+      origins: analysis.toovoidudOrigins,
+      topLevel: analysis.nesting.topLevel,
+      nested: analysis.nesting.nested,
+      threads: analysis.nesting.threads,
+      unresolved: analysis.nesting.unresolved.length,
+      invalidDisplayType: analysis.nesting.invalidDisplayType.length,
+      invalidRowOrigin: analysis.nesting.invalidRowOrigin.length,
+      invalidParentRefs: analysis.nesting.invalidParentRefs.length,
+      seriesNotNested: analysis.nesting.seriesNotNested.length,
+      newsOnlyRecommendations: analysis.newsOnly.count,
+      newsOnlyLeaked: analysis.newsOnly.leakedIntoImport.length,
+    },
     lawSearch: analysis.law,
     taxonomyReference: analysis.taxonomyReference,
     missingInvalidFields: {
@@ -553,6 +580,14 @@ function writeReport(analysis: Analysis, links: LinkWorkbook, r: ImportResult) {
     warnings: analysis.warnings,
     finalStatus: analysis.ok ? "PASS" : "FAIL",
     errors: analysis.errors,
+    // TODO: import policy_threads into a first-class structure (TopicGroup) so a
+    // single thread can be navigated across opinion/news/work-win. For now the
+    // canonical_policy_thread_id + v1.2 policy_thread_key are preserved on content,
+    // and nesting/timeline is resolved at runtime (src/lib/work-win-nesting.ts).
+    todo: [
+      "Import policy_threads as a first-class TopicGroup/policy-thread structure.",
+      "Adopt koda_content_links_v1_4_BACKFILL_UPDATED.xlsx when available (new relation types: parent_child_nested, same_policy_thread, timeline_sequence, related_news_context, news_only_context). Core nesting already works from the töövõidud import fields without it.",
+    ],
   };
 
   writeFileSync(resolve(reportsDir, "import-report.json"), JSON.stringify(report, null, 2));

@@ -1312,3 +1312,113 @@ table.admin-table th {
     padding: 6px 0;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   v1.2 töövõidud nesting / timeline
+   Nested/timeline rows never render as flat top-level cards; they fold into a
+   compact section under a parent card or a policy-thread card.
+   --------------------------------------------------------------------------- */
+
+/* Policy-thread (ajajoon) card: a grouped timeline, distinct from a single win. */
+.other-item.thread-card {
+  border-left: 3px solid var(--color-primary);
+  background: #f6f9fc;
+}
+
+/* Collapsible nested section under a parent card. */
+.nested-section {
+  margin-top: 10px;
+  border-top: 1px dashed var(--color-border);
+  padding-top: 8px;
+}
+
+.nested-section > summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--color-primary-dark);
+  list-style: revert;
+}
+
+.nested-section > summary:hover {
+  text-decoration: underline;
+}
+
+/* The timeline itself: a thin left rail with stacked steps. */
+.nested-timeline {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0 0 0 14px;
+  border-left: 2px solid var(--color-border);
+}
+
+.nested-item {
+  position: relative;
+  padding: 0 0 14px 12px;
+}
+
+.nested-item:last-child {
+  padding-bottom: 2px;
+}
+
+/* Step marker dot on the rail. */
+.nested-item::before {
+  content: "";
+  position: absolute;
+  left: -19px;
+  top: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-border);
+}
+
+.nested-item.nested-matched::before,
+.nested-item.nested-current::before {
+  background: var(--color-success);
+}
+
+.nested-item h3,
+.nested-item h4 {
+  margin: 2px 0 4px;
+  font-size: 0.92rem;
+}
+
+.nested-item h4 a,
+.nested-item h3 a {
+  color: var(--color-text-strong);
+  text-decoration: none;
+}
+
+.nested-item h4 a:hover,
+.nested-item h3 a:hover {
+  color: var(--color-primary-dark);
+  text-decoration: underline;
+}
+
+.nested-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 2px;
+}
+
+/* Timeline stage chip (e.g. "Riigikogu vastuvõtmine"). */
+.badge.nested-stage {
+  background: #eef3f8;
+  color: var(--color-primary-dark);
+}
+
+/* The currently-viewed step / a search-matched step is emphasised. */
+.nested-item.nested-current,
+.nested-item.nested-matched {
+  background: #f7fbf8;
+  border-radius: var(--radius-sm);
+}
+
+.nested-detail .thread-parent {
+  margin: 0 0 12px;
+  font-size: 0.9rem;
+  color: var(--color-muted);
+}

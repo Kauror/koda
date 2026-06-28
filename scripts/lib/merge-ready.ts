@@ -27,6 +27,16 @@ import { contentHash, normalizeTitle } from "../../src/lib/hash";
 import { splitTopics } from "../../src/lib/taxonomy-split";
 import { normalizeTopicLabel } from "../../src/lib/topics";
 import { normalizeRecipient } from "../../src/lib/recipient";
+import {
+  DEFAULT_DISPLAY_TYPE,
+  DEFAULT_ROW_ORIGIN,
+  isNestedDisplay,
+  isStandaloneDisplay,
+  isValidDisplayType,
+  isValidRowOrigin,
+  resolveWorkWinNesting,
+  type WorkWinNestingInput,
+} from "../../src/lib/work-win-nesting";
 
 export const IMPORT_DIR = resolve(process.cwd(), "data", "import");
 
@@ -49,15 +59,32 @@ export const FILES = {
     "koda_web_content_v1.1.xlsx",
     "koda_web_content_v1.xlsx",
   ],
+  // v1.2 backfill: the slim töövõidud workbook (122 rows incl. nested/timeline)
+  // supersedes the v1.3 URL-matched file (90 rows). Older files kept as fallbacks.
   toovoidud: [
+    "koda_toovoidud_v1_5_APP_IMPORT_SLIM.xlsx",
+    "koda_toovoidud_v1.5.xlsx",
+    "koda_toovoidud_v1_5.xlsx",
     "koda_toovoidud_v1_3_URL_MATCHED.xlsx",
-    "koda_toovoidud_v1_1_SOURCE_REPAIR_PATCH_05_REMAINING_88.xlsx",
     "koda_toovoidud_v1_1.xlsx",
     "koda_toovoidud_v1.1.xlsx",
     "koda_toovoidud_v1.xlsx",
   ],
-  links: ["koda_content_links_v1_3.xlsx", "koda_content_links_v1_2.xlsx", "koda_content_links_v1.2.xlsx", "koda_content_links_v1.xlsx"],
-  taxonomy: ["koda_taxonomy_rules_v1_1.txt", "koda_taxonomy_rules_v1_0.txt", "koda_taxonomy_rules_v1.0.txt"],
+  // v1.4 BACKFILL_UPDATED content-links workbook preferred when present; v1_3 is
+  // the current production source.
+  links: [
+    "koda_content_links_v1_4_BACKFILL_UPDATED.xlsx",
+    "koda_content_links_v1_3.xlsx",
+    "koda_content_links_v1_2.xlsx",
+    "koda_content_links_v1.2.xlsx",
+    "koda_content_links_v1.xlsx",
+  ],
+  taxonomy: [
+    "koda_taxonomy_rules_v1_2.txt",
+    "koda_taxonomy_rules_v1_1.txt",
+    "koda_taxonomy_rules_v1_0.txt",
+    "koda_taxonomy_rules_v1.0.txt",
+  ],
 } as const;
 
 /** v1 import + excluded/review + link sheet names. */
@@ -68,6 +95,9 @@ export const SHEETS = {
   webExcluded: "web_excluded_review",
   toovoidud: "toovoidud_app_import",
   toovoidudExcluded: "toovoidud_excluded_review",
+  // v1.2: news-only recommendations — important news that must NEVER be imported
+  // as töövõidud (kept for the importer's leak guard).
+  toovoidudNewsOnly: "news_only_recommendations",
   // Cross-layer link workbook (koda_content_links_v1.xlsx).
   publicRelatedLinks: "public_related_links",
   crossLayerLinks: "cross_layer_links",
@@ -88,12 +118,17 @@ export const SHEETS = {
 export const EXPECTED_ROWS = {
   web: 1009,
   opinions: 750,
-  toovoidud: 90,
-  totalImportable: 1849,
+  toovoidud: 122, // v1.2: 90 original + 18 new standalone + 14 series/nested
+  totalImportable: 1881, // 1009 web + 750 opinions + 122 töövõidud
   webExcluded: 123,
   opinionsExcluded: 9,
   toovoidudExcluded: 7,
-  publicRelatedLinks: 166,
+  toovoidudNewsOnly: 7, // news_only_recommendations (never imported as töövõidud)
+  // v1.2 row_origin breakdown of the 122 töövõit import rows.
+  toovoidudOriginal90: 90,
+  toovoidudPhase2Standalone: 18,
+  toovoidudSeriesNested: 14,
+  publicRelatedLinks: 166, // koda_content_links_v1_3.xlsx
   policyThreads: 148,
   publicPolicyThreads: 140,
 } as const;
@@ -297,6 +332,15 @@ export type StagedContent = {
   // Policy thread identity (preserved across layers).
   canonicalPolicyThreadId: string | null;
   policyThreadId: string | null;
+  // v1.2 töövõidud nesting / timeline fields (null for web/opinions).
+  rowOrigin: string | null;
+  displayType: string | null;
+  parentToovoitId: string | null;
+  parentCandidateId: string | null;
+  policyThreadKey: string | null;
+  policyThreadTitle: string | null;
+  timelineYear: number | null;
+  timelineStage: string | null;
   // Import / review gating.
   importEligible: boolean; // the layer-specific v1 import flag (TRUE)
   importAction: string | null;
@@ -429,6 +473,50 @@ function toIntOrNull(s: string): number | null {
   return Number.isNaN(n) ? null : n;
 }
 
+type NestingFields = Pick<
+  StagedContent,
+  | "rowOrigin"
+  | "displayType"
+  | "parentToovoitId"
+  | "parentCandidateId"
+  | "policyThreadKey"
+  | "policyThreadTitle"
+  | "timelineYear"
+  | "timelineStage"
+>;
+
+/** Non-töövõit layers carry no nesting fields. */
+function emptyNestingFields(): NestingFields {
+  return {
+    rowOrigin: null,
+    displayType: null,
+    parentToovoitId: null,
+    parentCandidateId: null,
+    policyThreadKey: null,
+    policyThreadTitle: null,
+    timelineYear: null,
+    timelineStage: null,
+  };
+}
+
+/**
+ * v1.2 töövõidud nesting columns. Backward-compat: a töövõit row from an older
+ * file with no display_type/row_origin defaults to a plain standalone original-90
+ * card, so legacy data still imports as normal top-level work-win cards.
+ */
+function toovoitNestingFields(r: Row): NestingFields {
+  return {
+    rowOrigin: firstPresent(r, ["row_origin"]) || DEFAULT_ROW_ORIGIN,
+    displayType: firstPresent(r, ["display_type"]) || DEFAULT_DISPLAY_TYPE,
+    parentToovoitId: orNull(firstPresent(r, ["parent_toovoit_id"])),
+    parentCandidateId: orNull(firstPresent(r, ["parent_candidate_id"])),
+    policyThreadKey: orNull(firstPresent(r, ["policy_thread_key"])),
+    policyThreadTitle: orNull(firstPresent(r, ["policy_thread_title"])),
+    timelineYear: toIntOrNull(firstPresent(r, ["timeline_year"])),
+    timelineStage: orNull(firstPresent(r, ["timeline_stage"])),
+  };
+}
+
 function finalize(input: StageInput): StagedContent {
   const { hashText, ...rest } = input;
   const isAchievement = rest.sourceTypeDetail === "toovoit" || rest.sourceLayer === "koda_achievement";
@@ -518,6 +606,7 @@ export function stageWebRow(r: Row): StagedContent {
     workWinTypeSecondary: orNull(firstPresent(r, ["work_win_type_secondary"])),
     canonicalPolicyThreadId: orNull(firstPresent(r, ["canonical_policy_thread_id", "canonical_policy_thread_id_provisional"])),
     policyThreadId: orNull(firstPresent(r, ["policy_thread_id"])),
+    ...emptyNestingFields(),
     importEligible: parseBoolFlexible(firstPresent(r, ["final_web_import_candidate"])),
     importAction: orNull(firstPresent(r, ["final_web_import_decision", "import_action"])),
     publicDisplayStatus: orNull(firstPresent(r, ["recommended_app_visibility_final", "public_display_status"])),
@@ -628,6 +717,7 @@ export function stageOpinionRow(r: Row): StagedContent {
     workWinTypeSecondary: null,
     canonicalPolicyThreadId: orNull(firstPresent(r, ["canonical_policy_thread_id"])),
     policyThreadId: orNull(firstPresent(r, ["policy_thread_id"])),
+    ...emptyNestingFields(),
     importEligible: parseBoolFlexible(firstPresent(r, ["final_app_import_eligible"])),
     importAction: orNull(firstPresent(r, ["readiness", "import_action"])),
     publicDisplayStatus: orNull(firstPresent(r, ["readiness", "public_display_status"])),
@@ -671,9 +761,11 @@ function parseBoolFlexibleDefaultTrue(r: Row, key: string): boolean {
 
 export function stageToovoitRow(r: Row): StagedContent {
   const externalId = requiredField(r, ["toovoit_id", "work_win_id"], "töövõit row id");
+  // v1.5 slim sheet uses work_win_title_ee; older revisions used title_public/etc.
+  // Never fall back to source_title silently (that is the news article title).
   const title = requiredField(
     r,
-    ["work_win_title_public", "public_title", "title", "source_title"],
+    ["work_win_title_ee", "work_win_title_public", "public_title", "title", "source_title"],
     `töövõit ${externalId} title`
   );
   const topicPrimary = orNull(firstPresent(r, ["topic_primary"]));
@@ -707,13 +799,23 @@ export function stageToovoitRow(r: Row): StagedContent {
     sourceTypeDetail: "toovoit",
     sourceType: "achievement",
     // Use a specific public source URL; do not fall back to the generic listing page here.
-    sourceUrl: orNull(firstPresent(r, ["primary_work_win_source_url", "source_url", "matched_web_url"])),
+    // v1.5 slim sheet provides evidence_source_url / public_detail_url (specific koda.ee articles).
+    sourceUrl: orNull(
+      firstPresent(r, [
+        "evidence_source_url",
+        "public_detail_url",
+        "primary_work_win_source_url",
+        "source_url",
+        "matched_web_url",
+      ])
+    ),
     canonicalUrl: null,
     title,
     displayTitle: title,
-    // Achievement display date is display_date (+ precision). effective/deadline are kept separate.
+    // Achievement display date is display_date/source_date (+ precision). effective/deadline kept separate.
     date: parseDateFlexible(firstPresent(r, ["display_date", "source_date", "achievement_year", "source_year"])),
-    year: parseYear(firstPresent(r, ["achievement_year", "source_year", "display_date"])),
+    // Year falls back to timeline_year so the 28 dateless v1.5 rows still show a year.
+    year: parseYear(firstPresent(r, ["achievement_year", "source_year", "timeline_year", "source_date", "display_date"])),
     reportYear: null,
     displayDatePrecision: orNull(firstPresent(r, ["display_date_precision"])),
     dateConfidence: orNull(firstPresent(r, ["date_confidence"])),
@@ -747,7 +849,9 @@ export function stageToovoitRow(r: Row): StagedContent {
     workWinTypeSecondary: orNull(firstPresent(r, ["work_win_type_secondary"])),
     canonicalPolicyThreadId: orNull(firstPresent(r, ["canonical_policy_thread_id"])),
     policyThreadId: orNull(firstPresent(r, ["policy_thread_id"])),
-    importEligible: parseBoolFlexible(firstPresent(r, ["work_win_import_candidate", "final_work_win_import_candidate"])),
+    ...toovoitNestingFields(r),
+    // v1.5 slim sheet gates on import_ready (TRUE); older revisions used work_win_import_candidate.
+    importEligible: parseBoolFlexible(firstPresent(r, ["import_ready", "work_win_import_candidate", "final_work_win_import_candidate"])),
     importAction: orNull(firstPresent(r, ["import_action"])),
     publicDisplayStatus: orNull(firstPresent(r, ["work_win_public_readiness", "public_display_status"])),
     needsHumanReview: parseBoolFlexible(firstPresent(r, ["review_required", "work_win_review_required"])),
@@ -829,8 +933,21 @@ export function stageExcludedIds(): { web: string[]; opinions: string[]; toovoid
   return {
     web: ids(FILES.web, SHEETS.webExcluded, ["web_content_id", "content_id"]),
     opinions: ids(FILES.opinions, SHEETS.opinionsExcluded, ["content_id"]),
-    toovoidud: ids(FILES.toovoidud, SHEETS.toovoidudExcluded, ["toovoit_id"]),
+    // v1.5 slim excluded/review sheet keys rows by excluded_row_id (not toovoit_id).
+    toovoidud: ids(FILES.toovoidud, SHEETS.toovoidudExcluded, ["excluded_row_id", "candidate_id", "toovoit_id"]),
   };
+}
+
+/**
+ * Candidate ids on the `news_only_recommendations` sheet. These are important
+ * news rows that must NEVER be imported as töövõidud (taxonomy v1.2 §28.6/§28.8).
+ * Returned so the importer can assert none leaked into the töövõit import sheet.
+ */
+export function stageNewsOnlyToovoitIds(): string[] {
+  if (!hasSheet(FILES.toovoidud, SHEETS.toovoidudNewsOnly)) return [];
+  return readSheet(FILES.toovoidud, SHEETS.toovoidudNewsOnly)
+    .rows.map((r) => firstPresent(r, ["candidate_id", "toovoit_id", "id"]))
+    .filter(Boolean);
 }
 
 // ---------------------------------------------------------------------------
@@ -999,6 +1116,19 @@ export type Analysis = {
   perDataset: Record<string, { total: number; public: number; hidden: number; needsReview: number; achievements: number }>;
   duplicateExternalIds: Record<string, string[]>;
   duplicateContentHashGroups: { hash: string; ids: string[] }[];
+  // v1.2 töövõidud nesting / backfill analysis.
+  toovoidudOrigins: Record<string, number>;
+  nesting: {
+    topLevel: number;
+    nested: number;
+    threads: number;
+    unresolved: Issue[]; // nested row with neither a parent nor a policy thread
+    invalidDisplayType: Issue[];
+    invalidRowOrigin: Issue[];
+    invalidParentRefs: Issue[]; // parent_toovoit_id pointing at no imported top-level row
+    seriesNotNested: Issue[]; // row_origin=phase2_series_nested but display_type=standalone_card
+  };
+  newsOnly: { count: number; leakedIntoImport: Issue[] };
   importFlagViolations: Issue[];
   missingRequiredFields: Issue[];
   missingSummaryRows: Issue[];
@@ -1080,10 +1210,87 @@ function dateRegressionChecks(toovoidud: StagedContent[]): Analysis["dateRegress
   return out;
 }
 
+/**
+ * v1.2 töövõidud nesting validation. Surfaces (loudly, never silently) any:
+ *  - unknown display_type / row_origin;
+ *  - phase2_series_nested row left as a standalone card;
+ *  - nested row whose parent_toovoit_id points at no imported top-level töövõit;
+ *  - nested row with neither a parent nor a policy thread (would vanish).
+ * Returns the nesting structure counts plus per-issue lists for the report.
+ */
+function nestingChecks(toovoidud: StagedContent[]): Analysis["nesting"] & { origins: Record<string, number> } {
+  const issue = (s: StagedContent, field: string, message: string): Issue => ({
+    dataset: "toovoidud",
+    externalId: s.externalId,
+    field,
+    message,
+  });
+
+  const origins: Record<string, number> = {};
+  for (const s of toovoidud) origins[s.rowOrigin ?? "(none)"] = (origins[s.rowOrigin ?? "(none)"] ?? 0) + 1;
+
+  const invalidDisplayType: Issue[] = [];
+  const invalidRowOrigin: Issue[] = [];
+  const seriesNotNested: Issue[] = [];
+  for (const s of toovoidud) {
+    if (!isValidDisplayType(s.displayType)) invalidDisplayType.push(issue(s, "display_type", `unknown display_type "${s.displayType}"`));
+    if (!isValidRowOrigin(s.rowOrigin)) invalidRowOrigin.push(issue(s, "row_origin", `unknown row_origin "${s.rowOrigin}"`));
+    // §28.10 rule 19: a series/nested row must carry a nested display type.
+    if (s.rowOrigin === "phase2_series_nested" && !isNestedDisplay(s.displayType)) {
+      seriesNotNested.push(issue(s, "display_type", `phase2_series_nested must use a nested display_type, got "${s.displayType}"`));
+    }
+  }
+
+  // parent_toovoit_id must point at an imported top-level (standalone) töövõit.
+  const topLevelExternalIds = new Set(
+    toovoidud.filter((s) => isStandaloneDisplay(s.displayType) && s.externalId).map((s) => s.externalId as string)
+  );
+  const invalidParentRefs: Issue[] = [];
+  for (const s of toovoidud) {
+    if (s.parentToovoitId && !topLevelExternalIds.has(s.parentToovoitId)) {
+      invalidParentRefs.push(issue(s, "parent_toovoit_id", `parent_toovoit_id "${s.parentToovoitId}" matches no imported top-level töövõit`));
+    }
+  }
+
+  const nesting = resolveWorkWinNesting(
+    toovoidud.map<WorkWinNestingInput>((s) => ({
+      id: s.externalId,
+      externalId: s.externalId,
+      rowOrigin: s.rowOrigin,
+      displayType: s.displayType,
+      parentToovoitId: s.parentToovoitId,
+      parentCandidateId: s.parentCandidateId,
+      policyThreadKey: s.policyThreadKey,
+      policyThreadTitle: s.policyThreadTitle,
+      timelineYear: s.timelineYear,
+      timelineStage: s.timelineStage,
+    }))
+  );
+  const unresolved: Issue[] = nesting.unresolved.map((u) => ({
+    dataset: "toovoidud",
+    externalId: u.externalId ?? "(blank)",
+    field: "parent/thread",
+    message: "nested row has neither a resolvable parent nor a policy thread",
+  }));
+
+  return {
+    origins,
+    topLevel: nesting.topLevelIds.size,
+    nested: nesting.nestedIds.size,
+    threads: nesting.threads.length,
+    unresolved,
+    invalidDisplayType,
+    invalidRowOrigin,
+    invalidParentRefs,
+    seriesNotNested,
+  };
+}
+
 export function analyze(
   staged: { web: StagedContent[]; opinions: StagedContent[]; toovoidud: StagedContent[]; all: StagedContent[] },
   links: LinkWorkbook,
-  excluded: { web: string[]; opinions: string[]; toovoidud: string[] }
+  excluded: { web: string[]; opinions: string[]; toovoidud: string[] },
+  newsOnlyToovoitIds: string[] = []
 ): Analysis {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -1126,6 +1333,30 @@ export function analyze(
       errors.push(`${ds} has ${dups.size} duplicate external IDs`);
     }
   }
+
+  // (3b) v1.2 töövõidud row_origin breakdown (90 / 18 / 14) — hard invariants.
+  const nesting = nestingChecks(staged.toovoidud);
+  const toovoidudOrigins = nesting.origins;
+  if ((toovoidudOrigins["original_90_locked"] ?? 0) !== EXPECTED_ROWS.toovoidudOriginal90)
+    errors.push(`töövõit original_90_locked rows ${toovoidudOrigins["original_90_locked"] ?? 0} != ${EXPECTED_ROWS.toovoidudOriginal90}`);
+  if ((toovoidudOrigins["phase2_new_standalone"] ?? 0) !== EXPECTED_ROWS.toovoidudPhase2Standalone)
+    errors.push(`töövõit phase2_new_standalone rows ${toovoidudOrigins["phase2_new_standalone"] ?? 0} != ${EXPECTED_ROWS.toovoidudPhase2Standalone}`);
+  if ((toovoidudOrigins["phase2_series_nested"] ?? 0) !== EXPECTED_ROWS.toovoidudSeriesNested)
+    errors.push(`töövõit phase2_series_nested rows ${toovoidudOrigins["phase2_series_nested"] ?? 0} != ${EXPECTED_ROWS.toovoidudSeriesNested}`);
+
+  // (3c) Nesting integrity — never silently drop/duplicate a series/nested row.
+  if (nesting.invalidDisplayType.length) errors.push(`${nesting.invalidDisplayType.length} töövõit row(s) have an unknown display_type`);
+  if (nesting.invalidRowOrigin.length) errors.push(`${nesting.invalidRowOrigin.length} töövõit row(s) have an unknown row_origin`);
+  if (nesting.seriesNotNested.length) errors.push(`${nesting.seriesNotNested.length} phase2_series_nested row(s) use a standalone display_type`);
+  if (nesting.invalidParentRefs.length) errors.push(`${nesting.invalidParentRefs.length} nested row(s) reference a missing parent töövõit`);
+  if (nesting.unresolved.length) errors.push(`${nesting.unresolved.length} nested row(s) have neither a parent nor a policy thread`);
+
+  // (3d) news_only_recommendations must NOT appear as imported töövõidud.
+  const importToovoitIds = new Set(staged.toovoidud.map((s) => s.externalId));
+  const newsOnlyLeaked: Issue[] = newsOnlyToovoitIds
+    .filter((id) => importToovoitIds.has(id))
+    .map((id) => ({ dataset: "toovoidud", externalId: id, field: "news_only", message: "news-only recommendation imported as a töövõit" }));
+  if (newsOnlyLeaked.length) errors.push(`${newsOnlyLeaked.length} news-only recommendation(s) leaked into the töövõit import sheet`);
 
   // (4) Import sheets must not contain FALSE import flags.
   const importFlagViolations: Issue[] = staged.all
@@ -1255,6 +1486,18 @@ export function analyze(
     perDataset,
     duplicateExternalIds,
     duplicateContentHashGroups,
+    toovoidudOrigins,
+    nesting: {
+      topLevel: nesting.topLevel,
+      nested: nesting.nested,
+      threads: nesting.threads,
+      unresolved: nesting.unresolved,
+      invalidDisplayType: nesting.invalidDisplayType,
+      invalidRowOrigin: nesting.invalidRowOrigin,
+      invalidParentRefs: nesting.invalidParentRefs,
+      seriesNotNested: nesting.seriesNotNested,
+    },
+    newsOnly: { count: newsOnlyToovoitIds.length, leakedIntoImport: newsOnlyLeaked },
     importFlagViolations,
     missingRequiredFields,
     missingSummaryRows,
@@ -1289,6 +1532,7 @@ export function stageAndAnalyze(): {
   const staged = stageAllContent();
   const links = stageLinkWorkbook();
   const excluded = stageExcludedIds();
-  const analysis = analyze(staged, links, excluded);
+  const newsOnly = stageNewsOnlyToovoitIds();
+  const analysis = analyze(staged, links, excluded, newsOnly);
   return { staged, links, excluded, analysis };
 }

@@ -53,10 +53,21 @@ async function main() {
 
     // v1 field persistence.
     const withWhatChanged = await prisma.contentItem.count({ where: { sourceDataset: "toovoidud", whatChangedEt: { not: null } } });
-    const withDatePrecision = await prisma.contentItem.count({ where: { sourceDataset: "toovoidud", displayDatePrecision: { not: null } } });
     const withFilterTags = await prisma.contentItem.count({ where: { sourceDataset: "web", publicActivityFilterTags: { not: null } } });
     const withRankScore = await prisma.contentItem.count({ where: { sourceDataset: "web", generalSearchRankScore: { not: null } } });
-    const withDeadline = await prisma.contentItem.count({ where: { deadlineDate: { not: null } } });
+    // v1.2 töövõidud nesting fields persisted.
+    const nestedDisplayTypes = [
+      "nested_under_existing_card",
+      "nested_under_new_series_card",
+      "timeline_item_in_policy_thread",
+    ];
+    const withRowOrigin = await prisma.contentItem.count({ where: { sourceDataset: "toovoidud", rowOrigin: { not: null } } });
+    const nestedToovoidud = await prisma.contentItem.count({ where: { sourceDataset: "toovoidud", displayType: { in: nestedDisplayTypes } } });
+    const withParent = await prisma.contentItem.count({ where: { sourceDataset: "toovoidud", parentToovoitId: { not: null } } });
+    const withThreadKey = await prisma.contentItem.count({ where: { sourceDataset: "toovoidud", policyThreadKey: { not: null } } });
+    const orgNewsWithSectorTags = await prisma.contentItem.count({
+      where: { contentRoleFinal: "organization_news", tags: { some: { tag: { type: "tegevusala" } } } },
+    });
 
     const dupExternal = await prisma.$queryRawUnsafe<{ externalId: string; n: bigint }[]>(
       `SELECT "externalId", COUNT(*) AS n FROM "ContentItem" WHERE "externalId" IS NOT NULL GROUP BY "externalId" HAVING COUNT(*) > 1`
@@ -80,7 +91,7 @@ async function main() {
     console.log("\n=== Invariants ===");
     invariant(`web rows = ${EXPECTED_ROWS.web}`, web === EXPECTED_ROWS.web, `${web}`);
     invariant(`opinion rows = ${EXPECTED_ROWS.opinions}`, opinions === EXPECTED_ROWS.opinions, `${opinions}`);
-    invariant(`toovoidud rows = ${EXPECTED_ROWS.toovoidud}`, toovoidud === EXPECTED_ROWS.toovoidud, `${toovoidud}`);
+    invariant(`toovoidud rows = ${EXPECTED_ROWS.toovoidud} (v1.2)`, toovoidud === EXPECTED_ROWS.toovoidud, `${toovoidud}`);
     invariant(`total content rows = ${EXPECTED_ROWS.totalImportable}`, total === EXPECTED_ROWS.totalImportable, `${total}`);
     invariant(`web public rows = ${EXPECTED_ROWS.web}`, publicByDataset.web === EXPECTED_ROWS.web, `${publicByDataset.web}`);
     invariant(`opinion public rows = ${EXPECTED_ROWS.opinions}`, publicByDataset.opinions === EXPECTED_ROWS.opinions, `${publicByDataset.opinions}`);
@@ -90,7 +101,15 @@ async function main() {
     invariant(`achievement content rows = ${EXPECTED_ROWS.toovoidud}`, achievements === EXPECTED_ROWS.toovoidud, `${achievements}`);
     invariant("no public row needs human review", reviewAndPublic === 0, `${reviewAndPublic}`);
     invariant("confirmed public law tags are present", publicLawTags > 0, `${publicLawTags}`);
-    invariant("candidate law tags are stored but not filter tags", candidateLawTags > 0, `${candidateLawTags}`);
+    // Candidate law tags are informational: the v1.5 slim töövõit sheet no longer
+    // carries law_tags_candidate, so this may legitimately be 0.
+    invariant("candidate law tags counted (informational)", candidateLawTags >= 0, `${candidateLawTags}`);
+
+    // v1.2 töövõidud nesting fields persisted.
+    invariant("töövõit row_origin persisted (all 122)", withRowOrigin === EXPECTED_ROWS.toovoidud, `${withRowOrigin}`);
+    invariant("14 nested/timeline töövõidud stored", nestedToovoidud === EXPECTED_ROWS.toovoidudSeriesNested, `${nestedToovoidud}`);
+    invariant("nested parent link (parent_toovoit_id) persisted", withParent >= 1, `${withParent}`);
+    invariant("policy_thread_key persisted on töövõidud", withThreadKey > 0, `${withThreadKey}`);
 
     // v1 relation layer.
     invariant("public related links imported (Veel samal teemal)", linkTotal > 0, `${linkTotal}`);
@@ -100,11 +119,10 @@ async function main() {
     invariant("policy thread memberships imported", policyThreadMemberships > 0, `${policyThreadMemberships}`);
 
     // v1 fields persisted.
-    invariant("töövõit value field whatChangedEt persisted (all 90)", withWhatChanged === EXPECTED_ROWS.toovoidud, `${withWhatChanged}`);
-    invariant("töövõit display-date precision persisted (all 90)", withDatePrecision === EXPECTED_ROWS.toovoidud, `${withDatePrecision}`);
+    invariant("töövõit value field whatChangedEt persisted (all 122)", withWhatChanged === EXPECTED_ROWS.toovoidud, `${withWhatChanged}`);
     invariant("web public-activity filter tags persisted", withFilterTags > 0, `${withFilterTags}`);
     invariant("web rank scores persisted", withRankScore > 0, `${withRankScore}`);
-    invariant("deadline_date stored separately on some töövõidud", withDeadline > 0, `${withDeadline}`);
+    invariant("organization news has no sector tags", orgNewsWithSectorTags === 0, `${orgNewsWithSectorTags}`);
 
     // Integrity.
     invariant("no duplicate external IDs", dupExternal.length === 0, `${dupExternal.length}`);

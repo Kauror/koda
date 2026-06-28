@@ -11,12 +11,22 @@ are fixed by the importer (`scripts/lib/merge-ready.ts`).
 | --- | --- | --- | --- | ---: |
 | `koda_opinions_v1.0.xlsx` | `opinions_app_import` | `excluded_rows` | what Koda said | 750 |
 | `koda_web_content_v1.xlsx` | `web_app_import` | `web_excluded_review` | what publicly happened / was explained | 1131 |
-| `koda_toovoidud_v1.xlsx` | `toovoidud_app_import` | `toovoidud_excluded_review` | what changed for companies | 90 |
+| `koda_toovoidud_v1_5_APP_IMPORT_SLIM.xlsx` | `toovoidud_app_import` | `toovoidud_excluded_review` (+ `news_only_recommendations`) | what changed for companies (incl. nested/timeline) | 122 |
 | `koda_content_links_v1.xlsx` | (relation workbook — see below) | — | cross-layer links / manifest / smoke test | — |
-| `koda_taxonomy_rules_v1_0.txt` | n/a | n/a | taxonomy rulebook (reference only, never imported) | n/a |
+| `koda_taxonomy_rules_v1_2.txt` | n/a | n/a | taxonomy rulebook (reference only, never imported) | n/a |
 
-- **Total importable content rows = 1971.** Excluded/review rows are **never**
-  imported as public content (web 1, opinions 9, töövõidud 7).
+- **Total importable content rows = 2003.** Excluded/review rows are **never**
+  imported as public content (web 1, opinions 9, töövõidud 7). The töövõidud
+  `news_only_recommendations` sheet (7 rows) is **never** imported as a töövõit.
+- **v1.2 töövõidud (122)** = 90 `original_90_locked` + 18 `phase2_new_standalone`
+  + 14 `phase2_series_nested`. The 14 series/nested rows carry `display_type` /
+  `parent_toovoit_id` / `parent_candidate_id` / `policy_thread_key` /
+  `policy_thread_title` / `timeline_year` / `timeline_stage`, and are rendered as
+  nested items under a parent card or grouped into a policy-thread timeline — never
+  as duplicate flat cards. See `docs/toovoidud-nesting-v1_2.md`.
+- The older `koda_toovoidud_v1.xlsx` (90 rows, no nesting columns) is still
+  accepted as a fallback; töövõit rows with no `display_type`/`row_origin` default
+  to `standalone_card` / `original_90_locked`, so legacy data imports unchanged.
 - The public gate is simple and authoritative: a row is public when it is in the
   official import sheet, its layer import flag is TRUE
   (`final_app_import_eligible` / `final_web_import_candidate` /

@@ -7,6 +7,7 @@ import {
   parseSearchParams,
   search,
   type FilterOptions,
+  type NestedWorkWinCard,
   type ResultCard,
   type SearchResults,
 } from "@/lib/search";
@@ -14,6 +15,59 @@ import { isGenericWorkWinUrl } from "@/lib/content-display";
 import TrackedLink from "./TrackedLink";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * Compact nested/timeline section under a parent or policy-thread töövõit card
+ * (v1.2). Series/timeline rows render here, never as flat top-level cards. Open
+ * by default for thread cards (the timeline is the card's whole content);
+ * collapsed under a normal parent card so the default list stays uncluttered.
+ */
+function NestedWorkWins({
+  items,
+  heading,
+  open,
+  fromQuery,
+}: {
+  items: NestedWorkWinCard[];
+  heading: string;
+  open: boolean;
+  fromQuery: string;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <details className="nested-section" open={open}>
+      <summary>
+        {heading} <span className="result-count">({items.length})</span>
+      </summary>
+      <ol className="nested-timeline">
+        {items.map((item) => {
+          const href = `/sisu/${encodeURIComponent(item.detailId)}${
+            fromQuery ? `?from=${encodeURIComponent(fromQuery)}` : ""
+          }`;
+          return (
+            <li key={item.id} className={`nested-item${item.matched ? " nested-matched" : ""}`}>
+              <p className="nested-meta">
+                {(item.timelineYear || item.displayDate) && (
+                  <span className="badge-date">{item.timelineYear ?? item.displayDate}</span>
+                )}
+                {item.timelineStageLabel && <span className="badge nested-stage">{item.timelineStageLabel}</span>}
+              </p>
+              <h4>
+                <Link href={href}>{item.title}</Link>
+              </h4>
+              {item.summary && <p className="item-excerpt small">{item.summary}</p>}
+              {item.url && !isGenericWorkWinUrl(item.url) && (
+                <a href={item.url} target="_blank" rel="noopener noreferrer" className="item-source-link">
+                  Allikas →
+                </a>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </details>
+  );
+}
 
 function Badges({ card }: { card: ResultCard }) {
   // card.displayDate is the safe public date (placeholder/import/future dates are
@@ -45,12 +99,18 @@ function Card({
   const detailHref = `/sisu/${encodeURIComponent(card.detailId)}${
     fromQuery ? `?from=${encodeURIComponent(fromQuery)}` : ""
   }`;
+  // A policy-thread card groups several timeline rows: its title is not a single
+  // detail page, so it reads as a group and exposes its timeline (the nested
+  // items each link to their own detail page).
+  const isThread = !!card.isThread;
   return (
-    <article className={`other-item${card.isAchievement ? " win" : ""}${compact ? " compact-result" : ""}`}>
+    <article
+      className={`other-item${card.isAchievement ? " win" : ""}${compact ? " compact-result" : ""}${
+        isThread ? " thread-card" : ""
+      }`}
+    >
       <Badges card={card} />
-      <h3>
-        <Link href={detailHref}>{card.title}</Link>
-      </h3>
+      <h3>{isThread ? card.title : <Link href={detailHref}>{card.title}</Link>}</h3>
       {card.summary && <p className="item-excerpt small">{card.summary}</p>}
       {!compact && (card.laws.length > 0 || card.recipient) && (
         <div className="card-tags">
@@ -73,25 +133,36 @@ function Card({
           )}
         </div>
       )}
-      <p className="card-links">
-        <Link href={detailHref} className="btn btn-secondary btn-small">
-          Loe lähemalt
-        </Link>
-        {/* Töövõit and news cards keep a single internal CTA: their external
-            source is either the generic koda.ee work-wins listing (useless) or a
-            duplicate of the detail page. Opinions/context keep a specific source
-            link, but never the generic work-wins URL. */}
-        {card.url && !card.isAchievement && card.kind !== "uudis" && !isGenericWorkWinUrl(card.url) && (
-          <TrackedLink
-            href={card.url}
-            sessionId={sessionId}
-            contentItemId={card.id}
-            className="item-source-link"
-          >
-            {card.sourceCtaLabel} →
-          </TrackedLink>
-        )}
-      </p>
+      {!isThread && (
+        <p className="card-links">
+          <Link href={detailHref} className="btn btn-secondary btn-small">
+            Loe lähemalt
+          </Link>
+          {/* Töövõit and news cards keep a single internal CTA: their external
+              source is either the generic koda.ee work-wins listing (useless) or a
+              duplicate of the detail page. Opinions/context keep a specific source
+              link, but never the generic work-wins URL. */}
+          {card.url && !card.isAchievement && card.kind !== "uudis" && !isGenericWorkWinUrl(card.url) && (
+            <TrackedLink
+              href={card.url}
+              sessionId={sessionId}
+              contentItemId={card.id}
+              className="item-source-link"
+            >
+              {card.sourceCtaLabel} →
+            </TrackedLink>
+          )}
+        </p>
+      )}
+      {/* v1.2: nested/timeline children fold in here, never as flat cards. */}
+      {card.nested && card.nested.length > 0 && (
+        <NestedWorkWins
+          items={card.nested}
+          heading={card.nestedHeading ?? "Seotud arengud"}
+          open={isThread}
+          fromQuery={fromQuery}
+        />
+      )}
     </article>
   );
 }

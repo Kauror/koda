@@ -187,6 +187,20 @@ model ContentItem {
   canonicalPolicyThreadId String? // canonical_policy_thread_id
   policyThreadId          String? // policy_thread_id (if distinct)
 
+  // --- v1.2 töövõidud nesting / timeline fields (koda_toovoidud_v1_5 slim) ---
+  // These describe how a töövõit row relates to others so series/timeline rows
+  // are NOT shown as duplicate flat cards. All nullable; legacy/non-töövõit rows
+  // leave them null (importer defaults töövõit rows missing display_type to
+  // standalone_card / row_origin original_90_locked). See src/lib/work-win-nesting.ts.
+  rowOrigin         String? // original_90_locked | phase2_new_standalone | phase2_series_nested
+  displayType       String? // standalone_card | nested_under_existing_card | nested_under_new_series_card | timeline_item_in_policy_thread
+  parentToovoitId   String? // parent_toovoit_id — references an existing (original-90) toovoit externalId
+  parentCandidateId String? // parent_candidate_id — new Phase 2 series/backfill parent (may be a thread key, not an imported id)
+  policyThreadKey   String? // policy_thread_key — stable key grouping a policy-thread timeline
+  policyThreadTitle String? // policy_thread_title — readable thread name
+  timelineYear      Int? // timeline_year — year this timeline item represents
+  timelineStage     String? // timeline_stage — proposal | riigikogu_adoption | final_entry_into_force | ...
+
   // --- Admin-owned override fields ---
   // The merge-ready import is the source of truth for the imported fields above
   // and overwrites them on every re-run. These override fields are NEVER written
@@ -232,6 +246,8 @@ model ContentItem {
   @@index([lawSearchAllowed])
   @@index([recipientFilterGroup])
   @@index([canonicalPolicyThreadId])
+  @@index([parentToovoitId])
+  @@index([policyThreadKey])
 }
 
 model TopicGroup {

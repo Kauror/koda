@@ -162,6 +162,24 @@ export type Candidate = {
   recipientFilterGroup?: string | null;
   /** Recipient/ministry display name (normalized). */
   recipientNormalized?: string | null;
+  // v1.2 töövõidud nesting / timeline fields (null for non-töövõit rows). Optional
+  // so plain test candidates need not set them.
+  /** original_90_locked | phase2_new_standalone | phase2_series_nested */
+  rowOrigin?: string | null;
+  /** standalone_card | nested_under_existing_card | nested_under_new_series_card | timeline_item_in_policy_thread */
+  displayType?: string | null;
+  /** parent_toovoit_id — external id of the original-90 parent card. */
+  parentToovoitId?: string | null;
+  /** parent_candidate_id — new Phase 2 series/backfill parent (may be a thread key). */
+  parentCandidateId?: string | null;
+  /** policy_thread_key — stable key grouping a policy-thread timeline. */
+  policyThreadKey?: string | null;
+  /** policy_thread_title — readable thread name. */
+  policyThreadTitle?: string | null;
+  /** timeline_year — year this timeline item represents. */
+  timelineYear?: number | null;
+  /** timeline_stage — proposal | riigikogu_adoption | final_entry_into_force | ... */
+  timelineStage?: string | null;
 };
 
 // ---------------------------------------------------------------------------
