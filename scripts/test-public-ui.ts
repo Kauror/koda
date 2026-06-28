@@ -162,14 +162,14 @@ check("teema ajalugu uses contextual CTA labels, not generic allikas wording", (
   assert.ok(!source.includes("Vaata allikat"));
 });
 
-check("results page uses incremental batch-of-10 load-more pagination", () => {
+check("results page uses incremental batch-of-3 load-more pagination", () => {
   const source = readFileSync("src/app/tulemused/page.tsx", "utf8");
-  // Sections render through the LoadMore client component (batches of ~10),
+  // Sections render through the LoadMore client component (batches of 3),
   // keyed by the active query so the visible count resets on filter/search change.
   assert.ok(source.includes("import LoadMore"));
   assert.ok(source.includes("<LoadMore"));
   assert.ok(source.includes("batchSize={LOAD_MORE_BATCH}"));
-  assert.ok(source.includes("const LOAD_MORE_BATCH = 10"));
+  assert.ok(source.includes("const LOAD_MORE_BATCH = 3"));
   assert.ok(source.includes("resetKey={editQuery}"));
   // The old "show 2, dump the rest in a <details>" pattern is gone.
   assert.ok(!source.includes("hiddenCards.map"));
@@ -178,6 +178,9 @@ check("results page uses incremental batch-of-10 load-more pagination", () => {
   const loadMore = readFileSync("src/app/tulemused/LoadMore.tsx", "utf8");
   assert.ok(loadMore.includes("Näita rohkem"));
   assert.ok(loadMore.includes("\"use client\""));
+  assert.ok(loadMore.includes("batchSize = 3"));
+  assert.ok(!loadMore.includes("kokku"));
+  assert.ok(!loadMore.includes("veel {"));
 });
 
 check("nested töövõidud sections are collapsed by default (no open attribute)", () => {

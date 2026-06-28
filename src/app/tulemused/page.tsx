@@ -18,7 +18,7 @@ import LoadMore from "./LoadMore";
 export const dynamic = "force-dynamic";
 
 /** Initial batch size + step for the "Näita rohkem" incremental pagination. */
-const LOAD_MORE_BATCH = 10;
+const LOAD_MORE_BATCH = 3;
 
 /**
  * Estonian label + count for the collapsed nested-section toggle. Threads read
@@ -181,8 +181,8 @@ function Card({
 }
 
 /**
- * A result group with incremental "Näita rohkem" pagination: about
- * LOAD_MORE_BATCH (~10) cards are shown first, each click reveals the next ~10
+ * A result group with incremental "Näita rohkem" pagination:
+ * LOAD_MORE_BATCH cards are shown first, each click reveals the next batch
  * until all are visible. `resetKey` is the active query signature — it keys the
  * LoadMore client component so changing the search/filters remounts it and the
  * visible count resets instead of carrying over from the previous result set.

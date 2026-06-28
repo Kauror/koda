@@ -5,8 +5,8 @@ import { Children, useState, type ReactNode } from "react";
 /**
  * Incremental "Näita rohkem" pagination for a result section.
  *
- * Renders its children (already server-rendered result cards) in batches: about
- * `batchSize` (~10) are shown initially, and each click reveals the next batch,
+ * Renders its children (already server-rendered result cards) in batches:
+ * `batchSize` are shown initially, and each click reveals the next batch,
  * then the next, until everything is visible. The button disappears when no more
  * items remain.
  *
@@ -16,7 +16,7 @@ import { Children, useState, type ReactNode } from "react";
  */
 export default function LoadMore({
   children,
-  batchSize = 10,
+  batchSize = 3,
   label = "Näita rohkem",
 }: {
   children: ReactNode;
@@ -28,8 +28,6 @@ export default function LoadMore({
 
   const shown = all.slice(0, visible);
   const remaining = all.length - visible;
-  const nextBatch = Math.min(batchSize, remaining);
-
   return (
     <>
       {shown}
@@ -39,7 +37,7 @@ export default function LoadMore({
           className="btn btn-secondary load-more-btn"
           onClick={() => setVisible((v) => Math.min(v + batchSize, all.length))}
         >
-          {label} <span className="result-count">(veel {nextBatch}, kokku {remaining})</span>
+          {label}
         </button>
       )}
     </>
