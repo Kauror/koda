@@ -60,13 +60,17 @@ export type PublicDateInput = {
  * the KODA_IMPORT_PLACEHOLDER_DATES env (comma-separated) without a code change.
  */
 const DEFAULT_IMPORT_PLACEHOLDER_DATES = ["2026-06-24"];
+let placeholderDateCache: { raw: string; dates: Set<string> } | null = null;
 
 function importPlaceholderDates(): Set<string> {
-  const fromEnv = (process.env.KODA_IMPORT_PLACEHOLDER_DATES || "")
+  const raw = process.env.KODA_IMPORT_PLACEHOLDER_DATES || "";
+  if (placeholderDateCache?.raw === raw) return placeholderDateCache.dates;
+  const fromEnv = raw
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  return new Set([...DEFAULT_IMPORT_PLACEHOLDER_DATES, ...fromEnv]);
+  placeholderDateCache = { raw, dates: new Set([...DEFAULT_IMPORT_PLACEHOLDER_DATES, ...fromEnv]) };
+  return placeholderDateCache.dates;
 }
 
 const MIN_YEAR = 1990;
@@ -217,5 +221,34 @@ export function computePublicDate(input: PublicDateInput, now: Date = new Date()
 
 /** Convenience: the recency ranking date (verified day/month only), else null. */
 export function rankingDateFor(input: PublicDateInput, now: Date = new Date()): Date | null {
-  return computePublicDate(input, now).rankingDate;
+  const d = input.date;
+  if (!d || Number.isNaN(d.getTime())) return null;
+
+  const curYear = now.getUTCFullYear();
+  const todayMs = startOfUtcDay(now);
+  const iso = isoOf(d);
+  const dYear = d.getUTCFullYear();
+  const month = d.getUTCMonth() + 1;
+  const day = d.getUTCDate();
+  const isFuture = startOfUtcDay(d) > todayMs;
+  const isYearEnd = month === 12 && day === 31;
+  const isImportPlaceholder = importPlaceholderDates().has(iso);
+  const lowClassification = input.classificationConfidence
+    ? LOW_CONFIDENCE_CLASSIFICATION.has(input.classificationConfidence.toLowerCase())
+    : false;
+
+  const precision = (input.displayDatePrecision ?? "").toLowerCase();
+  if (precision === "year") return null;
+  if (precision === "month") {
+    const conf = mapDateConfidence(input.dateConfidence);
+    return !isFuture && dYear >= MIN_YEAR && conf !== "low" && conf !== "unverified" ? d : null;
+  }
+  if (precision === "day") {
+    const conf = mapDateConfidence(input.dateConfidence);
+    return !isFuture && !isImportPlaceholder && conf !== "low" && conf !== "unverified" ? d : null;
+  }
+
+  return !isFuture && !isYearEnd && !isImportPlaceholder && !lowClassification && dYear >= MIN_YEAR && dYear <= curYear
+    ? d
+    : null;
 }
