@@ -22,6 +22,7 @@ import {
   activeInputFileName,
   analyze,
   evidenceLinkTypeForTarget,
+  isPolicyThreadLinkTarget,
   stageAllContent,
   stageExcludedIds,
   stageLinkWorkbook,
@@ -299,6 +300,10 @@ async function importPublicRelatedLinks(
   let skipped = 0;
 
   for (const l of publicRelated) {
+    if (isPolicyThreadLinkTarget(l)) {
+      skipped++;
+      continue;
+    }
     const fromId = idByExternal.get(l.sourceContentId);
     const toId = idByExternal.get(l.targetContentId);
     if (!fromId || !toId || !publicIds.has(l.sourceContentId) || !publicIds.has(l.targetContentId)) {

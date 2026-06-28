@@ -46,6 +46,7 @@ export type DatasetKey = "web" | "opinions" | "toovoidud";
 export const FILES = {
   opinions: [
     "koda_opinions_v1_3_URL_MATCHED.xlsx",
+    "koda_opinions_v1_3.xlsx",
     "koda_opinions_v1_1_SOURCE_REPAIR_PATCH_05_REMAINING_88.xlsx",
     "koda_opinions_v1_1.xlsx",
     "koda_opinions_v1.1.xlsx",
@@ -74,6 +75,7 @@ export const FILES = {
   // the current production source.
   links: [
     "koda_content_links_v1_4_BACKFILL_UPDATED.xlsx",
+    "koda_content_links_v1.4.xlsx",
     "koda_content_links_v1_3.xlsx",
     "koda_content_links_v1_2.xlsx",
     "koda_content_links_v1.2.xlsx",
@@ -128,9 +130,9 @@ export const EXPECTED_ROWS = {
   toovoidudOriginal90: 90,
   toovoidudPhase2Standalone: 18,
   toovoidudSeriesNested: 14,
-  publicRelatedLinks: 166, // koda_content_links_v1_3.xlsx
-  policyThreads: 148,
-  publicPolicyThreads: 140,
+  publicRelatedLinks: 223, // koda_content_links_v1_4_BACKFILL_UPDATED.xlsx
+  policyThreads: 172,
+  publicPolicyThreads: 172,
 } as const;
 
 export function filePath(name: string): string {
@@ -1011,25 +1013,34 @@ export function stagePublicRelatedLink(r: Row): PublicRelatedLink {
     sourceLayer: firstPresent(r, ["source_layer"]),
     targetContentId: firstPresent(r, ["target_content_id"]),
     targetLayer: firstPresent(r, ["target_layer"]),
-    relationRole: orNull(firstPresent(r, ["relationship_role", "relation_type"])),
-    relationLabelEt: orNull(firstPresent(r, ["app_relation_label_ee", "relation_type"])),
-    canonicalPolicyThreadId: orNull(firstPresent(r, ["canonical_policy_thread_id"])),
-    linkConfidence: orNull(firstPresent(r, ["link_confidence", "related_confidence"])),
-    linkBasis: orNull(firstPresent(r, ["link_basis", "related_basis"])),
+    relationRole: orNull(firstPresent(r, ["relationship_role", "relation_role", "relation_type"])),
+    relationLabelEt: orNull(firstPresent(r, ["app_relation_label_ee", "relation_role", "relation_type"])),
+    canonicalPolicyThreadId: orNull(firstPresent(r, ["canonical_policy_thread_id", "policy_thread_key"])),
+    linkConfidence: orNull(firstPresent(r, ["link_confidence", "relation_confidence", "related_confidence"])),
+    linkBasis: orNull(firstPresent(r, ["link_basis", "relation_basis", "related_basis"])),
     sortPriority: toIntOrNull(firstPresent(r, ["sort_priority"])),
   };
 }
 
 export function stagePolicyThread(r: Row): PolicyThread {
+  const explicitEligible = firstPresent(r, ["public_thread_eligible"]);
+  const reviewRequired = parseBoolFlexible(firstPresent(r, ["thread_review_required", "review_required"]));
+  const confidence = firstPresent(r, ["thread_confidence"]).toLowerCase();
+  const memberIds = [
+    ...splitMulti(firstPresent(r, ["thread_member_ids_public_valid", "included_content_ids"])),
+    ...splitMulti(firstPresent(r, ["timeline_content_ids"])),
+  ];
   return {
-    id: firstPresent(r, ["canonical_policy_thread_id", "policy_thread_id"]),
-    title: firstPresent(r, ["thread_title"]),
+    id: firstPresent(r, ["canonical_policy_thread_id", "policy_thread_id", "policy_thread_key"]),
+    title: firstPresent(r, ["thread_title", "policy_thread_title"]),
     summary: orNull(firstPresent(r, ["thread_summary"])),
-    representativeContentId: orNull(firstPresent(r, ["representative_content_id"])),
-    memberIds: splitMulti(firstPresent(r, ["thread_member_ids_public_valid"])),
+    representativeContentId: orNull(firstPresent(r, ["representative_content_id", "canonical_parent_content_id"])),
+    memberIds: [...new Set(memberIds)],
     topicPrimary: orNull(firstPresent(r, ["thread_topic_primary"])),
     topicSecondary: orNull(firstPresent(r, ["thread_topic_secondary"])),
-    publicThreadEligible: parseBoolFlexible(firstPresent(r, ["public_thread_eligible"])) && !parseBoolFlexible(firstPresent(r, ["thread_review_required"])),
+    publicThreadEligible: explicitEligible
+      ? parseBoolFlexible(explicitEligible) && !reviewRequired
+      : !reviewRequired && (!confidence || ACCEPTABLE_LINK_CONFIDENCE.has(confidence)),
   };
 }
 
@@ -1084,6 +1095,10 @@ export function evidenceLinkTypeForTarget(targetLayer: string): string {
     default:
       return "related_news";
   }
+}
+
+export function isPolicyThreadLinkTarget(link: Pick<PublicRelatedLink, "targetContentId" | "targetLayer">): boolean {
+  return link.targetLayer === "policy_thread" || link.targetContentId.startsWith("THREAD:");
 }
 
 // ---------------------------------------------------------------------------
@@ -1440,10 +1455,11 @@ export function analyze(
   const targetsExcluded: { source: string; target: string }[] = [];
   const lowOrRejected: { source: string; target: string; confidence: string }[] = [];
   for (const l of links.publicRelated) {
-    if (!importIds.has(l.sourceContentId) || !importIds.has(l.targetContentId)) {
+    const threadTarget = isPolicyThreadLinkTarget(l);
+    if (!importIds.has(l.sourceContentId) || (!threadTarget && !importIds.has(l.targetContentId))) {
       targetsNotImported.push({ source: l.sourceContentId, target: l.targetContentId });
     }
-    if (excludedSet.has(l.sourceContentId) || excludedSet.has(l.targetContentId)) {
+    if (excludedSet.has(l.sourceContentId) || (!threadTarget && excludedSet.has(l.targetContentId))) {
       targetsExcluded.push({ source: l.sourceContentId, target: l.targetContentId });
     }
     if (l.linkConfidence && !ACCEPTABLE_LINK_CONFIDENCE.has(l.linkConfidence)) {
