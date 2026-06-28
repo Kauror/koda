@@ -129,6 +129,10 @@ function main() {
   // ---- display tags never expose the cross-sector fallback ----
   check("public activity display tags never contain Kõik tegevusalad / valdkondadeülene", () =>
     assert.equal(analysis.crossSectorDisplayTagRows.length, 0));
+  check("organization news rows do not materialize public sector tags", () => {
+    const withSectorTags = staged.web.filter((s) => s.contentRoleFinal === "organization_news" && s.tegevusalad.length > 0);
+    assert.equal(withSectorTags.length, 0);
+  });
 
   // ---- töövõit date regressions ----
   check("töövõit date regressions all safe", () => {

@@ -557,10 +557,11 @@ export function stageWebRow(r: Row): StagedContent {
   // appointment, public_sector_page_allowed=FALSE) get NO sector relationship.
   const filterTags = orNull(firstPresent(r, ["public_activity_filter_tags"]));
   const displayTags = orNull(firstPresent(r, ["public_activity_display_tags"]));
-  const filterTagList = splitTopics(filterTags ?? "");
+  const contentRoleFinal = orNull(firstPresent(r, ["content_role_final", "content_role", "web_content_role"]));
+  const materializeActivityTags = contentRoleFinal === "organization_news" ? [] : makeActivityTags(filterTags ?? "");
+  const filterTagList = contentRoleFinal === "organization_news" ? [] : splitTopics(filterTags ?? "");
   const activityPrimary = filterTagList[0] ?? null;
   const activitySecondary = filterTagList.length > 1 ? filterTagList.slice(1).join("; ") : null;
-  const contentRoleFinal = orNull(firstPresent(r, ["content_role_final", "content_role", "web_content_role"]));
   const bodyText = joinSearchText([summary, sourceEvidence, topicPrimary, topicSecondary, activityPrimary, activitySecondary, lawTagsConfirmed]);
 
   return finalize({
@@ -637,7 +638,7 @@ export function stageWebRow(r: Row): StagedContent {
     valdkonnad: makeTopicTags(topicPrimary, topicSecondary),
     // Search/ranking activity tags from the curated filter tags only (cross-sector
     // kept for matching; empty filter tags ⇒ no sector tags at all).
-    tegevusalad: makeActivityTags(filterTags ?? ""),
+    tegevusalad: materializeActivityTags,
     tapsustused: splitMulti(firstPresent(r, ["situation_tags"])),
     oigusaktid: splitMulti(lawTagsConfirmed ?? ""),
     matchedWebContentId: null,
