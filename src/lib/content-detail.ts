@@ -30,7 +30,7 @@ import { buildLawChips, type LawChip } from "./law-match";
 import { slugify } from "./slug";
 import { computePublicDate } from "./public-date";
 import { qualifiesAsLawTopicRelation } from "./related";
-import { compareTimeline, isNestedDisplay, timelineStageLabel, type WorkWinNestingInput } from "./work-win-nesting";
+import { compareTimelineDesc, isNestedDisplay, timelineStageLabel, type WorkWinNestingInput } from "./work-win-nesting";
 
 const TOPIC_HISTORY_CAP = 4;
 const DUPLICATE_CAP = 4;
@@ -302,7 +302,7 @@ async function getWorkWinNesting(c: Candidate): Promise<WorkWinNestingDetail | n
       include: candidateInclude,
     });
     const cands = rows.filter(isEvidenceEligible).map(toCandidate);
-    cands.sort((a, b) => compareTimeline(toInput(a), toInput(b)));
+    cands.sort((a, b) => compareTimelineDesc(toInput(a), toInput(b)));
     children = cands.map((cc) => toRow(cc, false));
   }
 
@@ -316,7 +316,7 @@ async function getWorkWinNesting(c: Candidate): Promise<WorkWinNestingDetail | n
     });
     const cands = rows.filter(isEvidenceEligible).map(toCandidate);
     if (cands.length > 1) {
-      cands.sort((a, b) => compareTimeline(toInput(a), toInput(b)));
+      cands.sort((a, b) => compareTimelineDesc(toInput(a), toInput(b)));
       const title = cands.map((x) => x.policyThreadTitle).find((t): t is string => !!t) ?? null;
       thread = { key: c.policyThreadKey, title, items: cands.map((cc) => toRow(cc, cc.id === c.id)) };
     }

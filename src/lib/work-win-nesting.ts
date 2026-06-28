@@ -133,7 +133,7 @@ export type WorkWinNestingInput = {
 export type WorkWinThread = {
   key: string;
   title: string | null;
-  /** Member row ids, sorted into timeline order (year asc, then stage). */
+  /** Member row ids, sorted latest-first for display (newest year/stage first). */
   memberIds: string[];
   /** Most recent timeline_year among members, for ranking/sorting the thread. */
   latestYear: number | null;
@@ -167,6 +167,26 @@ export function compareTimeline(a: WorkWinNestingInput, b: WorkWinNestingInput):
   const as = stageRank(a.timelineStage);
   const bs = stageRank(b.timelineStage);
   if (as !== bs) return as - bs;
+  return (a.externalId ?? a.id).localeCompare(b.externalId ?? b.id);
+}
+
+/**
+ * Latest-first display order for nested/timeline rows (the public default):
+ *   1. newest timeline_year first (rows with no year sink to the bottom);
+ *   2. then the later policy-thread stage first;
+ *   3. then a stable id fallback so order never depends on the (unordered) DB
+ *      fetch — this is a deterministic tie-break, not a recency signal.
+ * This is the reverse of `compareTimeline` (which stays chronological for the
+ * importer/validation); the UI renders newest stage at the top, oldest last.
+ */
+export function compareTimelineDesc(a: WorkWinNestingInput, b: WorkWinNestingInput): number {
+  // Unknown year goes last in a newest-first list.
+  const ay = a.timelineYear ?? Number.NEGATIVE_INFINITY;
+  const by = b.timelineYear ?? Number.NEGATIVE_INFINITY;
+  if (ay !== by) return by - ay;
+  const as = stageRank(a.timelineStage);
+  const bs = stageRank(b.timelineStage);
+  if (as !== bs) return bs - as;
   return (a.externalId ?? a.id).localeCompare(b.externalId ?? b.id);
 }
 
@@ -234,19 +254,19 @@ export function resolveWorkWinNesting(rows: WorkWinNestingInput[]): WorkWinNesti
     unresolved.push(r);
   }
 
-  // Sort children into timeline order.
+  // Sort children into latest-first display order (newest stage at the top).
   for (const [parentId, ids] of childrenByParentId) {
     const sorted = ids
       .map((id) => rows.find((x) => x.id === id)!)
-      .sort(compareTimeline)
+      .sort(compareTimelineDesc)
       .map((x) => x.id);
     childrenByParentId.set(parentId, sorted);
   }
 
-  // Build thread groups (sorted members + readable title).
+  // Build thread groups (latest-first members + readable title).
   const threads: WorkWinThread[] = [];
   for (const [key, members] of threadMembers) {
-    const sorted = [...members].sort(compareTimeline);
+    const sorted = [...members].sort(compareTimelineDesc);
     const title = sorted.map((m) => m.policyThreadTitle).find((t) => !!t) ?? null;
     const years = sorted.map((m) => m.timelineYear).filter((y): y is number => y != null);
     threads.push({

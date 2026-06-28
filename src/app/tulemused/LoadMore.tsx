@@ -1,0 +1,47 @@
+"use client";
+
+import { Children, useState, type ReactNode } from "react";
+
+/**
+ * Incremental "Näita rohkem" pagination for a result section.
+ *
+ * Renders its children (already server-rendered result cards) in batches: about
+ * `batchSize` (~10) are shown initially, and each click reveals the next batch,
+ * then the next, until everything is visible. The button disappears when no more
+ * items remain.
+ *
+ * Reset on filter/search change is handled by the caller giving this component a
+ * `key` derived from the active query — a new query remounts it, so the visible
+ * count starts fresh instead of carrying over from the previous result set.
+ */
+export default function LoadMore({
+  children,
+  batchSize = 10,
+  label = "Näita rohkem",
+}: {
+  children: ReactNode;
+  batchSize?: number;
+  label?: string;
+}) {
+  const all = Children.toArray(children);
+  const [visible, setVisible] = useState(() => Math.min(batchSize, all.length));
+
+  const shown = all.slice(0, visible);
+  const remaining = all.length - visible;
+  const nextBatch = Math.min(batchSize, remaining);
+
+  return (
+    <>
+      {shown}
+      {remaining > 0 && (
+        <button
+          type="button"
+          className="btn btn-secondary load-more-btn"
+          onClick={() => setVisible((v) => Math.min(v + batchSize, all.length))}
+        >
+          {label} <span className="result-count">(veel {nextBatch}, kokku {remaining})</span>
+        </button>
+      )}
+    </>
+  );
+}

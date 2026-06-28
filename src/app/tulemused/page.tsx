@@ -13,32 +13,49 @@ import {
 } from "@/lib/search";
 import { isGenericWorkWinUrl } from "@/lib/content-display";
 import TrackedLink from "./TrackedLink";
+import LoadMore from "./LoadMore";
 
 export const dynamic = "force-dynamic";
 
+/** Initial batch size + step for the "Näita rohkem" incremental pagination. */
+const LOAD_MORE_BATCH = 10;
+
+/**
+ * Estonian label + count for the collapsed nested-section toggle. Threads read
+ * as a timeline ("ajajoon"); a normal parent card reads as related stages
+ * ("seotud etapid"). The count is shown so the user knows how much is hidden
+ * before expanding.
+ */
+function nestedToggleLabel(count: number, isThread: boolean): string {
+  if (isThread) {
+    const noun = count === 1 ? "ajajoone kirje" : "ajajoone kirjet";
+    return `Näita ajajoont · ${count} ${noun}`;
+  }
+  const noun = count === 1 ? "seotud etapp" : "seotud etappi";
+  return `Näita seotud etappe · ${count} ${noun}`;
+}
+
 /**
  * Compact nested/timeline section under a parent or policy-thread töövõit card
- * (v1.2). Series/timeline rows render here, never as flat top-level cards. Open
- * by default for thread cards (the timeline is the card's whole content);
- * collapsed under a normal parent card so the default list stays uncluttered.
+ * (v1.2). Series/timeline rows render here, never as flat top-level cards. The
+ * section is ALWAYS collapsed by default (initial load, topic/sector pages,
+ * search results, thread views) so the default list stays compact; the user
+ * explicitly expands a parent to reveal the nested/timeline items, which are
+ * ordered latest-first. Items themselves render smaller than the parent card.
  */
 function NestedWorkWins({
   items,
-  heading,
-  open,
+  isThread,
   fromQuery,
 }: {
   items: NestedWorkWinCard[];
-  heading: string;
-  open: boolean;
+  isThread: boolean;
   fromQuery: string;
 }) {
   if (items.length === 0) return null;
   return (
-    <details className="nested-section" open={open}>
-      <summary>
-        {heading} <span className="result-count">({items.length})</span>
-      </summary>
+    <details className="nested-section">
+      <summary>{nestedToggleLabel(items.length, isThread)}</summary>
       <ol className="nested-timeline">
         {items.map((item) => {
           const href = `/sisu/${encodeURIComponent(item.detailId)}${
@@ -154,40 +171,38 @@ function Card({
           )}
         </p>
       )}
-      {/* v1.2: nested/timeline children fold in here, never as flat cards. */}
+      {/* v1.2: nested/timeline children fold in here, never as flat cards.
+          Always collapsed by default — the user expands to see the timeline. */}
       {card.nested && card.nested.length > 0 && (
-        <NestedWorkWins
-          items={card.nested}
-          heading={card.nestedHeading ?? "Seotud arengud"}
-          open={isThread}
-          fromQuery={fromQuery}
-        />
+        <NestedWorkWins items={card.nested} isThread={isThread} fromQuery={fromQuery} />
       )}
     </article>
   );
 }
 
+/**
+ * A result group with incremental "Näita rohkem" pagination: about
+ * LOAD_MORE_BATCH (~10) cards are shown first, each click reveals the next ~10
+ * until all are visible. `resetKey` is the active query signature — it keys the
+ * LoadMore client component so changing the search/filters remounts it and the
+ * visible count resets instead of carrying over from the previous result set.
+ */
 function Section({
   title,
   sub,
   cards,
   sessionId,
   fromQuery,
-  compactAchievements = false,
-  initialVisibleCount,
+  resetKey,
 }: {
   title: string;
   sub?: string;
   cards: ResultCard[];
   sessionId: string | null;
   fromQuery: string;
-  compactAchievements?: boolean;
-  initialVisibleCount?: number;
+  resetKey: string;
 }) {
   if (cards.length === 0) return null;
-  const visibleLimit = compactAchievements ? 2 : initialVisibleCount ?? cards.length;
-  const visibleCards = cards.slice(0, visibleLimit);
-  const hiddenCards = cards.slice(visibleLimit);
 
   return (
     <section className="results-section">
@@ -195,29 +210,11 @@ function Section({
         {title} <span className="result-count">({cards.length})</span>
       </h2>
       {sub && <p className="section-sub">{sub}</p>}
-      {visibleCards.map((card) => (
-        <Card
-          key={card.id}
-          card={card}
-          sessionId={sessionId}
-          fromQuery={fromQuery}
-          compact={compactAchievements}
-        />
-      ))}
-      {hiddenCards.length > 0 && (
-        <details className="results-more">
-          <summary>Näita rohkem ({hiddenCards.length})</summary>
-          {hiddenCards.map((card) => (
-            <Card
-              key={card.id}
-              card={card}
-              sessionId={sessionId}
-              fromQuery={fromQuery}
-              compact={compactAchievements}
-            />
-          ))}
-        </details>
-      )}
+      <LoadMore key={`${title}:${resetKey}`} batchSize={LOAD_MORE_BATCH}>
+        {cards.map((card) => (
+          <Card key={card.id} card={card} sessionId={sessionId} fromQuery={fromQuery} />
+        ))}
+      </LoadMore>
     </section>
   );
 }
@@ -403,28 +400,28 @@ export default async function ResultsPage({
           cards={results.achievements}
           sessionId={sessionId}
           fromQuery={fromQuery}
-          compactAchievements
+          resetKey={editQuery}
         />
         <Section
           title="Koja seisukohad"
           cards={results.positions}
           sessionId={sessionId}
           fromQuery={fromQuery}
-          initialVisibleCount={2}
+          resetKey={editQuery}
         />
         <Section
           title="Koja uudised"
           cards={results.news}
           sessionId={sessionId}
           fromQuery={fromQuery}
-          initialVisibleCount={2}
+          resetKey={editQuery}
         />
         <Section
           title="Veel samal teemal"
           cards={results.context}
           sessionId={sessionId}
           fromQuery={fromQuery}
-          initialVisibleCount={2}
+          resetKey={editQuery}
         />
 
         {hasResults && (

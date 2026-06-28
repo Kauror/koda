@@ -51,17 +51,29 @@ Run: `npm run import:validate` (no DB) → `npm run import:merge-ready` (replace
 - For the v1.5 data this yields **108 standalone cards + 7 policy-thread cards**
   (13 nested rows) **+ 1 child** folded under `TOOVOIT-0001`.
 
-Timeline order is `timeline_year` then a chronological `timeline_stage` rank.
+Timeline display order is **latest-first** (`compareTimelineDesc`): newest
+`timeline_year` first, then the later `timeline_stage` first, then a stable id
+fallback; rows with no year sink to the bottom. (`compareTimeline` keeps the
+chronological/ascending order for the importer's validation.)
 
 ## Display (`src/lib/search.ts`, `tulemused`, `sisu/[id]`)
 
 - The töövõit result group is built from top-level **units** (standalone/parent
   cards + synthetic policy-thread cards). The 14 series/nested rows are **never**
   emitted as flat top-level cards.
-- A parent card exposes its children in a compact, collapsible **“Seotud
-  arengud”** section; a thread card shows its **“Sama teema ajajoon”** timeline
-  (open by default). Each nested item shows title, year, stage label, a short
-  summary and an `Allikas →` link, and links to its own `/sisu/[id]` page.
+- A parent/thread card exposes its children in a compact, collapsible nested
+  section that is **always collapsed by default** (initial load, topic/sector
+  pages, search results, thread views) — the user expands it explicitly. The
+  toggle is an Estonian control with a count: **“Näita seotud etappe · N seotud
+  etappi”** for a parent card, **“Näita ajajoont · N ajajoone kirjet”** for a
+  thread card. Each nested item shows title, year, stage label, a short summary
+  and an `Allikas →` link, renders smaller than the parent, and links to its own
+  `/sisu/[id]` page.
+- **Pagination.** Each result group (`Töövõidud`, `Koja seisukohad`,
+  `Koja uudised`, `Veel samal teemal`) renders through the `LoadMore` client
+  component: ~10 cards initially, then **“Näita rohkem”** reveals the next ~10
+  per click until all are shown. `LoadMore` is keyed by the active query, so
+  changing the search/filter resets the visible count.
 - **Search still finds nested rows.** A query that matches a nested row surfaces
   the parent/thread card that contains it, with the matched step highlighted —
   not a duplicate flat card. Nested rows remain directly reachable at their own

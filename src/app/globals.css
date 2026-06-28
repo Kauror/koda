@@ -910,6 +910,19 @@ a.tag:hover {
   margin-bottom: 10px;
 }
 
+/* Incremental "Näita rohkem" pagination button (batches of ~10). */
+.load-more-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.load-more-btn .result-count {
+  font-weight: 500;
+  opacity: 0.75;
+}
+
 /* Services section */
 
 .services-grid {

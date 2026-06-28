@@ -47,7 +47,10 @@ import {
 export { parseSearchParams };
 export type { SearchQuery };
 
-const GROUP_CAPS: Record<ResultKind, number> = { toovoit: 12, arvamus: 15, uudis: 12, kontekst: 10 };
+// Display caps per group. Raised in v1.2 so the incremental "Näita rohkem"
+// pagination (batches of ~10) has real content to reveal — the user pages
+// through matches in batches instead of seeing everything (or only ~10) at once.
+const GROUP_CAPS: Record<ResultKind, number> = { toovoit: 24, arvamus: 40, uudis: 24, kontekst: 20 };
 
 /** Small bump so confirmed law content beats incidental text hits on tie dates. */
 const LAW_MATCH_BOOST = 30;
@@ -458,8 +461,13 @@ function toNestedWorkWinCard(c: Candidate, matched: boolean): NestedWorkWinCard 
 
 /** A top-level töövõit display unit aggregated from matched rows. */
 type WorkWinUnit =
-  | { kind: "card"; parentId: string; score: number; matchedChildIds: Set<string> }
-  | { kind: "thread"; threadKey: string; score: number; matchedChildIds: Set<string> };
+  | { kind: "card"; parentId: string; score: number; latestDateMs: number; matchedChildIds: Set<string> }
+  | { kind: "thread"; threadKey: string; score: number; latestDateMs: number; matchedChildIds: Set<string> };
+
+/** Stable sort key for a unit (parent id / thread key), for deterministic ties. */
+function unitKey(u: WorkWinUnit): string {
+  return u.kind === "card" ? `card:${u.parentId}` : `thread:${u.threadKey}`;
+}
 
 /**
  * Aggregate matched töövõit rows into top-level units so series/timeline rows
@@ -469,37 +477,51 @@ type WorkWinUnit =
  *    unit (the parent surfaces even if it did not match itself);
  *  - a matched nested row in a policy thread → folds into that thread unit.
  * Unit score = best matching member score, so a unit ranks by its strongest hit.
+ * Unit date = newest verified date among its matched members, used as the
+ * recency tie-break so equally-relevant töövõidud show the latest one first.
  */
 function aggregateWorkWinUnits(matched: RankedCandidate[], nesting: WorkWinNesting): WorkWinUnit[] {
   const units = new Map<string, WorkWinUnit>();
-  const bump = (key: string, make: () => WorkWinUnit, score: number, matchedChild?: string) => {
+  const bump = (
+    key: string,
+    make: () => WorkWinUnit,
+    score: number,
+    dateMs: number,
+    matchedChild?: string
+  ) => {
     let u = units.get(key);
     if (!u) {
       u = make();
       units.set(key, u);
     }
     u.score = Math.max(u.score, score);
+    u.latestDateMs = Math.max(u.latestDateMs, dateMs);
     if (matchedChild) u.matchedChildIds.add(matchedChild);
   };
 
   for (const { c, total } of matched) {
+    const dateMs = verifiedDateMs(c);
     if (nesting.topLevelIds.has(c.id)) {
-      bump(`card:${c.id}`, () => ({ kind: "card", parentId: c.id, score: total, matchedChildIds: new Set() }), total);
+      bump(`card:${c.id}`, () => ({ kind: "card", parentId: c.id, score: total, latestDateMs: dateMs, matchedChildIds: new Set() }), total, dateMs);
       continue;
     }
     const parentId = nesting.parentIdByMemberId.get(c.id);
     if (parentId) {
-      bump(`card:${parentId}`, () => ({ kind: "card", parentId, score: total, matchedChildIds: new Set() }), total, c.id);
+      bump(`card:${parentId}`, () => ({ kind: "card", parentId, score: total, latestDateMs: dateMs, matchedChildIds: new Set() }), total, dateMs, c.id);
       continue;
     }
     const threadKey = nesting.threadKeyByMemberId.get(c.id);
     if (threadKey) {
-      bump(`thread:${threadKey}`, () => ({ kind: "thread", threadKey, score: total, matchedChildIds: new Set() }), total, c.id);
+      bump(`thread:${threadKey}`, () => ({ kind: "thread", threadKey, score: total, latestDateMs: dateMs, matchedChildIds: new Set() }), total, dateMs, c.id);
     }
     // A nested row with no parent and no thread was rejected at import; skip here.
   }
 
-  return [...units.values()].sort((a, b) => b.score - a.score);
+  // Relevance first, recency second: strongest score wins; equally-relevant
+  // töövõidud show the newest one first; a stable key keeps ties deterministic.
+  return [...units.values()].sort(
+    (a, b) => b.score - a.score || b.latestDateMs - a.latestDateMs || unitKey(a).localeCompare(unitKey(b))
+  );
 }
 
 /** Build a synthetic policy-thread timeline card from its member candidates. */
@@ -509,7 +531,9 @@ function buildThreadResultCard(
   score: number,
   matchedChildIds: Set<string>
 ): ResultCard {
-  const latest = members[members.length - 1];
+  // Members arrive latest-first (compareTimelineDesc), so the newest stage is the
+  // representative the thread card summarises and links to.
+  const latest = members[0];
   return {
     id: `thread:${thread.key}`,
     detailId: latest.externalId ?? latest.id,

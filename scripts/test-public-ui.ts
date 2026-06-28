@@ -162,14 +162,33 @@ check("teema ajalugu uses contextual CTA labels, not generic allikas wording", (
   assert.ok(!source.includes("Vaata allikat"));
 });
 
-check("results page uses compact expandable sections", () => {
+check("results page uses incremental batch-of-10 load-more pagination", () => {
   const source = readFileSync("src/app/tulemused/page.tsx", "utf8");
-  assert.ok(source.includes("const visibleLimit = compactAchievements ? 2 : initialVisibleCount ?? cards.length"));
-  assert.ok(source.includes("Näita rohkem"));
-  assert.ok(source.includes("hiddenCards.map"));
-  // Positions/news/context show 2 before "Näita rohkem" to keep the page short.
-  assert.ok(source.includes("initialVisibleCount={2}"));
-  assert.ok(!source.includes("initialVisibleCount={5}"));
+  // Sections render through the LoadMore client component (batches of ~10),
+  // keyed by the active query so the visible count resets on filter/search change.
+  assert.ok(source.includes("import LoadMore"));
+  assert.ok(source.includes("<LoadMore"));
+  assert.ok(source.includes("batchSize={LOAD_MORE_BATCH}"));
+  assert.ok(source.includes("const LOAD_MORE_BATCH = 10"));
+  assert.ok(source.includes("resetKey={editQuery}"));
+  // The old "show 2, dump the rest in a <details>" pattern is gone.
+  assert.ok(!source.includes("hiddenCards.map"));
+  assert.ok(!source.includes("initialVisibleCount"));
+
+  const loadMore = readFileSync("src/app/tulemused/LoadMore.tsx", "utf8");
+  assert.ok(loadMore.includes("Näita rohkem"));
+  assert.ok(loadMore.includes("\"use client\""));
+});
+
+check("nested töövõidud sections are collapsed by default (no open attribute)", () => {
+  const source = readFileSync("src/app/tulemused/page.tsx", "utf8");
+  // The nested <details> must NOT be force-opened (open by default would expand
+  // every timeline on load). Threads no longer pass open={isThread}.
+  assert.ok(source.includes('<details className="nested-section">'));
+  assert.ok(!source.includes("open={isThread}"));
+  // Estonian expand controls + counts.
+  assert.ok(source.includes("Näita seotud etappe"));
+  assert.ok(source.includes("Näita ajajoont"));
 });
 
 check("results page separates news/progress from opinions", () => {

@@ -9,6 +9,7 @@
 import assert from "node:assert";
 import {
   compareTimeline,
+  compareTimelineDesc,
   isNestedDisplay,
   isStandaloneDisplay,
   isValidDisplayType,
@@ -81,6 +82,16 @@ check("compareTimeline orders by year then chronological stage", () => {
   assert.deepEqual(sorted, ["a", "b", "c"]);
 });
 
+check("compareTimelineDesc orders latest-first (newest year/stage on top, no-year last)", () => {
+  const a = row({ id: "a", timelineYear: 2016, timelineStage: "riigikogu_adoption" });
+  const b = row({ id: "b", timelineYear: 2022, timelineStage: "proposal" });
+  const c = row({ id: "c", timelineYear: 2022, timelineStage: "final_entry_into_force" });
+  const d = row({ id: "d", timelineYear: null }); // unknown year sinks to the bottom
+  const sorted = [a, d, b, c].sort(compareTimelineDesc).map((r) => r.id);
+  // 2022 final_entry_into_force, 2022 proposal, 2016, then the no-year row.
+  assert.deepEqual(sorted, ["c", "b", "a", "d"]);
+});
+
 check("standalone rows are all top-level; no nested, no threads", () => {
   const rows = [
     row({ id: "T1", displayType: "standalone_card" }),
@@ -129,7 +140,7 @@ check("timeline items with no top-level parent group into a policy thread, sorte
   assert.equal(t.key, key);
   assert.equal(t.title, title);
   assert.equal(t.latestYear, 2026);
-  assert.deepEqual(t.memberIds, ["S2", "S1", "S3"]); // 2016, 2022, 2026
+  assert.deepEqual(t.memberIds, ["S3", "S1", "S2"]); // latest-first: 2026, 2022, 2016
   for (const id of ["S1", "S2", "S3"]) assert.equal(n.threadKeyByMemberId.get(id), key);
 });
 
@@ -142,7 +153,7 @@ check("nested_under_new_series_card with a non-imported parent falls back to its
   const n = resolveWorkWinNesting(rows);
   // P2CAND-0037 is not an imported top-level row, so S8 joins the thread, not a card.
   assert.equal(n.threads.length, 1);
-  assert.deepEqual(n.threads[0].memberIds, ["S4", "S8"]);
+  assert.deepEqual(n.threads[0].memberIds, ["S8", "S4"]); // latest-first: 2026, 2017
   assert.equal(n.unresolved.length, 0);
 });
 
