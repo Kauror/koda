@@ -11,12 +11,18 @@ import { normalizeTitle } from "./hash";
 import { publicSummary, publicTitle } from "./content-display";
 import { canonicalTopicId } from "./topics";
 import { rankingDateFor } from "./public-date";
-import { getSectorRelevance as getSectorRelevanceForScore, hasGenericSectorTag, sectorMatchesSlug } from "./sector-relevance";
+import {
+  genericSectorFallbackRequiresSignal,
+  getSectorRelevance as getSectorRelevanceForScore,
+  hasGenericSectorTag,
+  sectorMatchesSlug,
+} from "./sector-relevance";
 
 export {
   getRelatedTopicsForSector,
   getSectorRelevance,
   getSectorRelevanceExplanation,
+  genericSectorFallbackRequiresSignal,
   hasExactSectorMatch,
   hasGenericSectorTag,
   hasOnlyGenericOrNoSector,
@@ -307,10 +313,13 @@ export function scoreCandidate(c: Candidate, q: SearchQuery): ScoreBreakdown {
     sectorActive && c.activityPrimarySlug != null && sectorMatchesSlug(c.activityPrimarySlug, q.tegevusala);
   // Tier 3: a cross-sector ("Kõik tegevusalad / valdkondadeülene") tag applies to
   // every sector, so it's included under any specific filter (ranked lowest).
-  const crossSectorMatch = sectorActive && tegevusalaMatches === 0 && hasGenericSectorTag(c);
-  // Conservative keyword/topic fallback only for rows with no sector + no cross-sector tag.
+  const genericSectorMatch = sectorActive && tegevusalaMatches === 0 && hasGenericSectorTag(c);
+  const genericNeedsRelevance = genericSectorMatch && genericSectorFallbackRequiresSignal(q.tegevusala);
+  const crossSectorMatch = genericSectorMatch && !genericNeedsRelevance;
+  // Conservative keyword/topic fallback only for rows with no sector, plus
+  // signal-gated generic rows in sectors that need a narrower cross-sector gate.
   const sectorRelevance =
-    tegevusalaMatches === 0 && !crossSectorMatch
+    tegevusalaMatches === 0 && (!genericSectorMatch || genericNeedsRelevance)
       ? getSectorRelevanceForScore(c, q.tegevusala)
       : { matches: 0, topicMatches: 0, keywordMatches: 0 };
 

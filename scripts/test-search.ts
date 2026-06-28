@@ -469,6 +469,81 @@ check("Koda news can appear in Info/IT sector results through related topic fall
   assert.equal(assignKind(news), "uudis");
   assert.equal(passesActiveFilters(q, scoreCandidate(news, q), news), true);
 });
+check("Haridus sector has deterministic education/skills fallback mapping", () => {
+  const rule = getRelatedTopicsForSector("haridus-ja-koolitus");
+  assert.ok(rule);
+  assert.ok(rule.topicNeedles.some((needle) => needle.includes("haridus")));
+  assert.ok(rule.singleKeywordNeedles?.some((needle) => needle.includes("tasemekoolitus")));
+  assert.equal(getRelatedTopicsForSector("haridus-koolitus"), rule);
+  assert.equal(getRelatedTopicsForSector("haridus-ja-oskused"), rule);
+});
+check("Haridus fallback includes education-topic work wins below exact sector matches", () => {
+  const q: SearchQuery = { ...EMPTY, tegevusala: ["haridus-ja-koolitus"] };
+  const exact = cand({
+    id: "TOOVOIT-0031",
+    externalId: "TOOVOIT-0031",
+    sourceDataset: "toovoidud",
+    sourceLayer: "koda_achievement",
+    sourceTypeDetail: "toovoit",
+    title: "Aitasime lahendada haridusvaldkonna tööjõu ja oskuste probleeme",
+    tegevusalad: [{ slug: "haridus-ja-koolitus", name: "Haridus ja koolitus" }],
+    activityPrimarySlug: "haridus-ja-koolitus",
+  });
+  const levelStudy = cand({
+    id: "TOOVOIT-0023",
+    externalId: "TOOVOIT-0023",
+    sourceDataset: "toovoidud",
+    sourceLayer: "koda_achievement",
+    sourceTypeDetail: "toovoit",
+    title: "Aitasime juhatuse liikme tööga seotud tasemekoolituse kulud vabastada erisoodustusmaksust.",
+    tegevusalad: [],
+    valdkonnad: [{ slug: "haridus-oskused-ja-jarelkasv", name: "Haridus, oskused ja järelkasv" }],
+  });
+  const foreignStudents = cand({
+    id: "TOOVOIT-0057",
+    externalId: "TOOVOIT-0057",
+    sourceDataset: "toovoidud",
+    sourceLayer: "koda_achievement",
+    sourceTypeDetail: "toovoit",
+    title: "Riik loobus koja survel välisüliõpilaste tööaja piiramisest.",
+    tegevusalad: [{ slug: "koik-tegevusalad-valdkondadeulene", name: "Kõik tegevusalad / valdkondadeülene" }],
+    valdkonnad: [{ slug: "haridus-oskused-ja-jarelkasv", name: "Haridus, oskused ja järelkasv" }],
+  });
+
+  for (const row of [levelStudy, foreignStudents]) {
+    const explanation = getSectorRelevanceExplanation(row, "haridus-ja-koolitus");
+    assert.equal(explanation.exactSectorMatch, false, row.id);
+    assert.equal(explanation.fallbackAllowed, true, row.id);
+    assert.equal(passesActiveFilters(q, scoreCandidate(row, q), row), true, row.id);
+  }
+  assert.ok(scoreCandidate(exact, q).total > scoreCandidate(levelStudy, q).total);
+  assert.ok(scoreCandidate(exact, q).total > scoreCandidate(foreignStudents, q).total);
+});
+check("Haridus fallback excludes weak generic training mentions", () => {
+  const q: SearchQuery = { ...EMPTY, tegevusala: ["haridus-ja-koolitus"] };
+  const weak = cand({
+    id: "weak-training",
+    title: "Tööandjate üldine koolitus maksude ja bürokraatia teemal",
+    tegevusalad: [{ slug: "koik-tegevusalad-valdkondadeulene", name: "Kõik tegevusalad / valdkondadeülene" }],
+  });
+  const explanation = getSectorRelevanceExplanation(weak, "haridus-ja-koolitus");
+  assert.equal(explanation.fallbackAllowed, false);
+  assert.equal(explanation.fallbackBlockedReason, "no-strong-sector-signal");
+  assert.equal(passesActiveFilters(q, scoreCandidate(weak, q), weak), false);
+});
+check("Haridus fallback ignores explicit non-Haridus sector rows", () => {
+  const q: SearchQuery = { ...EMPTY, tegevusala: ["haridus-ja-koolitus"] };
+  const trade = cand({
+    id: "trade-training",
+    title: "Tasemekoolitus kaubandusettevõtte juhtidele",
+    tegevusalad: [{ slug: "kaubandus", name: "Kaubandus" }],
+    valdkonnad: [{ slug: "haridus-oskused-ja-jarelkasv", name: "Haridus, oskused ja järelkasv" }],
+  });
+  const explanation = getSectorRelevanceExplanation(trade, "haridus-ja-koolitus");
+  assert.equal(explanation.hasSpecificNonMatchingSector, true);
+  assert.equal(explanation.fallbackAllowed, false);
+  assert.equal(passesActiveFilters(q, scoreCandidate(trade, q), trade), false);
+});
 check("agriculture: no-sector rows with broad terms (no anchor) are still excluded", () => {
   const q: SearchQuery = { ...EMPTY, tegevusala: ["pollumajandus-metsandus-ja-kalandus"] };
   // No sector tag → keyword fallback applies, and broad non-anchor terms are excluded.

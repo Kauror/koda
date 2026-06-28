@@ -155,9 +155,18 @@ The first mapped sectors are:
   Broad terms such as environment, permit, planning, land, food, packaging and
   waste are not enough on their own; fallback requires an agriculture, forestry
   or fishing anchor.
+- `haridus-ja-koolitus` (aliases `haridus-koolitus`,
+  `haridus-ja-oskused`): education, skills, talent pipeline, level-study,
+  continuing training, vocational/higher education, apprenticeships, interns,
+  and foreign-student work-access rows. Generic all-sector rows under this
+  sector are signal-gated: they need an imported education/skills topic signal,
+  at least two strong education keywords, or a specific keyword such as
+  `tasemekoolitus`, `täienduskoolitus`, `välisüliõpilane` /
+  `välisüliõpilas`, or `kutseharidus`. Casual references to training are not
+  enough, and rows with an explicit different sector tag remain excluded.
 
-Extend the mapping in `getRelatedTopicsForSector(tegevusalaSlug)` in
-`src/lib/search-core.ts` when another sector needs curated horizontal topics.
+Extend the mapping behind `getRelatedTopicsForSector(tegevusalaSlug)` in
+`src/lib/sector-relevance.ts` when another sector needs curated horizontal topics.
 Add new mappings conservatively: start exact-only, list safe sector-specific
 terms, add explicit fallback exclusions for neighbouring domains, and verify
 with `npm run data:sector-audit -- --tegevusala=<slug> --explain` before

@@ -28,6 +28,59 @@ export type SectorRelevanceRule = {
 };
 
 const SECTOR_RELEVANCE: Record<string, SectorRelevanceRule> = {
+  "haridus-ja-koolitus": {
+    aliases: ["haridus-koolitus", "haridus-ja-oskused"],
+    topicNeedles: [
+      "haridus",
+      "oskused",
+      "j\u00e4relkasv",
+      "jarelkasv",
+      "koolitus",
+      "kutseharidus",
+      "k\u00f5rgharidus",
+      "korgharidus",
+      "\u00f5pe",
+      "ope",
+      "\u00f5pilane",
+      "opilane",
+      "\u00fcli\u00f5pilane",
+      "uliopilane",
+    ],
+    keywordNeedles: [
+      "tasemekoolitus",
+      "t\u00e4ienduskoolitus",
+      "taienduskoolitus",
+      "koolituskulu",
+      "koolituskulud",
+      "v\u00e4lis\u00fcli\u00f5pilane",
+      "valisuliopilane",
+      "v\u00e4lis\u00fcli\u00f5pilas",
+      "valisuliopilas",
+      "\u00fcli\u00f5pilane",
+      "uliopilane",
+      "\u00fcli\u00f5pilas",
+      "uliopilas",
+      "kutseharidus",
+      "praktika",
+      "praktikant",
+      "\u00f5pipoisi\u00f5pe",
+      "opipoisiope",
+      "oskused",
+      "j\u00e4relkasv",
+      "jarelkasv",
+    ],
+    singleKeywordNeedles: [
+      "tasemekoolitus",
+      "t\u00e4ienduskoolitus",
+      "taienduskoolitus",
+      "v\u00e4lis\u00fcli\u00f5pilane",
+      "valisuliopilane",
+      "v\u00e4lis\u00fcli\u00f5pilas",
+      "valisuliopilas",
+      "kutseharidus",
+    ],
+    keywordMatchThreshold: 2,
+  },
   "info-side-ja-it": {
     aliases: ["info-ja-side-it"],
     topicNeedles: [
@@ -206,6 +259,10 @@ function sectorRuleKey(tegevusalaSlug: string): string | null {
     return "pollumajandus-metsandus-ja-kalandus";
   }
   return null;
+}
+
+export function genericSectorFallbackRequiresSignal(selectedSectorSlugs: string[]): boolean {
+  return selectedSectorSlugs.some((slug) => sectorRuleKey(slug) === "haridus-ja-koolitus");
 }
 
 function includesNeedle(haystack: string, needle: string): boolean {
