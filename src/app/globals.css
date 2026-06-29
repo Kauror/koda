@@ -444,6 +444,121 @@ textarea {
   font-weight: 700;
 }
 
+.homepage-workwins-action {
+  margin-top: 18px;
+}
+
+.workwins-browser {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(31, 31, 31, 0.45);
+}
+
+.modal-panel {
+  width: min(760px, 100%);
+  max-height: min(760px, calc(100vh - 48px));
+  overflow: auto;
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-raised);
+  padding: 22px;
+}
+
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.modal-header h2 {
+  margin: 0 0 4px;
+  font-size: 1.25rem;
+}
+
+.modal-header p {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
+
+.modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: #fff;
+  color: var(--color-text-strong);
+  font: inherit;
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.modal-close:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary-dark);
+}
+
+.workwins-list {
+  list-style: none;
+  padding: 0;
+  margin: 14px 0 0;
+}
+
+.workwins-list-item {
+  border-bottom: 1px solid var(--color-border);
+  padding: 14px 0;
+}
+
+.workwins-list-item:last-child {
+  border-bottom: 0;
+}
+
+.workwins-list-main {
+  display: grid;
+  gap: 5px;
+}
+
+.workwins-list-main h3 {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+.workwins-list-main h3 a {
+  color: var(--color-text-strong);
+  text-decoration: none;
+}
+
+.workwins-list-main h3 a:hover {
+  color: var(--color-primary-dark);
+  text-decoration: underline;
+}
+
+.workwins-list-main p {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
+
 /* ---------- Homepage: value strip ---------- */
 
 .stat-strip {
@@ -1281,11 +1396,6 @@ table.admin-table th {
 .search-actions {
   order: 6;
   margin-top: 18px;
-}
-
-.disclosure {
-  order: 2;
-  margin-bottom: 20px;
 }
 
 /* Selected-filter chips (removable). */

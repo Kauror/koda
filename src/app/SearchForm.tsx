@@ -50,7 +50,6 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
   );
   const [valdkond, setValdkond] = useState<string[]>(listParam("valdkond"));
   const [showSectorError, setShowSectorError] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(listParam("valdkond").length > 0);
 
   const toggle = (list: string[], set: (v: string[]) => void) => (slug: string) =>
     set(list.includes(slug) ? list.filter((s) => s !== slug) : [...list, slug]);
@@ -74,13 +73,11 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
   function submit(e: React.FormEvent) {
     e.preventDefault();
     // Tegevusala is no longer mandatory: a search needs at least one filter, but
-    // the user may search by Teema / valdkond (or recipient) alone. Only block a
-    // completely empty search, and reveal the advanced section so the topic
-    // filter is visible when prompting.
+    // the user may search by Teema / valdkond alone. Only block a completely
+    // empty search.
     const hasAnyFilter = tegevusala.length > 0 || valdkond.length > 0;
     if (!hasAnyFilter) {
       setShowSectorError(true);
-      setShowAdvanced(true);
       return;
     }
     const p = new URLSearchParams();
@@ -95,7 +92,7 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
         <fieldset className="search-sector" aria-describedby="tegevusala-hint tegevusala-error">
           <legend>Tegevusala</legend>
           <p className="field-hint" id="tegevusala-hint">
-            Vali üks või mitu tegevusala – või otsi hoopis teema järgi „Täpsemad valikud" alt.
+            Vali üks või mitu tegevusala – või otsi hoopis teema järgi.
           </p>
           <ChipGroup
             options={tegevusalaOptions}
@@ -125,33 +122,19 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
         </div>
       )}
 
-      <button
-        type="button"
-        className="btn btn-secondary btn-small disclosure"
-        onClick={() => setShowAdvanced((v) => !v)}
-        aria-expanded={showAdvanced}
-      >
-        {showAdvanced ? "Peida täpsemad valikud" : "Täpsemad valikud (teema)"}
-      </button>
-
-      {showAdvanced && (
-        <>
-          {options.valdkonnad.length > 0 && (
-            <fieldset>
-              <legend>Teema / valdkond</legend>
-              <p className="field-hint">Vali üks või mitu teemat (valikuline).</p>
-              <ChipGroup
-                options={options.valdkonnad}
-                selected={valdkond}
-                onToggle={(slug) => {
-                  setShowSectorError(false);
-                  toggle(valdkond, setValdkond)(slug);
-                }}
-              />
-            </fieldset>
-          )}
-
-        </>
+      {options.valdkonnad.length > 0 && (
+        <fieldset>
+          <legend>Teema / valdkond</legend>
+          <p className="field-hint">Vali üks või mitu teemat (valikuline).</p>
+          <ChipGroup
+            options={options.valdkonnad}
+            selected={valdkond}
+            onToggle={(slug) => {
+              setShowSectorError(false);
+              toggle(valdkond, setValdkond)(slug);
+            }}
+          />
+        </fieldset>
       )}
 
       <div className="search-actions">

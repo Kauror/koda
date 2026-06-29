@@ -259,6 +259,27 @@ check("homepage keeps filter groups when database options are unavailable", () =
   assert.ok(!source.includes("using empty filter list"));
 });
 
+check("homepage removes separate topic browser and keeps topic picker visible", () => {
+  const page = readFileSync("src/app/page.tsx", "utf8");
+  const form = readFileSync("src/app/SearchForm.tsx", "utf8");
+  assert.ok(!page.includes("homepage.topics.title"));
+  assert.ok(!page.includes("homepage.topics.description"));
+  assert.ok(form.includes("Teema / valdkond"));
+  assert.ok(!form.includes("showAdvanced"));
+  assert.ok(!form.includes("disclosure"));
+});
+
+check("homepage work-win browser opens modal and paginates by seven", () => {
+  const page = readFileSync("src/app/page.tsx", "utf8");
+  const modal = readFileSync("src/app/WorkWinsModal.tsx", "utf8");
+  assert.ok(page.includes("getHomepageWorkWins"));
+  assert.ok(page.includes("WorkWinsModal"));
+  assert.ok(page.includes('displayType ?? "standalone_card"'));
+  assert.ok(modal.includes("Vaata kõiki töövõite"));
+  assert.ok(modal.includes("const BATCH_SIZE = 7"));
+  assert.ok(modal.includes('role="dialog"'));
+});
+
 check("detail page hides front-facing outcome status metadata", () => {
   const source = readFileSync("src/app/sisu/[id]/page.tsx", "utf8");
   assert.ok(source.includes("Veel samal teemal"));
