@@ -73,7 +73,7 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
   function submit(e: React.FormEvent) {
     e.preventDefault();
     // Tegevusala is no longer mandatory: a search needs at least one filter, but
-    // the user may search by Teema / valdkond alone. Only block a completely
+    // the user may search by Teema alone. Only block a completely
     // empty search.
     const hasAnyFilter = tegevusala.length > 0 || valdkond.length > 0;
     if (!hasAnyFilter) {
@@ -92,7 +92,7 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
         <fieldset className="search-sector" aria-describedby="tegevusala-hint tegevusala-error">
           <legend>Tegevusala</legend>
           <p className="field-hint" id="tegevusala-hint">
-            Vali üks või mitu tegevusala – või otsi hoopis teema järgi.
+            Vali üks või mitu tegevusala
           </p>
           <ChipGroup
             options={tegevusalaOptions}
@@ -124,8 +124,8 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
 
       {options.valdkonnad.length > 0 && (
         <fieldset>
-          <legend>Teema / valdkond</legend>
-          <p className="field-hint">Vali üks või mitu teemat (valikuline).</p>
+          <legend>Teema</legend>
+          <p className="field-hint">Vali üks või mitu teemat</p>
           <ChipGroup
             options={options.valdkonnad}
             selected={valdkond}

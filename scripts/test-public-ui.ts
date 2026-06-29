@@ -201,12 +201,22 @@ check("results page separates news/progress from opinions", () => {
   assert.ok(source.includes("Koja seisukohad"));
   assert.ok(source.includes("Koja uudised"));
   assert.ok(source.includes("Veel samal teemal"));
+  assert.ok(source.includes('title="Töövõidud"'));
+  assert.ok(!source.includes("Konkreetsed tulemused ja võidud, mille koda on ettevõtjate jaoks saavutanud."));
   assert.ok(source.includes("results.news"));
   assert.ok(source.includes("valdkondadeüleseid tulemusi"));
   assert.ok(!source.includes("Vaata allikat"));
   assert.ok(!source.includes("Koja avalikud seisukohad, ettepanekud ja hoiatused."));
   assert.ok(!source.includes("Koda.ee uudised, praktilised muutused ja teema edenemise vahekokkuvõtted."));
   assert.ok(!source.includes("Aastaaruannete kontekst ja koja pikem töö samadel teemadel."));
+});
+
+check("results page intro matches the homepage wording", () => {
+  const source = readFileSync("src/app/tulemused/page.tsx", "utf8");
+  assert.ok(source.includes("Siit saad mugavalt otsida Sind huvitavaid Eesti Kaubandus-Tööstuskoja töövõite"));
+  assert.ok(source.includes("seisukohti ja teemasid millega koda on läbi aastate tegelenud."));
+  assert.ok(!source.includes("teemade teemasid"));
+  assert.ok(!source.includes("koja seisukohti ja teemade"));
 });
 
 check("results page does not show capped total copy", () => {
@@ -218,7 +228,7 @@ check("results page does not show capped total copy", () => {
 check("search form allows topic-only search (sector not mandatory) and hides removed type filters", () => {
   const source = readFileSync("src/app/SearchForm.tsx", "utf8");
   // Sector is no longer mandatory: a search needs at least one filter, but the
-  // user may search by Teema / valdkond (or recipient) alone.
+  // user may search by Teema alone.
   assert.ok(source.includes("hasAnyFilter"));
   assert.ok(!source.includes("tegevusalaOptions.length > 0 && tegevusala.length === 0"));
   // The cross-sector fallback option is hidden via the shared helper.
@@ -227,7 +237,11 @@ check("search form allows topic-only search (sector not mandatory) and hides rem
   assert.ok(!source.includes("Adressaat / ministeerium"));
   assert.ok(!source.includes("Kellele koda pöördus"));
   assert.ok(source.includes('type="submit"'));
-  assert.ok(source.includes("Teema / valdkond"));
+  assert.ok(source.includes("<legend>Teema</legend>"));
+  assert.ok(source.includes("Vali üks või mitu teemat"));
+  assert.ok(!source.includes("Teema / valdkond"));
+  assert.ok(!source.includes("valikuline"));
+  assert.ok(!source.includes("Täpsemad valikud"));
   assert.ok(!source.includes('type="search"'));
   assert.ok(!source.includes('name="q"'));
   assert.ok(!source.includes("Otsi teemat või märksõna"));
@@ -264,9 +278,22 @@ check("homepage removes separate topic browser and keeps topic picker visible", 
   const form = readFileSync("src/app/SearchForm.tsx", "utf8");
   assert.ok(!page.includes("homepage.topics.title"));
   assert.ok(!page.includes("homepage.topics.description"));
-  assert.ok(form.includes("Teema / valdkond"));
+  assert.ok(form.includes("<legend>Teema</legend>"));
   assert.ok(!form.includes("showAdvanced"));
   assert.ok(!form.includes("disclosure"));
+});
+
+check("homepage copy uses shortened hints, privacy and stat strip", () => {
+  const form = readFileSync("src/app/SearchForm.tsx", "utf8");
+  const page = readFileSync("src/app/page.tsx", "utf8");
+  const layout = readFileSync("src/app/layout.tsx", "utf8");
+  assert.ok(form.includes("Vali üks või mitu tegevusala"));
+  assert.ok(!form.includes("või otsi hoopis teema järgi"));
+  assert.ok(layout.includes("Privaatsus: Valitud filtreid võidakse kasutada anonüümselt tööriista parandamiseks."));
+  assert.ok(!layout.includes("me ei küsi ega salvesta"));
+  assert.ok(page.includes("<strong>220+</strong>"));
+  assert.ok(!page.includes("<strong>100+</strong>"));
+  assert.ok(!page.includes("<strong>Teenused</strong>"));
 });
 
 check("homepage work-win browser opens modal and paginates by seven", () => {

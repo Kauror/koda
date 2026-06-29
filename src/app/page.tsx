@@ -221,12 +221,8 @@ export default async function HomePage() {
             <span>aastast esindame Eesti ettevõtjate huve</span>
           </div>
           <div className="stat">
-            <strong>100+</strong>
+            <strong>220+</strong>
             <span>seisukohta ja ettepanekut riigile igal aastal</span>
-          </div>
-          <div className="stat">
-            <strong>Teenused</strong>
-            <span>väliskaubandusdokumendid, nõustamine, kontaktid</span>
           </div>
         </div>
       </section>

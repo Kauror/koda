@@ -325,7 +325,7 @@ export default async function ResultsPage({
           <h1>{query.q ? `Otsing: „${query.q}"` : "Mida on koda teinud ja öelnud"}</h1>
           <p className="sub">
             Siit saad mugavalt otsida Sind huvitavaid Eesti Kaubandus-Tööstuskoja töövõite,
-            koja seisukohti ja teemade teemasid millega koda on läbi aastate tegelenud.
+            seisukohti ja teemasid millega koda on läbi aastate tegelenud.
           </p>
           {(query.q || activeFilters.length > 0) && (
             <div className="filter-summary">
@@ -409,7 +409,6 @@ export default async function ResultsPage({
 
         <Section
           title="Töövõidud"
-          sub="Konkreetsed tulemused ja võidud, mille koda on ettevõtjate jaoks saavutanud."
           cards={results.achievements}
           sessionId={sessionId}
           fromQuery={fromQuery}
