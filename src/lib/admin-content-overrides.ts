@@ -38,6 +38,14 @@ export function nullable(value: FormDataEntryValue | null): string | null {
   return trimmed === "" ? null : trimmed;
 }
 
+function nullableJoined(form: FormData, name: string): string | null {
+  const values = form
+    .getAll(name)
+    .filter((value): value is string => typeof value === "string")
+    .flatMap(splitList);
+  return joinList([...new Set(values)]);
+}
+
 export function parseVisibility(value: string | null): boolean | null {
   if (value === "visible") return true;
   if (value === "hidden") return false;
@@ -52,11 +60,11 @@ export function parseAdminOverrideForm(form: FormData): AdminOverrideInput {
     visibilityOverride: parseVisibility(nullable(form.get("visibilityOverride"))),
     hiddenReason: nullable(form.get("hiddenReason")),
     topicPrimary: nullable(form.get("topicPrimary")),
-    topicSecondary: nullable(form.get("topicSecondary")),
+    topicSecondary: nullableJoined(form, "topicSecondary"),
     activityPrimary: nullable(form.get("activityPrimary")),
-    activitySecondary: nullable(form.get("activitySecondary")),
-    publicActivityFilterTags: nullable(form.get("publicActivityFilterTags")),
-    publicActivityDisplayTags: nullable(form.get("publicActivityDisplayTags")),
+    activitySecondary: nullableJoined(form, "activitySecondary"),
+    publicActivityFilterTags: nullableJoined(form, "publicActivityFilterTags"),
+    publicActivityDisplayTags: nullableJoined(form, "publicActivityDisplayTags"),
     publicSectorPageAllowed: nullable(form.get("publicSectorPageAllowed")),
     reviewerNote: nullable(form.get("reviewerNote")),
   };
@@ -64,7 +72,7 @@ export function parseAdminOverrideForm(form: FormData): AdminOverrideInput {
 
 function splitList(value: string | null): string[] {
   return (value ?? "")
-    .split(/[;\n,|]/)
+    .split(/[;\n|]/)
     .map((item) => item.trim())
     .filter(Boolean);
 }

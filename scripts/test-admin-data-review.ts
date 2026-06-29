@@ -31,7 +31,10 @@ import {
   BUNDLE_VALIDATE_COMMAND,
   DECISIONS_NOT_APPLIED_NOTICE,
 } from "../src/lib/admin-review-ui";
+import { parseAdminOverrideForm, validateAdminOverrideInput } from "../src/lib/admin-content-overrides";
+import { CROSS_SECTOR_ACTIVITY, PUBLIC_ACTIVITY_FILTERS } from "../src/lib/activities";
 import { summarizeImportReport } from "../src/lib/admin-status";
+import { PUBLIC_TOPIC_FILTERS } from "../src/lib/topics";
 
 const readSource = (path: string) => readFileSync(path, "utf8");
 
@@ -57,6 +60,31 @@ function skip(name: string, reason: string) {
 }
 
 console.log("[test] admin data-review checks:");
+
+check("admin override form parses repeated taxonomy select values", () => {
+  const form = new FormData();
+  const topicA = PUBLIC_TOPIC_FILTERS[2].name;
+  const topicB = PUBLIC_TOPIC_FILTERS[5].name;
+  const activityA = PUBLIC_ACTIVITY_FILTERS[1].name;
+  const activityB = PUBLIC_ACTIVITY_FILTERS[5].name;
+
+  form.append("topicSecondary", topicA);
+  form.append("topicSecondary", topicB);
+  form.append("activitySecondary", activityA);
+  form.append("activitySecondary", activityB);
+  form.append("publicActivityFilterTags", CROSS_SECTOR_ACTIVITY);
+  form.append("publicActivityFilterTags", activityA);
+  form.append("publicActivityDisplayTags", activityB);
+
+  const parsed = parseAdminOverrideForm(form);
+  assert.equal(parsed.topicSecondary, `${topicA}; ${topicB}`);
+  assert.equal(parsed.activitySecondary, `${activityA}; ${activityB}`);
+  assert.equal(parsed.publicActivityFilterTags, `${CROSS_SECTOR_ACTIVITY}; ${activityA}`);
+  assert.equal(parsed.publicActivityDisplayTags, activityB);
+
+  const validation = validateAdminOverrideInput(parsed);
+  assert.equal(validation.ok, true);
+});
 
 // ---------------------------------------------------------------------------
 // 1) Pure logic with synthetic fixtures — runs without any private data files.

@@ -591,6 +591,94 @@ function buildThreadResultCard(
   };
 }
 
+function toResultCard(s: { c: Candidate; total: number }, evidence: Map<string, EvidenceHint>): ResultCard {
+  const kind = assignKind(s.c);
+  return {
+    id: s.c.id,
+    detailId: s.c.externalId ?? s.c.id,
+    title: publicTitle(s.c),
+    summary: compactText(getCleanPublicExcerpt(s.c), isAchievement(s.c) ? 180 : 260),
+    url: publicSourceUrl(s.c),
+    sourceCtaLabel: sourceCtaLabel(s.c),
+    date: s.c.date ? s.c.date.toISOString() : null,
+    displayDate: computePublicDate({
+      date: s.c.date,
+      year: s.c.year ?? null,
+      reportYear: s.c.reportYear ?? null,
+      classificationConfidence: s.c.classificationConfidence ?? null,
+      displayDatePrecision: s.c.displayDatePrecision ?? null,
+      dateConfidence: s.c.dateConfidence ?? null,
+    }).text,
+    kind,
+    type: primaryType(s.c),
+    isAchievement: isAchievement(s.c),
+    outcomeStatus: s.c.outcomeStatus,
+    badges: buildBadges(s.c),
+    valdkonnad: s.c.valdkonnad,
+    tegevusalad: s.c.tegevusalad,
+    laws: buildLawChips(s.c),
+    recipient:
+      shouldShowRecipientChip({ kind, hasRecipient: !!s.c.recipientNormalized }) && s.c.recipientNormalized
+        ? { slug: s.c.recipientFilterGroup ?? slugify(s.c.recipientNormalized), name: s.c.recipientNormalized }
+        : null,
+    evidence: evidence.get(s.c.id) ?? { annualContext: false, relatedOpinions: 0 },
+    score: s.total,
+  };
+}
+
+function buildWorkWinResultCards(
+  candidates: Candidate[],
+  units: WorkWinUnit[],
+  nesting: WorkWinNesting,
+  evidence: Map<string, EvidenceHint>
+): ResultCard[] {
+  const candById = new Map(candidates.map((c) => [c.id, c]));
+  const threadByKey = new Map(nesting.threads.map((t) => [t.key, t]));
+  const cards: ResultCard[] = [];
+
+  for (const u of units) {
+    if (u.kind === "card") {
+      const parent = candById.get(u.parentId);
+      if (!parent) continue;
+      const card = toResultCard({ c: parent, total: u.score }, evidence);
+      const childIds = nesting.childrenByParentId.get(u.parentId) ?? [];
+      const children = childIds.map((id) => candById.get(id)).filter((c): c is Candidate => !!c);
+      if (children.length) {
+        card.nested = children.map((c) => toNestedWorkWinCard(c, u.matchedChildIds.has(c.id)));
+        card.nestedHeading = "Seotud arengud";
+        card.threadKey = parent.policyThreadKey ?? null;
+      }
+      cards.push(card);
+      continue;
+    }
+
+    const thread = threadByKey.get(u.threadKey);
+    if (!thread) continue;
+    const members = thread.memberIds.map((id) => candById.get(id)).filter((c): c is Candidate => !!c);
+    if (!members.length) continue;
+    cards.push(buildThreadResultCard(thread, members, u.score, u.matchedChildIds));
+  }
+
+  return cards;
+}
+
+export async function getAllWorkWinCards(): Promise<ResultCard[]> {
+  const candidates = await fetchEligibleCandidates();
+  const workWins = candidates.filter((c) => isAchievement(c));
+  const nesting = resolveWorkWinNesting(workWins.map(toNestingInput));
+  const query: SearchQuery = { q: "", valdkond: [], tegevusala: [], tapsustus: [], recipient: [], type: [] };
+  const matched = workWins.map((c) => ({ c, total: scoreCandidate(c, query).total }));
+  const units = aggregateWorkWinUnits(matched, nesting, query).sort(
+    (a, b) => b.latestDateMs - a.latestDateMs || unitKey(a).localeCompare(unitKey(b))
+  );
+  const parentCandidates = units
+    .filter((u): u is Extract<WorkWinUnit, { kind: "card" }> => u.kind === "card")
+    .map((u) => candidates.find((c) => c.id === u.parentId))
+    .filter((c): c is Candidate => !!c);
+  const evidence = await buildEvidence(parentCandidates);
+  return buildWorkWinResultCards(candidates, units, nesting, evidence);
+}
+
 export async function search(query: SearchQuery): Promise<SearchResults> {
   const candidates = await fetchEligibleCandidates();
   const empty = isEmptyQuery(query);

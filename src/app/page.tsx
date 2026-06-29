@@ -1,10 +1,6 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import SearchForm from "./SearchForm";
-import WorkWinsModal, { type HomepageWorkWin } from "./WorkWinsModal";
-import { prisma } from "@/lib/db";
-import { compactText, getCleanPublicExcerpt, publicTitle } from "@/lib/content-display";
-import { isPublicSearchEligible } from "@/lib/eligibility";
-import { computePublicDate } from "@/lib/public-date";
 import { getFilterOptions, type FilterOptions } from "@/lib/search";
 import { getHomepageSiteTexts } from "@/lib/site-texts";
 
@@ -58,86 +54,13 @@ function withFallbackOptions(options: FilterOptions): FilterOptions {
   };
 }
 
-async function getHomepageWorkWins(): Promise<HomepageWorkWin[]> {
-  const rows = await prisma.contentItem.findMany({
-    where: {
-      AND: [
-        { OR: [{ sourceTypeDetail: "toovoit" }, { sourceLayer: "koda_achievement" }] },
-        { OR: [{ isPublic: true }, { adminVisibilityOverride: true }] },
-      ],
-    },
-    select: {
-      id: true,
-      externalId: true,
-      title: true,
-      displayTitle: true,
-      adminDisplayTitleOverride: true,
-      summary: true,
-      adminSummaryOverride: true,
-      adminTextOverride: true,
-      companyRelevance: true,
-      kodaPosition: true,
-      sourceEvidence: true,
-      excerpt: true,
-      bodyText: true,
-      canonicalUrl: true,
-      sourceUrl: true,
-      date: true,
-      year: true,
-      reportYear: true,
-      classificationConfidence: true,
-      displayDatePrecision: true,
-      dateConfidence: true,
-      sourceDataset: true,
-      sourceLayer: true,
-      sourceTypeDetail: true,
-      displayType: true,
-      isPublic: true,
-      isHidden: true,
-      needsHumanReview: true,
-      numericClaimNeedsReview: true,
-      importStatus: true,
-      importAction: true,
-      publicDisplayAllowed: true,
-      publicDisplayStatus: true,
-      adminVisibilityOverride: true,
-    },
-  });
-
-  return rows
-    .filter((row) => isPublicSearchEligible(row))
-    .filter((row) => (row.displayType ?? "standalone_card") === "standalone_card")
-    .map((row) => {
-      const publicDate = computePublicDate({
-        date: row.date,
-        year: row.year,
-        reportYear: row.reportYear,
-        classificationConfidence: row.classificationConfidence,
-        displayDatePrecision: row.displayDatePrecision,
-        dateConfidence: row.dateConfidence,
-      });
-      const sortMs = publicDate.rankingDate?.getTime() ?? (publicDate.year ? Date.UTC(publicDate.year, 0, 1) : 0);
-      return {
-        id: row.id,
-        detailId: row.externalId ?? row.id,
-        title: publicTitle(row),
-        summary: compactText(getCleanPublicExcerpt(row), 180),
-        displayDate: publicDate.text,
-        sortMs,
-      };
-    })
-    .sort((a, b) => b.sortMs - a.sortMs || a.title.localeCompare(b.title, "et"))
-    .map(({ sortMs, ...item }) => item);
-}
-
 export default async function HomePage() {
-  const [options, texts, workWins] = await Promise.all([
+  const [options, texts] = await Promise.all([
     getFilterOptions().catch(() => {
       console.warn("Failed to load filter options; using fallback filter list.");
       return FALLBACK_FILTER_OPTIONS;
     }),
     getHomepageSiteTexts(),
-    getHomepageWorkWins().catch(() => []),
   ]);
   const filterOptions = withFallbackOptions(options);
 
@@ -156,11 +79,11 @@ export default async function HomePage() {
           <Suspense>
             <SearchForm options={filterOptions} />
           </Suspense>
-          {workWins.length > 0 && (
-            <div className="homepage-workwins-action">
-              <WorkWinsModal items={workWins} />
-            </div>
-          )}
+          <div className="homepage-workwins-action">
+            <Link href="/toovoidud" className="btn btn-secondary">
+              Vaata kõiki töövõite
+            </Link>
+          </div>
         </div>
       </section>
 

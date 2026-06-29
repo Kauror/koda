@@ -186,7 +186,7 @@ check("results page uses incremental batch-of-3 load-more pagination", () => {
 });
 
 check("nested töövõidud sections are collapsed by default (no open attribute)", () => {
-  const source = readFileSync("src/app/tulemused/page.tsx", "utf8");
+  const source = readFileSync("src/app/PublicResultCard.tsx", "utf8");
   // The nested <details> must NOT be force-opened (open by default would expand
   // every timeline on load). Threads no longer pass open={isThread}.
   assert.ok(source.includes('<details className="nested-section">'));
@@ -298,15 +298,19 @@ check("homepage copy uses shortened hints, privacy and stat strip", () => {
   assert.ok(!page.includes("<strong>Teenused</strong>"));
 });
 
-check("homepage work-win browser opens modal and paginates by seven", () => {
+check("homepage work-win browser links to a full page that paginates by seven", () => {
   const page = readFileSync("src/app/page.tsx", "utf8");
-  const modal = readFileSync("src/app/WorkWinsModal.tsx", "utf8");
-  assert.ok(page.includes("getHomepageWorkWins"));
-  assert.ok(page.includes("WorkWinsModal"));
-  assert.ok(page.includes('displayType ?? "standalone_card"'));
-  assert.ok(modal.includes("Vaata kõiki töövõite"));
-  assert.ok(modal.includes("const BATCH_SIZE = 7"));
-  assert.ok(modal.includes('role="dialog"'));
+  const workWinsPage = readFileSync("src/app/toovoidud/page.tsx", "utf8");
+  const publicCard = readFileSync("src/app/PublicResultCard.tsx", "utf8");
+  assert.ok(page.includes('href="/toovoidud"'));
+  assert.ok(!page.includes("getHomepageWorkWins"));
+  assert.ok(!page.includes("WorkWinsModal"));
+  assert.ok(workWinsPage.includes("getAllWorkWinCards"));
+  assert.ok(workWinsPage.includes("const WORK_WIN_BATCH = 7"));
+  assert.ok(workWinsPage.includes("<LoadMore"));
+  assert.ok(workWinsPage.includes("PublicResultCard"));
+  assert.ok(publicCard.includes("tag-law"));
+  assert.ok(publicCard.includes("card.laws"));
 });
 
 check("detail page hides front-facing outcome status metadata", () => {
@@ -326,7 +330,7 @@ check("legacy crawler requires explicit opt-in before running", () => {
 });
 
 check("result cards show linked law tags, not generic topic/sector chips", () => {
-  const source = readFileSync("src/app/tulemused/page.tsx", "utf8");
+  const source = readFileSync("src/app/PublicResultCard.tsx", "utf8");
   assert.ok(source.includes("card.laws"));
   assert.ok(source.includes("tag-law"));
   assert.ok(source.includes("/seadused/"));
@@ -339,8 +343,8 @@ check("result cards show linked law tags, not generic topic/sector chips", () =>
 });
 
 check("result cards use one internal 'Loe lähemalt' CTA and recipient chips", () => {
-  const source = readFileSync("src/app/tulemused/page.tsx", "utf8");
-  // Internal CTA renamed everywhere on the results page.
+  const source = readFileSync("src/app/PublicResultCard.tsx", "utf8");
+  // Internal CTA renamed everywhere on public result cards.
   assert.ok(source.includes("Loe lähemalt"));
   assert.ok(!source.includes("Vaata kokkuvõtet"));
   // Recipient/ministry shows as a clickable chip (filters by recipient) next to laws.
@@ -435,11 +439,12 @@ check("isGenericWorkWinUrl matches the generic koda.ee work-wins listing only", 
 });
 
 check("public cards expose admin-only edit shortcuts", () => {
-  const source = readFileSync("src/app/tulemused/page.tsx", "utf8");
-  assert.ok(source.includes("isAdmin"));
-  assert.ok(source.includes("admin-edit-link"));
-  assert.ok(source.includes("/admin/content/${card.id}"));
-  assert.ok(source.includes("admin={admin}"));
+  const resultsPage = readFileSync("src/app/tulemused/page.tsx", "utf8");
+  const publicCard = readFileSync("src/app/PublicResultCard.tsx", "utf8");
+  assert.ok(resultsPage.includes("isAdmin"));
+  assert.ok(resultsPage.includes("admin={admin}"));
+  assert.ok(publicCard.includes("admin-edit-link"));
+  assert.ok(publicCard.includes("/admin/content/${card.id}"));
 });
 
 check("public detail pages expose admin-only edit shortcuts", () => {
@@ -465,6 +470,13 @@ check("admin content editor uses draft and publish override controls", () => {
   assert.ok(source.includes("CROSS_SECTOR_ACTIVITY"));
   assert.ok(source.includes("publicActivityDisplayTags"));
   assert.ok(source.includes("adminTextOverride"));
+  assert.ok(source.includes("Jäta import (praegu:"));
+  assert.ok(source.includes('id="topicSecondary" name="topicSecondary" multiple'));
+  assert.ok(source.includes('id="activitySecondary" name="activitySecondary" multiple'));
+  assert.ok(source.includes('id="publicActivityFilterTags" name="publicActivityFilterTags" multiple'));
+  assert.ok(source.includes('id="publicActivityDisplayTags" name="publicActivityDisplayTags" multiple'));
+  assert.ok(!source.includes('textarea id="topicSecondary"'));
+  assert.ok(!source.includes('textarea id="activitySecondary"'));
   assert.ok(!source.includes('name="companySize"'));
 });
 

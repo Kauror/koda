@@ -17,6 +17,22 @@ function text(value: string | null | undefined): string {
   return value ?? "";
 }
 
+function splitValues(value: string | null | undefined): string[] {
+  return (value ?? "")
+    .split(/[;\n|]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function importLabel(value: string | null | undefined): string {
+  return `Jäta import (praegu: ${value?.trim() || "—"})`;
+}
+
+const FILTER_TAG_OPTIONS = [
+  { name: CROSS_SECTOR_ACTIVITY },
+  ...PUBLIC_ACTIVITY_FILTERS,
+];
+
 export default async function AdminContentEdit({
   params,
   searchParams,
@@ -58,6 +74,12 @@ export default async function AdminContentEdit({
     .filter((t) => t.tag.type === "tegevusala")
     .map((t) => t.tag.name)
     .join("; ");
+  const importedTopicPrimary = item.topicPrimary;
+  const importedTopicSecondary = item.topicSecondary || currentTopics;
+  const importedActivityPrimary = item.activityPrimary;
+  const importedActivitySecondary = item.activitySecondary || currentActivities;
+  const importedFilterTags = item.publicActivityFilterTags || currentActivities;
+  const importedDisplayTags = item.publicActivityDisplayTags || currentActivities;
   const publicPreview = {
     title: publicTitle(item),
     summary: getPublicDetailSummary(item),
@@ -160,7 +182,7 @@ export default async function AdminContentEdit({
             Peamine teema
           </label>
           <select id="topicPrimary" name="topicPrimary" defaultValue={draft?.topicPrimary ?? ""}>
-            <option value="">Jäta import</option>
+            <option value="">{importLabel(importedTopicPrimary)}</option>
             {PUBLIC_TOPIC_FILTERS.map((topic) => (
               <option key={topic.slug} value={topic.name}>
                 {topic.name}
@@ -170,8 +192,18 @@ export default async function AdminContentEdit({
           <label className="field-label" htmlFor="topicSecondary">
             Teisesed teemad
           </label>
-          <textarea id="topicSecondary" name="topicSecondary" defaultValue={text(draft?.topicSecondary)} placeholder="Üks või mitu teemat, eralda semikooloniga" />
-          <p className="muted small">Praegu importist: {currentTopics || "—"}</p>
+          <select id="topicSecondary" name="topicSecondary" multiple size={8} defaultValue={splitValues(draft?.topicSecondary)}>
+            <option value="" disabled>
+              {importLabel(importedTopicSecondary)}
+            </option>
+            {PUBLIC_TOPIC_FILTERS.map((topic) => (
+              <option key={topic.slug} value={topic.name}>
+                {topic.name}
+              </option>
+            ))}
+          </select>
+          <p className="muted small">Kui midagi ei vali, jääb import. Mitme valimiseks kasuta Ctrl/Cmd-klikki.</p>
+          <p className="muted small">Praegu importist: {importedTopicSecondary || "—"}</p>
         </fieldset>
 
         <fieldset>
@@ -180,7 +212,7 @@ export default async function AdminContentEdit({
             Peamine tegevusala
           </label>
           <select id="activityPrimary" name="activityPrimary" defaultValue={draft?.activityPrimary ?? ""}>
-            <option value="">Jäta import</option>
+            <option value="">{importLabel(importedActivityPrimary)}</option>
             {PUBLIC_ACTIVITY_FILTERS.map((activity) => (
               <option key={activity.slug} value={activity.name}>
                 {activity.name}
@@ -190,8 +222,18 @@ export default async function AdminContentEdit({
           <label className="field-label" htmlFor="activitySecondary">
             Teisesed tegevusalad
           </label>
-          <textarea id="activitySecondary" name="activitySecondary" defaultValue={text(draft?.activitySecondary)} placeholder="Üks või mitu 12 sektorist, eralda semikooloniga" />
-          <p className="muted small">Praegu importist: {currentActivities || "—"}</p>
+          <select id="activitySecondary" name="activitySecondary" multiple size={8} defaultValue={splitValues(draft?.activitySecondary)}>
+            <option value="" disabled>
+              {importLabel(importedActivitySecondary)}
+            </option>
+            {PUBLIC_ACTIVITY_FILTERS.map((activity) => (
+              <option key={activity.slug} value={activity.name}>
+                {activity.name}
+              </option>
+            ))}
+          </select>
+          <p className="muted small">Kui midagi ei vali, jääb import. Valitud sektorile luuakse avaldamisel tag, kui seda veel ei ole.</p>
+          <p className="muted small">Praegu importist: {importedActivitySecondary || "—"}</p>
         </fieldset>
 
         <fieldset>
@@ -199,16 +241,34 @@ export default async function AdminContentEdit({
           <label className="field-label" htmlFor="publicActivityFilterTags">
             public_activity_filter_tags
           </label>
-          <textarea id="publicActivityFilterTags" name="publicActivityFilterTags" defaultValue={text(draft?.publicActivityFilterTags)} placeholder={`${CROSS_SECTOR_ACTIVITY} või 12 sektori väärtused`} />
+          <select id="publicActivityFilterTags" name="publicActivityFilterTags" multiple size={7} defaultValue={splitValues(draft?.publicActivityFilterTags)}>
+            <option value="" disabled>
+              {importLabel(importedFilterTags)}
+            </option>
+            {FILTER_TAG_OPTIONS.map((activity) => (
+              <option key={activity.name} value={activity.name}>
+                {activity.name}
+              </option>
+            ))}
+          </select>
           <label className="field-label" htmlFor="publicActivityDisplayTags">
             public_activity_display_tags
           </label>
-          <textarea id="publicActivityDisplayTags" name="publicActivityDisplayTags" defaultValue={text(draft?.publicActivityDisplayTags)} placeholder="Ainult 12 avalikku sektorit; cross-sector ei ole lubatud" />
+          <select id="publicActivityDisplayTags" name="publicActivityDisplayTags" multiple size={7} defaultValue={splitValues(draft?.publicActivityDisplayTags)}>
+            <option value="" disabled>
+              {importLabel(importedDisplayTags)}
+            </option>
+            {PUBLIC_ACTIVITY_FILTERS.map((activity) => (
+              <option key={activity.slug} value={activity.name}>
+                {activity.name}
+              </option>
+            ))}
+          </select>
           <label className="field-label" htmlFor="publicSectorPageAllowed">
             public_sector_page_allowed
           </label>
           <select id="publicSectorPageAllowed" name="publicSectorPageAllowed" defaultValue={draft?.publicSectorPageAllowed ?? ""}>
-            <option value="">Jäta import</option>
+            <option value="">{importLabel(item.publicSectorPageAllowed)}</option>
             <option value="TRUE">TRUE</option>
             <option value="LIMITED">LIMITED</option>
             <option value="FALSE">FALSE</option>

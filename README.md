@@ -38,13 +38,14 @@ defineeritud CSS-muutujatena failis `src/app/globals.css`:
   `--font-din-fallback`. Kui FF DIN Pro litsents on olemas, lisa selle
   `@font-face` deklaratsioon `globals.css`-i – stack võtab selle automaatselt
   esimesena kasutusse.
-- **Komponendiklassid** – `.hero`, `.section`, `.topic-card`, `.item-grid`,
-  `.service-card`, `.cta-box`, `.stat-strip`, `.theme-link`, `.source-badge`
+- **Komponendiklassid** – `.hero`, `.section`, `.results-section`,
+  `.other-item`, `.cta-box`, `.stat-strip`, `.theme-link`, `.admin-edit-link`
   jt on kirjeldatud `globals.css`-is; värve kasuta alati tokenite kaudu.
-- **Sisu paigutus tulemustelehel** – teemakaardil on kuni kaks allikakasti
-  (peamine + järgmine asjakohaseim), „Teema ajalugu" akordion ja sildid.
-  Teenused (`sourceType=service`) ei segune teemakaartidega, vaid kuvatakse
-  lehe lõpus eraldi sektsioonis „Teenused, mis võivad sulle kasulikud olla".
+- **Sisu paigutus tulemustelehel** – tulemused on rühmitatud töövõitudeks,
+  koja seisukohtadeks, koja uudisteks ja taustaks. Töövõitude v1.2
+  nested/timeline read kuvatakse vanemkaardi või poliitikateema ajajoone all,
+  mitte eraldi topeltkaartidena. Adminile kuvatakse avalikus vaates väike
+  „Muuda" link, mis viib konkreetse sisu haldusesse.
 
 ## Kiirstart Dockeriga (soovitatud)
 
@@ -57,8 +58,8 @@ Migratsioonid (`prisma migrate deploy`) jooksevad app-konteineri käivitumisel
 automaatselt. Seejärel loo soovi korral demoandmed:
 
 ```bash
-docker compose exec app npm run seed     # sildid + näidissisu + teemagrupid
-# Päris v1 sisu tuleb merge-ready Excelitest, mitte legacy crawlerist.
+docker compose exec app npm run seed     # taksonoomia + näidissisu
+# Päris v1/v1.2 sisu tuleb app-import Excelitest, mitte legacy crawlerist.
 ```
 
 Rakendus: <http://localhost:3000> · Admin: <http://localhost:3000/admin>
@@ -82,7 +83,7 @@ npm run dev                 # http://localhost:3000
 | `npm run dev`            | Arendusserver                                            |
 | `npm run build`          | Prisma client + Next.js production build                 |
 | `npm run start`          | Production server                                        |
-| `npm run seed`           | Sildid (sektorid, suurused, huvid, profiilid) + näidissisu |
+| `npm run seed`           | Taksonoomia ja näidissisu lokaalseks proovimiseks           |
 | `npm run site-texts:seed`| Loob puuduvad avalehe tekstiread, olemasolevaid muudatusi üle kirjutamata |
 | `npm run freshness:audit`| Raporteerib avalike ridade värskuse ja 2025/2026 katvuse DB põhjal |
 | `npm run crawl`          | Legacy crawler; requires `-- --legacy-ok` and `CRAWLER_ENABLED=true` |
@@ -95,21 +96,23 @@ npm run dev                 # http://localhost:3000
 | `npm run prisma:migrate` | `prisma migrate dev` (arendus)                           |
 | `npm run prisma:deploy`  | `prisma migrate deploy` (server)                         |
 
-## App-import (v1 andmemudel)
+## App-import (v1/v1.2 andmemudel)
 
-Rakenduse v1 sisu **tõeallikas** on **v1 app-import pakett** (`data/import/`),
-mitte crawler ega seed. Vt täielikku juhendit:
+Rakenduse sisu **tõeallikas** on **v1/v1.2 app-import pakett** (`data/import/`),
+mitte crawler ega seed. Töövõitude v1.2 reeglid lisavad nested/timeline
+struktuuri, kuid avalikud teemad ja 12 tegevusala jäävad lukustatuks. Vt
+täielikku juhendit:
 [`docs/import-merge-ready.md`](docs/import-merge-ready.md).
 
-v1 failid ja impordilehed (ainult need):
+Praegused failid ja impordilehed:
 
 | Fail | Impordileht | Väljajäetud/ülevaatuse leht | Read |
 | --- | --- | --- | ---: |
 | `koda_opinions_v1.0.xlsx` | `opinions_app_import` | `excluded_rows` | 750 |
 | `koda_web_content_v1.xlsx` | `web_app_import` | `web_excluded_review` | 1131 |
-| `koda_toovoidud_v1.xlsx` | `toovoidud_app_import` | `toovoidud_excluded_review` | 90 |
+| `koda_toovoidud_v1_5_APP_IMPORT_SLIM.xlsx` | `toovoidud_app_import` | `toovoidud_excluded_review` (+ `news_only_recommendations`) | 122 |
 | `koda_content_links_v1.xlsx` | `public_related_links` (+ valideerimise lehed) | — | — |
-| `koda_taxonomy_rules_v1_0.txt` | — (reegistik, ei impordita) | — | — |
+| `koda_taxonomy_rules_v1_2.txt` | — (reegistik, ei impordita) | — | — |
 
 ```bash
 # Failid kausta data/import/ (vt data/import/README.md), siis:
@@ -119,50 +122,62 @@ npm run import:merge-ready     # impordi (asendav import)
 npm run import:verify-db       # kontrolli andmebaasi invariandid
 ```
 
-- Imporditavad sisuread: web **1131** + arvamused **750** + töövõidud **90** =
-  **1971**. Väljajäetud/ülevaatuse read **ei impordita** kunagi avaliku sisuna
-  (web 1, arvamused 9, töövõidud 7).
+- Imporditavad sisuread: web **1131** + arvamused **750** + töövõidud **122** =
+  **2003**. Väljajäetud/ülevaatuse read **ei impordita** kunagi avaliku sisuna
+  (web 1, arvamused 9, töövõidud 7). Töövõitude
+  `news_only_recommendations` lehe 7 rida **ei impordita** töövõitudena.
 - Avaliku kuvamise värav v1-s: rida on impordilehel, kihipõhine impordilipp on
   TRUE (`final_app_import_eligible` / `final_web_import_candidate` /
   `work_win_import_candidate`) ja avalik kokkuvõte on olemas.
+  `numeric_claim_needs_review` on tootjapoolne diagnostika, mitte avaldamise
+  värav.
 - Avalikud "Veel samal teemal" / tõenduslingid tulevad **ainult**
   `koda_content_links_v1.xlsx` lehelt `public_related_links` (→
   `ContentEvidenceLink`). Kandidaat-/ülevaatuse-/blokeeritud lingid ei lähe
-  avalikku kuvamisse.
+  avalikku kuvamisse; avalik link peab olema `high` või `curated_medium`
+  kindlusega.
 - Töövõidud salvestavad struktuursed väljad (`whatChangedEt`, `kodaRoleEt`,
   `businessValueEt`, `beforeAfterEt`) ning kuupäeva täpsuse
   (`displayDatePrecision`/`dateConfidence`/`dateBasis`); avalik kuupäev austab
   täpsust (aasta-tasemel kindlust ei kuvata päeva täpsusena).
+- Töövõitude v1.2 väljad (`row_origin`, `display_type`, `parent_toovoit_id`,
+  `parent_candidate_id`, `policy_thread_key`, `policy_thread_title`,
+  `timeline_year`, `timeline_stage`) juhivad seda, kas rida on iseseisev kaart,
+  vanema all nested-etapp või poliitikateema ajajoone kirje.
 - QA raport: `data/import/reports/import-report.{json,md}`.
 - Import on **asendav** (vana imporditud sisu varundatakse `data/import/backups/`
-  ja kustutatakse enne uut paketti); ära jooksuta seda andmebaasil, kus on
-  admin-muudatusi, ilma neid taastamata.
+  ja kustutatakse enne uut paketti). Avaldatud admin-override'id
+  snapshotitakse enne importi ja rakendatakse pärast tagasi stabiilse
+  `externalId` järgi.
 - Lokaalseks verifitseerimiseks ilma Postgresita on PGlite-haru
   (`KODA_DB_DRIVER=pglite`) — vt [`docs/import-merge-ready.md`](docs/import-merge-ready.md).
 - **Legacy:** vanad v0.9.x töövihikud ja `*_merge_ready.xlsx` failid **ei ole**
   enam tõeallikas; crawler jääb legacy/mitteproduktsiooniliseks.
 - AI jääb väljalülitatuks ja pole impordiks vajalik.
 
-## Otsing ja järjestus (v1)
+## Otsing ja järjestus
 
-Otsing kasutab imporditud taksonoomiat (mitte vanu konstante). Tegevusala ei ole
-kohustuslik; toetatud on vabatekst `q` ning filtrid `valdkond`, `tegevusala`,
-`tapsustus`, `type`. Tulemused on rühmitatud: **Töövõidud**, **Koja seisukohad ja
-selgitused**, **Teema ajalugu ja taust**. Arvamused on vaikimisi tõendusmaterjal
-(ei kuvata peamiste tulemustena). Avalik nähtavus käib läbi
+Otsing kasutab imporditud taksonoomiat (mitte vanu konstante). Avalehel on
+tegevusala ja teema valikud nähtaval; vabateksti otsing ja vanad avalikud
+`tapsustus`/`type` filtrid on avalikust vormist eemaldatud. Tulemused on
+rühmitatud: **Töövõidud**, **Koja seisukohad**, **Koja uudised** ja
+**Veel samal teemal**. Arvamused ja uudised on omaette avalikud tulemuskihid,
+kui import neid avalikuks lubab. Avalik nähtavus käib läbi
 `isPublicSearchEligible()` värava. Täielik kirjeldus:
 [`docs/search-ranking-v1.md`](docs/search-ranking-v1.md).
 
 Tulemuse kaardilt avaneb avalik detailileht `/sisu/[id]` (allikapõhine selgitus,
-töövõidu rikastus, seotud aastaaruande kontekst ja toetavad arvamused).
-Peidetud/toetavad read 404-vad otselingil ning kuvatakse ainult tõendusena
-avaliku tulemuse all. Originaalallika link säilib eraldi. Vt
+töövõidu rikastus, seotud taust ja avalikud seosed). Peidetud/toetavad read
+404-vad otselingil ning kuvatakse ainult tõendusena avaliku tulemuse all.
+Originaalallika link säilib vajadusel eraldi, kuid töövõidu ja uudise kaartidel
+on avalikus tulemuses üks põhiline sisemine CTA. Vt
 [`docs/public-detail-evidence-v1.md`](docs/public-detail-evidence-v1.md).
 
 Avalik kasutajateekond (avaleht → otsing → rühmitatud tulemused → detailileht):
-vabatekst on esmane, tegevusala pole kohustuslik, valitud filtrid on nähtavad ja
-eemaldatavad, kaartidel on kaks eraldi tegevust („Vaata kokkuvõtet" ja „Ava
-algallikas"). Vt [`docs/public-ux-v1.md`](docs/public-ux-v1.md).
+kasutaja valib ühe või mitu tegevusala ja/või teemat, valitud filtrid on
+tulemuste päises nähtavad ning kaartidel on sisemine „Loe lähemalt" CTA. Admin
+näeb avalikes kaartides ja detailvaadetes väikest „Muuda" linki. Vt
+[`docs/public-ux-v1.md`](docs/public-ux-v1.md).
 
 ## Keskkonnamuutujad (`.env.example`)
 
@@ -217,10 +232,10 @@ imporditakse ikkagi pealkiri/kuupäev/link/väljavõte loendilehtedelt.
 ## Admin
 
 - `/admin` – töölaud (statistika, viimased otsingud)
-- `/admin/content` – imporditud sisu: kuvatava pealkirja ja kokkuvõtte
-  muutmine, sektori/huvi/suuruse/profiili sildid, prioriteet ja madaldamine
-  (käsitsi kaal −2…+2), evergreen, peitmine, duplikaatide liitmine,
-  teemagruppidesse määramine
+- `/admin/content` – **Sisu haldus**: otsing töövõitude, arvamuste ja uudiste
+  üle; pealkirja/kokkuvõtte/teksti override'id, nähtavuse override ning
+  taksonoomia/tagide override draft-then-publish töövooga. Toorimpordi välju ei
+  muudeta otse.
 - `/admin/topics` – teemagrupid: loomine, „Miks see on sinu ettevõttele
   oluline" tekst, põhisisu valik, liikmete haldus, sildid
 - `/admin/tags` – siltide haldus
@@ -237,7 +252,8 @@ vaikeväärtusi. Pärast uue võtme lisamist või värsket juurutust käivita
 ## Privaatsus
 
 - Ettevõtte nime, isikunime ega e-posti **ei küsita ega salvestata**.
-- Analüütikaks salvestatakse valitud filtrid ja tulemuste klikid.
+- Valitud filtreid ja tulemuste klikke võidakse kasutada anonüümselt tööriista
+  parandamiseks.
 - IP-aadressi hoitakse ainult päevasoolaga võtmestatud räsina
   (`anonymizedIpHash`), sama kehtib User-Agentile.
 - Avalikul lehel on eestikeelne privaatsusmärge.
@@ -251,8 +267,8 @@ Lühidalt:
    - `APP_URL=https://koda.orgusaar.ee`
    - tugev `ADMIN_PASSWORD` ja `POSTGRES_PASSWORD`
    - `KODA_IMPORT_DIR=/mnt/user/appdata/koda/import` (Unraid)
-2. Pane 4 merge-ready `.xlsx` faili `KODA_IMPORT_DIR` kausta (neid **ei**
-   commitita gitti ega panda image'isse).
+2. Pane v1/v1.2 app-import failid `KODA_IMPORT_DIR` kausta (töövihikuid **ei**
+   commitita gitti ega panda image'isse; reeglistik on repos viitena olemas).
 3. `docker compose build && docker compose up -d` – app kuulab pordil 3000;
    migratsioonid (`prisma migrate deploy`) jooksevad konteineri käivitumisel.
 4. Impordi andmebaasi (konteineri sees, `@prisma/adapter-pg` + natiivne engine):
@@ -285,7 +301,7 @@ Skeem ja kood on ette valmistatud, midagi ümber ehitada pole vaja:
 ## Märkused
 
 - `npm run seed` loob **näidissisu** (selgelt koja-laadne, aga illustratiivne),
-  et UI-d saaks kohe testida. Päris v1 sisu tuleb merge-ready Excelitest;
+  et UI-d saaks kohe testida. Päris v1/v1.2 sisu tuleb app-import Excelitest;
   näidiskirjed saab admin-vaates peita või kustutada, kui päris andmed olemas.
 - Teadlikult väljas (spec'i järgi): Kubernetes, väline auth, tasuline otsing,
   chatbot, CRM/liikmesüsteemi integratsioon, e-posti kogumine, Drupali sõltuvus.

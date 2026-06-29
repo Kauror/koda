@@ -8,185 +8,15 @@ import {
   parseSearchParams,
   search,
   type FilterOptions,
-  type NestedWorkWinCard,
   type ResultCard,
-  type SearchResults,
 } from "@/lib/search";
-import { isGenericWorkWinUrl } from "@/lib/content-display";
-import TrackedLink from "./TrackedLink";
 import LoadMore from "./LoadMore";
+import PublicResultCard from "../PublicResultCard";
 
 export const dynamic = "force-dynamic";
 
 /** Initial batch size + step for the "Näita rohkem" incremental pagination. */
 const LOAD_MORE_BATCH = 3;
-
-/**
- * Estonian label + count for the collapsed nested-section toggle. Threads read
- * as a timeline ("ajajoon"); a normal parent card reads as related stages
- * ("seotud etapid"). The count is shown so the user knows how much is hidden
- * before expanding.
- */
-function nestedToggleLabel(count: number, isThread: boolean): string {
-  if (isThread) {
-    const noun = count === 1 ? "ajajoone kirje" : "ajajoone kirjet";
-    return `Näita ajajoont · ${count} ${noun}`;
-  }
-  const noun = count === 1 ? "seotud etapp" : "seotud etappi";
-  return `Näita seotud etappe · ${count} ${noun}`;
-}
-
-/**
- * Compact nested/timeline section under a parent or policy-thread töövõit card
- * (v1.2). Series/timeline rows render here, never as flat top-level cards. The
- * section is ALWAYS collapsed by default (initial load, topic/sector pages,
- * search results, thread views) so the default list stays compact; the user
- * explicitly expands a parent to reveal the nested/timeline items, which are
- * ordered latest-first. Items themselves render smaller than the parent card.
- */
-function NestedWorkWins({
-  items,
-  isThread,
-  fromQuery,
-}: {
-  items: NestedWorkWinCard[];
-  isThread: boolean;
-  fromQuery: string;
-}) {
-  if (items.length === 0) return null;
-  return (
-    <details className="nested-section">
-      <summary>{nestedToggleLabel(items.length, isThread)}</summary>
-      <ol className="nested-timeline">
-        {items.map((item) => {
-          const href = `/sisu/${encodeURIComponent(item.detailId)}${
-            fromQuery ? `?from=${encodeURIComponent(fromQuery)}` : ""
-          }`;
-          return (
-            <li key={item.id} className={`nested-item${item.matched ? " nested-matched" : ""}`}>
-              <p className="nested-meta">
-                {(item.timelineYear || item.displayDate) && (
-                  <span className="badge-date">{item.timelineYear ?? item.displayDate}</span>
-                )}
-                {item.timelineStageLabel && <span className="badge nested-stage">{item.timelineStageLabel}</span>}
-              </p>
-              <h4>
-                <Link href={href}>{item.title}</Link>
-              </h4>
-              {item.summary && <p className="item-excerpt small">{item.summary}</p>}
-              {item.url && !isGenericWorkWinUrl(item.url) && (
-                <a href={item.url} target="_blank" rel="noopener noreferrer" className="item-source-link">
-                  Allikas →
-                </a>
-              )}
-            </li>
-          );
-        })}
-      </ol>
-    </details>
-  );
-}
-
-function Badges({ card }: { card: ResultCard }) {
-  // card.displayDate is the safe public date (placeholder/import/future dates are
-  // suppressed by the public-date gate); never format card.date raw here.
-  if (card.badges.length === 0 && !card.displayDate) return null;
-  return (
-    <p className="item-meta">
-      {card.badges.map((badge) => (
-        <span key={badge} className={`badge${badge === "Töövõit" ? " win-badge" : ""}`}>
-          {badge === "Töövõit" ? `✓ ${badge}` : badge}
-        </span>
-      ))}
-      {card.displayDate && <span className="badge-date">{card.displayDate}</span>}
-    </p>
-  );
-}
-
-function Card({
-  card,
-  sessionId,
-  fromQuery,
-  admin,
-  compact,
-}: {
-  card: ResultCard;
-  sessionId: string | null;
-  fromQuery: string;
-  admin: boolean;
-  compact?: boolean;
-}) {
-  const detailHref = `/sisu/${encodeURIComponent(card.detailId)}${
-    fromQuery ? `?from=${encodeURIComponent(fromQuery)}` : ""
-  }`;
-  // A policy-thread card groups several timeline rows: its title is not a single
-  // detail page, so it reads as a group and exposes its timeline (the nested
-  // items each link to their own detail page).
-  const isThread = !!card.isThread;
-  return (
-    <article
-      className={`other-item${card.isAchievement ? " win" : ""}${compact ? " compact-result" : ""}${
-        isThread ? " thread-card" : ""
-      }`}
-    >
-      <Badges card={card} />
-      {admin && (
-        <Link href={`/admin/content/${card.id}`} className="admin-edit-link" title="Muuda halduses">
-          Muuda
-        </Link>
-      )}
-      <h3>{isThread ? card.title : <Link href={detailHref}>{card.title}</Link>}</h3>
-      {card.summary && <p className="item-excerpt small">{card.summary}</p>}
-      {!compact && (card.laws.length > 0 || card.recipient) && (
-        <div className="card-tags">
-          {card.laws.map((law) => (
-            <Link
-              key={law.slug}
-              href={law.hasPage ? `/seadused/${law.slug}` : `/tulemused?q=${encodeURIComponent(law.canonicalName)}`}
-              className="tag tag-law"
-            >
-              {law.canonicalName}
-            </Link>
-          ))}
-          {card.recipient && (
-            <Link
-              href={`/tulemused?recipient=${encodeURIComponent(card.recipient.slug)}`}
-              className="tag tag-recipient"
-            >
-              {card.recipient.name}
-            </Link>
-          )}
-        </div>
-      )}
-      {!isThread && (
-        <p className="card-links">
-          <Link href={detailHref} className="btn btn-secondary btn-small">
-            Loe lähemalt
-          </Link>
-          {/* Töövõit and news cards keep a single internal CTA: their external
-              source is either the generic koda.ee work-wins listing (useless) or a
-              duplicate of the detail page. Opinions/context keep a specific source
-              link, but never the generic work-wins URL. */}
-          {card.url && !card.isAchievement && card.kind !== "uudis" && !isGenericWorkWinUrl(card.url) && (
-            <TrackedLink
-              href={card.url}
-              sessionId={sessionId}
-              contentItemId={card.id}
-              className="item-source-link"
-            >
-              {card.sourceCtaLabel} →
-            </TrackedLink>
-          )}
-        </p>
-      )}
-      {/* v1.2: nested/timeline children fold in here, never as flat cards.
-          Always collapsed by default — the user expands to see the timeline. */}
-      {card.nested && card.nested.length > 0 && (
-        <NestedWorkWins items={card.nested} isThread={isThread} fromQuery={fromQuery} />
-      )}
-    </article>
-  );
-}
 
 /**
  * A result group with incremental "Näita rohkem" pagination:
@@ -222,7 +52,7 @@ function Section({
       {sub && <p className="section-sub">{sub}</p>}
       <LoadMore key={`${title}:${resetKey}`} batchSize={LOAD_MORE_BATCH} initialVisibleCount={initialVisibleCount}>
         {cards.map((card) => (
-          <Card key={card.id} card={card} sessionId={sessionId} fromQuery={fromQuery} admin={admin} />
+          <PublicResultCard key={card.id} card={card} sessionId={sessionId} fromQuery={fromQuery} admin={admin} />
         ))}
       </LoadMore>
     </section>
