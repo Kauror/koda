@@ -218,9 +218,7 @@ function Section({
 
   return (
     <section className="results-section">
-      <h2>
-        {title} <span className="result-count">({cards.length})</span>
-      </h2>
+      <h2>{title}</h2>
       {sub && <p className="section-sub">{sub}</p>}
       <LoadMore key={`${title}:${resetKey}`} batchSize={LOAD_MORE_BATCH} initialVisibleCount={initialVisibleCount}>
         {cards.map((card) => (

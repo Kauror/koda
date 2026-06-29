@@ -223,6 +223,8 @@ check("results page does not show capped total copy", () => {
   const source = readFileSync("src/app/tulemused/page.tsx", "utf8");
   assert.ok(!source.includes("results-count-line"));
   assert.ok(!source.includes("Kuvame neist"));
+  assert.ok(!source.includes("result-count"));
+  assert.ok(!source.includes("({cards.length})"));
 });
 
 check("search form allows topic-only search (sector not mandatory) and hides removed type filters", () => {
