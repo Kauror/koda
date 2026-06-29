@@ -192,6 +192,133 @@ async function clearImportedContent() {
   await prisma.tag.deleteMany({ where: { type: { in: [TagType.valdkond, TagType.tegevusala, TagType.tapsustus, TagType.oigusakt] } } });
 }
 
+async function snapshotExistingAdminOverrides(): Promise<number> {
+  const rows = await prisma.contentItem.findMany({
+    where: {
+      externalId: { not: null },
+      OR: [
+        { adminDisplayTitleOverride: { not: null } },
+        { adminSummaryOverride: { not: null } },
+        { adminTextOverride: { not: null } },
+        { adminVisibilityOverride: { not: null } },
+        { adminHiddenReason: { not: null } },
+        { adminReviewNote: { not: null } },
+      ],
+    },
+    select: {
+      id: true,
+      externalId: true,
+      adminDisplayTitleOverride: true,
+      adminSummaryOverride: true,
+      adminTextOverride: true,
+      adminVisibilityOverride: true,
+      adminHiddenReason: true,
+      adminReviewNote: true,
+    },
+  });
+
+  for (const row of rows) {
+    if (!row.externalId) continue;
+    await prisma.adminContentOverride.upsert({
+      where: { contentExternalId: row.externalId },
+      create: {
+        contentExternalId: row.externalId,
+        contentItemId: row.id,
+        titleOverride: row.adminDisplayTitleOverride,
+        summaryOverride: row.adminSummaryOverride,
+        textOverride: row.adminTextOverride,
+        visibilityOverride: row.adminVisibilityOverride,
+        hiddenReason: row.adminHiddenReason,
+        updatedBy: "import-snapshot",
+      },
+      update: {
+        contentItemId: row.id,
+        titleOverride: row.adminDisplayTitleOverride,
+        summaryOverride: row.adminSummaryOverride,
+        textOverride: row.adminTextOverride,
+        visibilityOverride: row.adminVisibilityOverride,
+        hiddenReason: row.adminHiddenReason,
+        updatedBy: "import-snapshot",
+      },
+    });
+  }
+  return rows.length;
+}
+
+function splitAdminList(value: string | null): string[] {
+  return (value ?? "")
+    .split(/[;\n,|]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+async function ensureTag(type: TagType, name: string): Promise<string> {
+  const slug = slugify(name) || "x";
+  const tag = await prisma.tag.upsert({
+    where: { type_slug: { type, slug } },
+    create: { type, slug, name },
+    update: { name },
+  });
+  return tag.id;
+}
+
+async function reapplyPublishedAdminOverrides(): Promise<number> {
+  const overrides = await prisma.adminContentOverride.findMany();
+  let applied = 0;
+  for (const override of overrides) {
+    const item = await prisma.contentItem.findUnique({
+      where: { externalId: override.contentExternalId },
+      select: { id: true },
+    });
+    if (!item) continue;
+
+    await prisma.contentItem.update({
+      where: { id: item.id },
+      data: {
+        adminDisplayTitleOverride: override.titleOverride,
+        adminSummaryOverride: override.summaryOverride,
+        adminTextOverride: override.textOverride,
+        adminVisibilityOverride: override.visibilityOverride,
+        adminHiddenReason: override.hiddenReason,
+        publicActivityFilterTags: override.publicActivityFilterTags,
+        publicActivityDisplayTags: override.publicActivityDisplayTags,
+        publicSectorPageAllowed: override.publicSectorPageAllowed,
+      },
+    });
+
+    const topicValues = splitAdminList([override.topicPrimary, override.topicSecondary].filter(Boolean).join(";"));
+    const activityValues = splitAdminList([override.activityPrimary, override.activitySecondary].filter(Boolean).join(";"));
+    if (topicValues.length || activityValues.length) {
+      const existing = await prisma.contentTag.findMany({
+        where: { contentItemId: item.id, tag: { type: { in: [TagType.valdkond, TagType.tegevusala] } } },
+        select: { tagId: true },
+      });
+      if (existing.length) {
+        await prisma.contentTag.deleteMany({
+          where: { contentItemId: item.id, tagId: { in: existing.map((row) => row.tagId) } },
+        });
+      }
+      const tagIds = [
+        ...(await Promise.all(topicValues.map((name) => ensureTag(TagType.valdkond, name)))),
+        ...(await Promise.all(activityValues.map((name) => ensureTag(TagType.tegevusala, name)))),
+      ];
+      if (tagIds.length) {
+        await prisma.contentTag.createMany({
+          data: [...new Set(tagIds)].map((tagId) => ({ contentItemId: item.id, tagId })),
+          skipDuplicates: true,
+        });
+      }
+    }
+
+    await prisma.adminContentOverride.update({
+      where: { contentExternalId: override.contentExternalId },
+      data: { contentItemId: item.id },
+    });
+    applied++;
+  }
+  return applied;
+}
+
 async function upsertTaxonomy(all: StagedContent[]): Promise<Map<string, string>> {
   const map = new Map<string, string>();
   for (const { type, pick } of TAXONOMY) {
@@ -462,6 +589,10 @@ async function main() {
   const backup = await writeBackup();
   log(`  backup: ${backup.path}`);
 
+  log("Snapshotting existing admin overrides...");
+  const snapshottedOverrides = await snapshotExistingAdminOverrides();
+  log(`  admin overrides snapshotted=${snapshottedOverrides}`);
+
   log("Replacing old imported content...");
   await clearImportedContent();
 
@@ -480,6 +611,10 @@ async function main() {
   const policyThreads = await importPolicyThreads(links.policyThreads, staged.all, idByExternal, tagMap);
   log(`  policy threads: created=${policyThreads.created} memberships=${policyThreads.memberships} skipped=${policyThreads.skipped}`);
 
+  log("Reapplying published admin overrides...");
+  const appliedAdminOverrides = await reapplyPublishedAdminOverrides();
+  log(`  admin overrides applied=${appliedAdminOverrides}`);
+
   const dbTotal = await prisma.contentItem.count();
   writeReport(analysis, links, {
     dryRun: false,
@@ -488,6 +623,7 @@ async function main() {
     created,
     evidenceLinks,
     policyThreads,
+    appliedAdminOverrides,
     dbTotal,
   });
 
@@ -501,6 +637,7 @@ type ImportResult = {
   created: number;
   evidenceLinks: { publicRelated: number; duplicateLinks: number; skipped: number };
   policyThreads?: { created: number; memberships: number; skipped: number };
+  appliedAdminOverrides?: number;
   dbTotal: number;
 };
 
@@ -547,6 +684,7 @@ function writeReport(analysis: Analysis, links: LinkWorkbook, r: ImportResult) {
     missingTargets: analysis.links.missingTargets,
     evidenceLinksCreated: r.evidenceLinks,
     policyThreadsCreated: r.policyThreads ?? null,
+    adminOverridesApplied: r.appliedAdminOverrides ?? 0,
     smokeTest: {
       total: analysis.smokeTest.rows.length,
       pass: analysis.smokeTest.rows.filter((t) => t.status === "PASS").length,

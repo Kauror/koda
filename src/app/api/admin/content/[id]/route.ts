@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { redirectBack, requireAdmin, str } from "@/lib/adminRoute";
+import { redirectBack, redirectTo, requireAdmin, str } from "@/lib/adminRoute";
+import {
+  adminActor,
+  parseAdminOverrideForm,
+  publishAdminContentDraft,
+  validateAdminOverrideInput,
+} from "@/lib/admin-content-overrides";
 
 export const dynamic = "force-dynamic";
 
@@ -17,29 +23,66 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     return NextResponse.json({ error: "Content item not found" }, { status: 404 });
   }
 
-  if (action === "update") {
-    const dateStr = str(form, "date");
-    const manualWeight = parseInt(str(form, "manualWeight") ?? "0", 10) || 0;
-    const tagIds = form.getAll("tagIds").filter((v): v is string => typeof v === "string");
+  if (action === "save-draft" || action === "publish") {
+    const externalId = item.externalId ?? item.id;
+    const input = parseAdminOverrideForm(form);
+    const validation = validateAdminOverrideInput(input);
+    if (!validation.ok) {
+      return NextResponse.json({ error: "Invalid admin override", details: validation.errors }, { status: 400 });
+    }
 
+    await prisma.adminContentDraft.upsert({
+      where: { contentExternalId: externalId },
+      create: {
+        contentExternalId: externalId,
+        contentItemId: item.id,
+        ...validation.value,
+        updatedBy: adminActor(),
+      },
+      update: {
+        contentItemId: item.id,
+        ...validation.value,
+        publishedAt: null,
+        updatedBy: adminActor(),
+      },
+    });
+
+    if (action === "publish") {
+      const result = await publishAdminContentDraft(item.id, adminActor());
+      if (!result.ok) {
+        return NextResponse.json({ error: "Publish failed", details: result.errors }, { status: 400 });
+      }
+      return redirectTo(req, `/admin/content/${id}?published=1`);
+    }
+    return redirectTo(req, `/admin/content/${id}?saved=1`);
+  } else if (action === "clear-published") {
+    const externalId = item.externalId ?? item.id;
     await prisma.$transaction([
+      prisma.adminContentOverride.deleteMany({ where: { contentExternalId: externalId } }),
+      prisma.adminContentDraft.deleteMany({ where: { contentExternalId: externalId } }),
       prisma.contentItem.update({
         where: { id },
         data: {
-          displayTitle: str(form, "displayTitle"),
-          summary: str(form, "summary"),
-          date: dateStr ? new Date(dateStr) : null,
-          manualWeight: Math.max(-2, Math.min(2, manualWeight)),
-          isEvergreen: form.get("isEvergreen") != null,
-          isHidden: form.get("isHidden") != null,
+          adminDisplayTitleOverride: null,
+          adminSummaryOverride: null,
+          adminTextOverride: null,
+          adminVisibilityOverride: null,
+          adminHiddenReason: null,
+          publicActivityFilterTags: null,
+          publicActivityDisplayTags: null,
+          publicSectorPageAllowed: null,
         },
       }),
-      prisma.contentTag.deleteMany({ where: { contentItemId: id } }),
-      prisma.contentTag.createMany({
-        data: tagIds.map((tagId) => ({ contentItemId: id, tagId })),
-        skipDuplicates: true,
+      prisma.adminAuditLog.create({
+        data: {
+          action: "content_override_clear",
+          contentExternalId: externalId,
+          contentItemId: id,
+          actor: adminActor(),
+        },
       }),
     ]);
+    return redirectTo(req, `/admin/content/${id}?cleared=1`);
   } else if (action === "add-to-group") {
     const topicGroupId = str(form, "topicGroupId");
     const relationType = str(form, "relationType") ?? "history";

@@ -64,7 +64,12 @@ function buildDateCoverage(): DateCoverage | null {
   return { byYear, newest, oldest, missing };
 }
 
-export default async function AdminDataBundlePage() {
+export default async function AdminDataBundlePage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ published?: string }>;
+}) {
+  const params = searchParams ? await searchParams : {};
   const result = readBundleOverview();
 
   if (!result.ok) {
@@ -99,6 +104,11 @@ export default async function AdminDataBundlePage() {
   return (
     <>
       <h1>Andmepakett</h1>
+      {params.published && (
+        <div className="card notice">
+          <p style={{ margin: 0 }}>Andmepakett saadeti live'i. Vaata lõplikku impordistaatust lehelt Staatus.</p>
+        </div>
+      )}
       <div className="card">
         <p className="section-sub">
           Read-only ülevaade genereeritud andmepaketist. See leht ei impordi andmeid ega muuda avalikke tulemusi.
@@ -205,6 +215,11 @@ export default async function AdminDataBundlePage() {
           <Link href="/api/admin/data-review/export?format=csv" className="btn btn-secondary btn-small">
             Ekspordi otsused CSV
           </Link>
+          <form method="post" action="/api/admin/data-bundle/publish" className="inline-form">
+            <button type="submit" className="btn btn-small">
+              Kinnita ja saada live'i
+            </button>
+          </form>
         </div>
       </section>
 

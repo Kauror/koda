@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { headers } from "next/headers";
+import { isAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { anonymizeIp, hashUserAgent } from "@/lib/hash";
 import {
@@ -106,11 +107,13 @@ function Card({
   card,
   sessionId,
   fromQuery,
+  admin,
   compact,
 }: {
   card: ResultCard;
   sessionId: string | null;
   fromQuery: string;
+  admin: boolean;
   compact?: boolean;
 }) {
   const detailHref = `/sisu/${encodeURIComponent(card.detailId)}${
@@ -127,6 +130,11 @@ function Card({
       }`}
     >
       <Badges card={card} />
+      {admin && (
+        <Link href={`/admin/content/${card.id}`} className="admin-edit-link" title="Muuda halduses">
+          Muuda
+        </Link>
+      )}
       <h3>{isThread ? card.title : <Link href={detailHref}>{card.title}</Link>}</h3>
       {card.summary && <p className="item-excerpt small">{card.summary}</p>}
       {!compact && (card.laws.length > 0 || card.recipient) && (
@@ -193,6 +201,7 @@ function Section({
   cards,
   sessionId,
   fromQuery,
+  admin,
   resetKey,
   initialVisibleCount,
 }: {
@@ -201,6 +210,7 @@ function Section({
   cards: ResultCard[];
   sessionId: string | null;
   fromQuery: string;
+  admin: boolean;
   resetKey: string;
   initialVisibleCount?: number;
 }) {
@@ -214,7 +224,7 @@ function Section({
       {sub && <p className="section-sub">{sub}</p>}
       <LoadMore key={`${title}:${resetKey}`} batchSize={LOAD_MORE_BATCH} initialVisibleCount={initialVisibleCount}>
         {cards.map((card) => (
-          <Card key={card.id} card={card} sessionId={sessionId} fromQuery={fromQuery} />
+          <Card key={card.id} card={card} sessionId={sessionId} fromQuery={fromQuery} admin={admin} />
         ))}
       </LoadMore>
     </section>
@@ -258,6 +268,7 @@ export default async function ResultsPage({
   });
   const [session, results, options] = await Promise.all([sessionPromise, resultsPromise, optionsPromise]);
   const sessionId = session?.id ?? null;
+  const admin = await isAdmin();
 
   if (!results) {
     return (
@@ -402,6 +413,7 @@ export default async function ResultsPage({
           cards={results.achievements}
           sessionId={sessionId}
           fromQuery={fromQuery}
+          admin={admin}
           resetKey={editQuery}
           initialVisibleCount={results.achievementsInitialVisible}
         />
@@ -410,6 +422,7 @@ export default async function ResultsPage({
           cards={results.positions}
           sessionId={sessionId}
           fromQuery={fromQuery}
+          admin={admin}
           resetKey={editQuery}
         />
         <Section
@@ -417,6 +430,7 @@ export default async function ResultsPage({
           cards={results.news}
           sessionId={sessionId}
           fromQuery={fromQuery}
+          admin={admin}
           resetKey={editQuery}
         />
         <Section
@@ -424,6 +438,7 @@ export default async function ResultsPage({
           cards={results.context}
           sessionId={sessionId}
           fromQuery={fromQuery}
+          admin={admin}
           resetKey={editQuery}
         />
 

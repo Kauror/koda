@@ -384,5 +384,44 @@ check("isGenericWorkWinUrl matches the generic koda.ee work-wins listing only", 
   assert.equal(isGenericWorkWinUrl(undefined), false);
 });
 
+check("public cards expose admin-only edit shortcuts", () => {
+  const source = readFileSync("src/app/tulemused/page.tsx", "utf8");
+  assert.ok(source.includes("isAdmin"));
+  assert.ok(source.includes("admin-edit-link"));
+  assert.ok(source.includes("/admin/content/${card.id}"));
+  assert.ok(source.includes("admin={admin}"));
+});
+
+check("public detail pages expose admin-only edit shortcuts", () => {
+  const source = readFileSync("src/app/sisu/[id]/page.tsx", "utf8");
+  assert.ok(source.includes("isAdmin"));
+  assert.ok(source.includes("admin-edit-link"));
+  assert.ok(source.includes("/admin/content/${item.id}"));
+});
+
+check("achievement nesting keeps v1.2 rows out of flat result cards", () => {
+  const source = readFileSync("src/lib/search.ts", "utf8");
+  assert.ok(source.includes("resolveWorkWinNesting"));
+  assert.ok(source.includes("NestedWorkWinCard"));
+  assert.ok(source.includes("displayType"));
+  assert.ok(source.includes("parentToovoitId"));
+  assert.ok(source.includes("timelineStage"));
+});
+
+check("admin content editor uses draft and publish override controls", () => {
+  const source = readFileSync("src/app/admin/(dash)/content/[id]/page.tsx", "utf8");
+  assert.ok(source.includes("save-draft"));
+  assert.ok(source.includes("publish"));
+  assert.ok(source.includes("CROSS_SECTOR_ACTIVITY"));
+  assert.ok(source.includes("publicActivityDisplayTags"));
+  assert.ok(source.includes("adminTextOverride"));
+  assert.ok(!source.includes('name="companySize"'));
+});
+
+check("data bundle page exposes explicit live publish action", () => {
+  const source = readFileSync("src/app/admin/(dash)/data-bundle/page.tsx", "utf8");
+  assert.ok(source.includes("/api/admin/data-bundle/publish"));
+});
+
 console.log(`\n[test] ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exitCode = 1;

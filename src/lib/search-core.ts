@@ -118,6 +118,7 @@ export type Candidate = {
   adminDisplayTitleOverride: string | null;
   summary: string | null;
   adminSummaryOverride: string | null;
+  adminTextOverride?: string | null;
   companyRelevance: string | null;
   kodaPosition: string | null;
   sourceEvidence: string | null;

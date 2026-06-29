@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { isAdmin } from "@/lib/auth";
 import {
   getContentDetail,
   type ContentDetail,
@@ -185,6 +186,7 @@ export default async function ContentDetailPage({
   const { from } = await searchParams;
   const item = await getContentDetail(id);
   if (!item) notFound();
+  const admin = await isAdmin();
 
   const backHref = from ? `/tulemused?${from}` : "/";
 
@@ -195,6 +197,11 @@ export default async function ContentDetailPage({
           <Link href={backHref} className="btn btn-secondary btn-small">
             ← Tagasi otsingusse
           </Link>
+          {admin && (
+            <Link href={`/admin/content/${item.id}`} className="admin-edit-link" title="Muuda halduses">
+              Muuda
+            </Link>
+          )}
           <p className="item-meta" style={{ marginTop: 16 }}>
             {item.isAchievement ? (
               <span className="badge win-badge">✓ Töövõit</span>

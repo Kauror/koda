@@ -208,7 +208,9 @@ model ContentItem {
   // prefer the override when set, e.g. adminDisplayTitleOverride ?? displayTitle.
   adminDisplayTitleOverride String?
   adminSummaryOverride      String?
+  adminTextOverride         String?
   adminVisibilityOverride   Boolean? // null = follow import gating; true/false = force public/hidden
+  adminHiddenReason         String?
   adminReviewNote           String?
 
   // AI-ready fields, unused while AI_ENABLED=false.
@@ -230,6 +232,7 @@ model ContentItem {
   // supporting/duplicate target (to).
   evidenceLinksFrom ContentEvidenceLink[] @relation("EvidenceFrom")
   evidenceLinksTo   ContentEvidenceLink[] @relation("EvidenceTo")
+  adminDrafts       AdminContentDraft[]
 
   // Achievement enrichment (1:1) for canonical töövõit rows. The standalone
   // enrichment workbook never becomes its own content row – it lives here.
@@ -247,7 +250,9 @@ model ContentItem {
   @@index([recipientFilterGroup])
   @@index([canonicalPolicyThreadId])
   @@index([parentToovoitId])
+  @@index([parentCandidateId])
   @@index([policyThreadKey])
+  @@index([displayType])
 }
 
 model TopicGroup {
@@ -383,6 +388,96 @@ model DataReviewDecision {
   @@index([decision])
   @@index([contentExternalId])
   @@index([reviewedAt])
+}
+
+model AdminContentOverride {
+  id                String   @id @default(cuid())
+  contentExternalId String   @unique
+  contentItemId     String?
+  titleOverride     String?
+  summaryOverride   String?
+  textOverride      String?
+  visibilityOverride Boolean?
+  hiddenReason      String?
+  topicPrimary      String?
+  topicSecondary    String?
+  activityPrimary   String?
+  activitySecondary String?
+  publicActivityFilterTags  String?
+  publicActivityDisplayTags String?
+  publicSectorPageAllowed   String?
+  updatedBy         String?
+  publishedAt       DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([contentExternalId])
+  @@index([visibilityOverride])
+}
+
+model AdminContentDraft {
+  id                String   @id @default(cuid())
+  contentExternalId String   @unique
+  contentItemId     String?
+  titleOverride     String?
+  summaryOverride   String?
+  textOverride      String?
+  visibilityOverride Boolean?
+  hiddenReason      String?
+  topicPrimary      String?
+  topicSecondary    String?
+  activityPrimary   String?
+  activitySecondary String?
+  publicActivityFilterTags  String?
+  publicActivityDisplayTags String?
+  publicSectorPageAllowed   String?
+  reviewerNote      String?
+  updatedBy         String?
+  publishedAt       DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  contentItem ContentItem? @relation(fields: [contentItemId], references: [id], onDelete: SetNull)
+
+  @@index([contentExternalId])
+  @@index([publishedAt])
+}
+
+model AdminAuditLog {
+  id                String   @id @default(cuid())
+  action            String
+  contentExternalId String?
+  contentItemId     String?
+  oldValues         Json?
+  newValues         Json?
+  actor             String?
+  publishRunId      String?
+  createdAt         DateTime @default(now())
+
+  publishRun AdminPublishRun? @relation(fields: [publishRunId], references: [id], onDelete: SetNull)
+
+  @@index([contentExternalId])
+  @@index([action])
+  @@index([createdAt])
+  @@index([publishRunId])
+}
+
+model AdminPublishRun {
+  id             String    @id @default(cuid())
+  kind           String
+  status         String    @default("started")
+  startedAt      DateTime  @default(now())
+  finishedAt     DateTime?
+  actor          String?
+  validationJson Json?
+  reportJson     Json?
+  backupName     String?
+  errorSummary   String?
+
+  auditLogs AdminAuditLog[]
+
+  @@index([kind])
+  @@index([status])
+  @@index([startedAt])
 }
 
 /// Evidence graph linking a public result to its supporting opinions, annual

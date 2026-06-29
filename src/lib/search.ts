@@ -88,6 +88,7 @@ export function toCandidate(row: ContentWithTags): Candidate {
     adminDisplayTitleOverride: row.adminDisplayTitleOverride,
     summary: row.summary,
     adminSummaryOverride: row.adminSummaryOverride,
+    adminTextOverride: row.adminTextOverride,
     companyRelevance: row.companyRelevance,
     kodaPosition: row.kodaPosition,
     sourceEvidence: row.sourceEvidence,

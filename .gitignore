@@ -21,6 +21,7 @@ next-env.d.ts
 # See data/import/README.md for what goes here.
 data/import/*.xlsx
 data/import/*.txt
+!data/import/koda_taxonomy_rules_v1_2.txt
 data/import/reports/
 data/import/bundles/
 data/import/backups/

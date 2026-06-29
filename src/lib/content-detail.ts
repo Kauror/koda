@@ -48,6 +48,8 @@ export type EvidenceRow = {
   sourceUrl: string | null;
   sourceCtaLabel: string;
   isPublic: boolean;
+  timelineYear?: number | null;
+  timelineStage?: string | null;
 };
 
 /** A nested/timeline töövõit row shown under a parent or in a policy thread (v1.2). */
@@ -131,6 +133,7 @@ export type ContentDetail = {
     duplicates: EvidenceRow[];
     relatedOpinions: EvidenceRow[];
     topicHistory: EvidenceRow[];
+    timeline: EvidenceRow[];
   };
 };
 
@@ -159,6 +162,8 @@ function toEvidenceRow(c: Candidate, isPublic: boolean): EvidenceRow {
     sourceUrl: publicSourceUrl(c),
     sourceCtaLabel: sourceCtaLabel(c),
     isPublic,
+    timelineYear: c.timelineYear ?? null,
+    timelineStage: c.timelineStage ?? null,
   };
 }
 
@@ -348,7 +353,7 @@ function candidateText(c: Candidate): string {
  * Fewer or zero related items is acceptable and preferred over loose matches.
  */
 export async function getEvidenceForContent(parent: Candidate): Promise<ContentDetail["evidence"]> {
-  const empty = { annualContext: [], duplicates: [], relatedOpinions: [], topicHistory: [] };
+  const empty = { annualContext: [], duplicates: [], relatedOpinions: [], topicHistory: [], timeline: [] };
 
   // (1) Explicit evidence links touching this item (both directions). All of
   // these link types are curated/cluster relations created at import time, so
@@ -387,6 +392,25 @@ export async function getEvidenceForContent(parent: Candidate): Promise<ContentD
     });
     for (const row of threadRows) if (isEvidenceEligible(row)) threadIds.add(row.id);
   }
+
+  const parentKeys = [parent.externalId, parent.id].filter((value): value is string => !!value);
+  const timelineRows = await prisma.contentItem.findMany({
+    where: {
+      id: { not: parent.id },
+      OR: [
+        { parentToovoitId: { in: parentKeys } },
+        { parentCandidateId: { in: parentKeys } },
+        ...(parent.policyThreadKey ? [{ policyThreadKey: parent.policyThreadKey }] : []),
+      ],
+      displayType: { in: ["nested_under_existing_card", "nested_under_new_series_card", "timeline_item_in_policy_thread"] },
+    },
+    include: candidateInclude,
+    take: 12,
+  });
+  const timeline = timelineRows
+    .filter((row) => isEvidenceEligible(row) && isPublicSearchEligible(row))
+    .map((row) => toEvidenceRow(toCandidate(row), true))
+    .sort((a, b) => (a.timelineYear ?? a.year ?? 0) - (b.timelineYear ?? b.year ?? 0));
 
   // (3) Same confirmed law tag + shared narrow topic + strong text overlap.
   const lawSlugs = parent.oigusaktid.map((t) => t.slug);
@@ -458,10 +482,10 @@ export async function getEvidenceForContent(parent: Candidate): Promise<ContentD
   for (const entry of lawTopicMatches) pushUnique(entry); // (3) law + topic + text
   const topicHistory = ordered.slice(0, TOPIC_HISTORY_CAP).map((x) => toEvidenceRow(x.c, x.eligible));
 
-  if (!annualContext.length && !duplicates.length && !topicHistory.length) {
+  if (!annualContext.length && !duplicates.length && !topicHistory.length && !timeline.length) {
     return empty;
   }
   // relatedOpinions kept empty: opinions now only surface via explicit curated
   // (supporting_opinion) links, which already flow through topicHistory above.
-  return { annualContext, duplicates, relatedOpinions: [], topicHistory };
+  return { annualContext, duplicates, relatedOpinions: [], topicHistory, timeline };
 }

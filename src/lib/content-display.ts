@@ -10,6 +10,7 @@ export type DisplayFields = {
   adminDisplayTitleOverride: string | null;
   summary: string | null;
   adminSummaryOverride: string | null;
+  adminTextOverride?: string | null;
   companyRelevance: string | null;
   kodaPosition: string | null;
   excerpt: string | null;
@@ -26,6 +27,7 @@ export type SourceLabelFields = {
 export type PublicDetailSummaryFields = {
   summary?: string | null;
   adminSummaryOverride?: string | null;
+  adminTextOverride?: string | null;
   kodaPosition?: string | null;
   companyRelevance?: string | null;
   sourceEvidence?: string | null;
@@ -43,6 +45,7 @@ export function publicTitle(i: DisplayFields): string {
 export function publicSummary(i: DisplayFields): string | null {
   return (
     i.adminSummaryOverride ||
+    i.adminTextOverride ||
     i.summary ||
     i.companyRelevance ||
     i.kodaPosition ||
@@ -210,6 +213,8 @@ function isKodaWebLikeRow(i: PublicDetailSummaryFields): boolean {
 export function getPublicDetailSummary(i: PublicDetailSummaryFields): string | null {
   const manual = cleanDetailCandidate(i.adminSummaryOverride);
   if (manual) return manual;
+  const manualText = cleanDetailCandidate(i.adminTextOverride);
+  if (manualText) return manualText;
 
   if (isKodaWebLikeRow(i)) {
     return (
@@ -237,6 +242,7 @@ export function getPublicDetailSummary(i: PublicDetailSummaryFields): string | n
 export function getCleanPublicExcerpt(i: {
   summary?: string | null;
   adminSummaryOverride?: string | null;
+  adminTextOverride?: string | null;
   kodaPosition?: string | null;
   companyRelevance?: string | null;
   sourceEvidence?: string | null;

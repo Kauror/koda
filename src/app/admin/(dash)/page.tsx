@@ -5,6 +5,11 @@ export const dynamic = "force-dynamic";
 
 const ADMIN_TOOLS: { href: string; title: string; description: string }[] = [
   {
+    href: "/admin/content",
+    title: "Sisu haldus",
+    description: "Otsi, muuda, peida ja avalda töövõite, arvamusi ning uudiseid.",
+  },
+  {
     href: "/admin/site-texts",
     title: "Avalehe tekstid",
     description: "Muuda avalehe ja avalikku teksti.",
@@ -18,6 +23,11 @@ const ADMIN_TOOLS: { href: string; title: string; description: string }[] = [
     href: "/admin/data-review",
     title: "Andmeülevaatus",
     description: "Kinnita või lükka tagasi soovitatud kategooria- ja tegevusalamuudatused.",
+  },
+  {
+    href: "/admin/audit",
+    title: "Muudatuste logi",
+    description: "Vaata admini avaldamisi, peitmisi ja override'i muudatusi.",
   },
   {
     href: "/admin/ingestion",

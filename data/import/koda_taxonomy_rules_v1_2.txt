@@ -1,0 +1,4297 @@
+KODA DATA PACKAGE v1.2 TAXONOMY AND APP-IMPORT RULES COPY
+Package version: v1.2
+Underlying taxonomy guide version: v2.1.6 + v1.1 data-quality/app-import/display addendum + v1.2 töövõidud backfill/nesting/display addendum
+Created: 2026-06-28 09:32:39 UTC
+Supersedes: v1.1
+Note: Public topic labels remain v2.1.6. App-facing activity/sector schema remains the v1.1 locked 12-sector model. v1.2 does not change the public topic taxonomy or public sector taxonomy. v1.2 adds töövõidud backfill, nesting/timeline display, parent/thread, news-only relevance and content-links update rules.
+
+================================================================================
+================================================================================
+0.C V1.2 KIIRKOKKUVÕTE
+================================================================================
+
+v1.2 ei muuda avalike teemade põhistruktuuri. Avalike teemade nimekiri jääb v2.1.6 järgi samaks.
+
+v1.2 ei muuda app-facing tegevusala/sektori skeemi. Koda app'i public activity / sector väljades kasutatakse jätkuvalt v1.1 lukustatud 12 sektorit:
+1. `Tööstus ja tootmine`
+2. `Kaubandus`
+3. `Ehitus ja kinnisvara`
+4. `Transport ja logistika`
+5. `Majutus, toitlustus ja turism`
+6. `Info, side ja IT`
+7. `Põllumajandus, metsandus ja kalandus`
+8. `Finants, kindlustus ja krediit`
+9. `Haridus ja koolitus`
+10. `Tervishoid, farmaatsia ja meditsiiniseadmed`
+11. `Äriteenused ja kutseteenused`
+12. `Meedia, loome- ja kultuurisektor`
+
+`Kõik tegevusalad / valdkondadeülene` jääb sisemiseks cross-sector/fallback väärtuseks. Seda ei kuvata avaliku display tag'ina.
+
+v1.2 on import/display/nesting addendum, mitte uus avalik taksonoomia. v1.2 lisab töövõitude backfill'i ja appi kuvamisloogika reeglid pärast `koda_toovoidud_v1_5_BACKFILL_REVIEWED_TARGETED_REPAIR_SLIM.xlsx` loomist.
+
+Peamised v1.2 täiendused:
+1. Lisatud originaal-90 töövõidu locked baseline reegel: esialgsed 90 kureeritud töövõitu jäävad usaldusväärseks baasiks ning neid ei kustutata, nõrgendata ega kirjutata vaikimisi ümber.
+2. Lisatud töövõitude backfill'i ridade päritolu mudel: `original_90_locked`, `phase2_new_standalone`, `phase2_series_nested`.
+3. Lisatud töövõitude kuvamistüüpide mudel: `standalone_card`, `nested_under_existing_card`, `nested_under_new_series_card`, `timeline_item_in_policy_thread`.
+4. Lisatud duplicate-versus-series reegel: eri aasta, eri etapp, osaline võit vs lõppvõit või erinev õiguslik otsus ei ole automaatselt duplikaat.
+5. Lisatud parent/thread väljad: `policy_thread_key`, `policy_thread_title`, `parent_toovoit_id`, `parent_candidate_id`, `timeline_year`, `timeline_stage`.
+6. Lisatud reegel, et series/nested read imporditakse ainult siis, kui app toetab `display_type`, parent-ID ja policy-thread timeline kuvamist.
+7. Lisatud news-only-but-relevant reegel: tähtis uudis või valitsuse/Riigikogu etapp võib jääda web/news kihis kõrge prioriteediga nähtavaks, kuid töövõiduks saab see ainult juhul, kui Koja roll, konkreetne tulemus, ettevõtja väärtus ja eristuvus on kinnitatud.
+8. Lisatud content-links update requirement: uued `TOOVOIT-BACKFILL-*` read nõuavad `koda_content_links` faili uuendamist, et allikauudised, arvamused, vanemad töövõidud ja policy-thread'id oleksid seotud.
+9. Lisatud töövõitude v1.2 import-contract täpsustus: production import peaks kasutama slim workbook'i struktuuri `README`, `toovoidud_app_import`, `toovoidud_excluded_review`, `news_only_recommendations`, `field_mapping`.
+10. Lisatud v1.2 regressioonitestid töövõitude nesting'u, backfill'i, news-only ridade ja content-links seoste kontrolliks.
+
+================================================================================
+V1.1 SISU SÄILITAMISE MÄRKUS
+================================================================================
+
+Allpool säilib v1.1 reeglistiku terviktekst. v1.2 lisad ei asenda avalike teemade ega 12 sektori skeemi; need täpsustavad töövõitude backfill'i, nested/timeline kuvamist, content-links uuendamist ja import-contract'i.
+
+================================================================================
+================================================================================
+0.A V1.1 KIIRKOKKUVÕTE
+================================================================================
+
+v1.1 ei muuda avalike teemade põhistruktuuri. Avalike teemade nimekiri jääb v2.1.6 järgi samaks.
+
+v1.1 muudab ja lukustab ainult app-facing tegevusala/sektori skeemi. Edaspidi kasutatakse
+public activity / sector väljades ainult Koda app'i 12 sektorit. v1.0-s olnud uuemad, aga appi
+UI-ga vastuolus olevad activity label'id eemaldatakse app-facing standardist.
+
+Koda app'i 12 lubatud sektorit on:
+1. `Tööstus ja tootmine`
+2. `Kaubandus`
+3. `Ehitus ja kinnisvara`
+4. `Transport ja logistika`
+5. `Majutus, toitlustus ja turism`
+6. `Info, side ja IT`
+7. `Põllumajandus, metsandus ja kalandus`
+8. `Finants, kindlustus ja krediit`
+9. `Haridus ja koolitus`
+10. `Tervishoid, farmaatsia ja meditsiiniseadmed`
+11. `Äriteenused ja kutseteenused`
+12. `Meedia, loome- ja kultuurisektor`
+
+Peamised v1.1 täiendused:
+1. Lukustatud üks ja ainus app-facing public sector schema: 12 sektorit, mitte v1.0 split-label skeem.
+2. Eemaldatud app-facing standardist label'id `Ehitus`, `Kinnisvara`, `Energeetika`, `Põllumajandus ja toit`,
+   `Finants ja kindlustus`, `Haridus`, `Professionaalsed teenused` ja `Avalik sektor ja riigihanked`.
+3. Kinnitatud, et `Kõik tegevusalad / valdkondadeülene` on sisemine cross-sector/fallback väärtus,
+   mitte avalik display tag.
+4. Kinnitatud, et cross-sector sisu ei tohi reostada kitsaste sektorite top-tulemusi, kuid võib olla
+   sektorilehtedel demoted/fallback tulemusena `LIMITED`, kui otseseid või värskeid sektori tulemusi napib.
+5. Täpsustatud, et `Avalik sektor ja riigihanked` ei ole app-facing tegevusala; `Riigihanked ja avaliku sektoriga äri`
+   jääb eraldi topic'uks, kui sisu puudutab päriselt riigihankeid või avaliku sektoriga äri.
+6. Lisatud v1.1 mapping reegel: vanu või vahepealseid activity label'eid ei kasutata otse, vaid need kas
+   kaardistatakse 12 sektorisse tugeva allikatõendi korral või jäetakse cross-sector/LIMITED väärtuseks.
+
+================================================================================
+0.A.1 V1.0 KIIRKOKKUVÕTE AJALOOLISEKS VIITEKS
+================================================================================
+
+v1.0 ei muuda avalike teemade põhistruktuuri. Avalike teemade nimekiri jääb v2.1.6 järgi samaks.
+
+v1.0 muudab v0.9.4 paketi production app-import rulebook'iks. Peamine uus osa on lõpliku v1
+app-import lepingu lukustamine pärast kolme slim import-kihi valmimist:
+
+- `koda_opinions_v0_10_10_APP_IMPORT_SLIM.xlsx`
+- `koda_web_content_v1.xlsx`
+- `koda_toovoidud_v1.xlsx`
+
+Peamised v1.0 täiendused:
+1. Lisatud ametlik v1 app-import failide struktuur: `README`, import sheet, excluded/review sheet ja `field_mapping`.
+2. Täpsustatud, et app impordib ainult vastava `*_app_import` sheet'i ridu; excluded/review sheet'id on kontrolliks, mitte avalikuks importimiseks.
+3. Lisatud lõpliku slim-faili tulbavaliku reegel: app'i ei tohi kaasa minna patch-logid, before/after väljad, raw scrape/full text, ajutised QA väljad, vanad snapshotid ega töötluse sisemised märkused.
+4. Lukustatud web v1 importileping: `web_app_import` on web/news source of truth ning `web_excluded_review` jääb kontrollileheks.
+5. Lukustatud töövõidud v1 importileping: `toovoidud_app_import` sisaldab ainult public/import-candidate töövõite ning `toovoidud_excluded_review` sisaldab välja jäetud või review ridu.
+6. Lukustatud opinions slim importileping: `opinions_app_import` on importitav kiht ning excluded sheet jääb kontrolliks.
+7. Lisatud v1 release gate: enne app importi peavad summary, activity, visibility, date, related/source ja known-regression QA olema läbitud ning import-candidate väljades ei tohi olla tühje otsuseid.
+8. Lisatud versioning reegel: tööfailid võivad jääda `v0.10.x` seeriasse, kuid app-import/slim release'id kannavad `v1`, järgmised parandused `v1.1`, `v1.2` jne.
+9. Täpsustatud, et v1 slim import ei tähenda andmestiku ajaloolise auditi kustutamist; auditifailid säilivad eraldi tööfailidena, kuid ei ole app'i importallikas.
+10. Kinnitatud v0.9.4 põhimõtted: canonical activity labels, app-safe activity fields, web/news content roles, anti-template summary QA, person/company != sector relevance, relevance-first ranking and conservative patch workflow remain in force.
+
+================================================================================
+0.B V0.9.4 KIIRKOKKUVÕTE
+================================================================================
+
+v0.9.4 ei muuda avalike teemade põhistruktuuri. Avalike teemade nimekiri jääb v2.1.6 järgi samaks.
+
+v0.9.4 muudab ja täpsustab andmekvaliteedi, app-importimise, avalike tegevusalade, web/news rollide,
+summary-kvaliteedi, nähtavuse/ranking'u ning patch-workflow reegleid.
+
+Peamised v0.9.4 täiendused:
+1. Lisatud kanooniline app-facing tegevusalade nimekiri ja legacy activity label mapping.
+2. Täpsustatud, et app ei tohi kasutada vana `activity_primary` välja otse sektorilehtede filtrina.
+3. Lisatud app-safe tegevusala väljad: `public_activity_filter_tags`, `public_activity_display_tags`,
+   `public_activity_reason`, `public_activity_evidence`, `public_sector_page_allowed`,
+   `public_activity_confidence`.
+4. Lisatud web/news content-role reeglid, et eristada poliitikauudiseid, töövõite, organisatsiooniuudiseid,
+   roundup'e, vanu üritusi, Ukraina/annetuste toetussisu, arhiivilehti ja mitte-artikleid.
+5. Lisatud range person/company != sector relevance reegel. Isiku tööandja või juhatuse liikme ettevõtte
+   tegevusala ei loo uudisele sektoriseost.
+6. Lisatud summary-väljade rollid ja kvaliteediväravad. `lead_text` ja `first_substantive_paragraph` ei ole
+   avalik app summary.
+7. Lisatud anti-template ja anti-meta-language fail-listid nii opinions kui web/news kihtidele.
+8. Lisatud sektorilehtede nähtavuse ja ranking'u lõppväljad ning põhimõte: relevance first, recency second.
+9. Lisatud patch-workflow reegel: üks väli või kitsas seotud väljade grupp korraga, kumulatiivsed patch'id,
+   sisemised QA checkpoint'id ja konservatiivne stop-condition.
+10. Lisatud regressiooninäited: Oliver Väärtnõu juhatuse esimehe uudis, Ukraina varustusabi, suhkrumaks,
+    Uudiste arhiiv ja kvartaliülevaated.
+
+
+KODA TAXONOMY V2.1.6 ANDMESTIKE JUHEND
+Eesti Kaubandus-Toostuskoda / Koda value-discovery tool
+Versioon: v2.1.6
+Eesmärk: kasutada juhendina uute andmekihtide loomisel, eriti opinions, web, toovoidud ja annual reports kihtide puhul.
+
+================================================================================
+0. VERSIOONI MUUDATUSED
+================================================================================
+
+v0.9.2 täiendab v0.9.1/v2.1.6 juhendit andmekvaliteedi, avaliku kuvamise, import/digest gate'ide ja otsingu/ranking'u reeglitega. Avalike teemade nimekirja, tegevusalade struktuuri, stance'i, value_type'i ega work_win_type'i ei muudeta. Tegemist on data-quality/import/display addendum'iga, mitte uue avaliku teemataxonomy'ga.
+
+Peamised uued parandused v0.9.2-s:
+1. Lisatud töövõitude kuupäevamudel: `source_date`, `source_year`, `achievement_year`, `effective_date`, `deadline_date`, `display_date`, `display_date_precision`, `date_confidence`, `date_basis`, `date_review_required`.
+2. Lisatud suspicious-date gate: import/current/placeholder kuupäevad, 2026-06-24, 2026-12-31, 31.12 year-end placeholder'id ja tõendamata tulevikukuupäevad ei tohi minna avalikku täpse töövõidu kuupäevana.
+3. Täpsustatud, et õigusliku muudatuse jõustumiskuupäev või tulevane tähtaeg ei ole automaatselt töövõidu achievement/display kuupäev.
+4. Lisatud public_readiness väärtused: `public_ready`, `public_ready_limited`, `needs_review`, `blocked`, `archive_only`.
+5. Lisatud tegevusala/public news relevance gate: konkreetse tegevusala lehel peab otsene või tugev secondary tegevusala vaste eelistuma cross-sector fallback'ile; parem kuvada vähem tulemusi kui valesid.
+6. Lisatud "Veel samal teemal" / related-content range reegel: broad topic/activity overlap ei ole piisav; vaja on approved link'i, sama policy thread'i, sama konkreetset õigusakti + tugevat sisulist vastet või muud kõrge confidence seost.
+7. Lisatud töövõitude ranking'u reegel: ranking on relevance-first, verified-recency second; nõrga või tõendamata kuupäevaga töövõit ei tohi saada recency boost'i.
+8. Täpsustatud recipient/ministry metadata kasutust app'is ja importides: recipient on advanced metadata-filter, mitte topic ega tegevusala määraja.
+9. Lisatud uue info digestimise QA workflow: raw source -> extraction -> taxonomy classification -> recipient normalization -> date verification -> thread/link matching -> public readiness gate -> public index.
+10. Lisatud konkreetsed blocker-testid panditulumaksu, börsiettevõtete soolise tasakaalu, haridus/koolitus uudiste, põllumajandus/metsandus/kalandus uudiste ja broad fallback tulemuste kontrolliks.
+
+v2.1.6 täiendab v2.1.5 juhendit full-run'i ja baseline-lock QA põhjal ilmnenud metadata, extraction ja recipient-normalization reeglitega. Avalike teemade nimekirja, sektorite struktuuri, stance'i, value_type'i ja work_win_type'i ei muudeta. Tegemist on metadata and extraction addendum'iga, mitte uue avaliku teemataxonomy'ga.
+
+Peamised uued parandused v2.1.6-s:
+1. Lisatud boilerplate-skip reegel: `first_substantive_paragraph` ei tohi olla Koja üldtutvustus, liikmeskonna kirjeldus, kontaktiplokk, viisakusavang, adressaadi rida ega muu dokumendi vormiline osa.
+2. Täpsustatud, et esimene sisuline lõik on esimene lõik, mis kirjeldab eelnõu, poliitikaettepanekut, probleemi, Koja seisukohta, ettepanekut või ettevõtjate mõju.
+3. Lisatud recipient/ministry metadata schema: `recipient_raw`, `recipient_normalized`, `recipient_filter_group`, `recipient_type`, `recipient_secondary`, `recipient_normalization_review_required`.
+4. Lisatud recipient normalization reeglid ajalooliste ja lühendatud ministeeriuminimede ühtlustamiseks, säilitades alati raw adressaadi väärtuse.
+5. Täpsustatud maksud vs finants piir: sotsiaalmaks, tulumaks, TSD vormid, maksudeklaratsioonid, töötuskindlustusmaksete deklaratsioonid ja maksuseadustest tulenevad vormid kuuluvad üldjuhul `Maksud ja tasud` alla, mitte `Finants, krediit ja rahapesu nõuded`.
+6. Lisatud nõue, et ministeeriumi/adressaadi filter on metadata-filter, mitte topic taxonomy. Recipient ei tohi ise määrata `topic_primary` väärtust.
+
+v2.1.5 täiendab v2.1.4 juhendit 150+50 validation-run'i põhjal ilmnenud protsessi- ja kvaliteedireeglitega. Avalike teemade, sektorite, stance'i, value_type'i ja work_win_type'i struktuuri ei muudeta.
+
+v2.1.4 parandas v2.1.3 150-realise piloodi pohjal ilmnenud andmekvaliteedi ja klassifitseerimise probleemid.
+
+Avalike teemade nimekirja ei muudeta. Koik varasemad v2.1.3 reeglid jaavad kehtima.
+
+Peamised uued parandused v2.1.5-s:
+1. Lisatud approved baseline / regression-control reegel: QA-ga kinnitatud ridu ei tohi järgmises validation-run'is vabalt ümber klassifitseerida. Need tuleb lukustada ja kasutada regressioonikontrollina.
+2. Lisatud põhimõte, et "Maksud ja tasud" ei ole fallback-topic. Maksud/tasud primary on lubatud ainult siis, kui maksu-, tasu-, aktsiisi-, riigilõivu-, MTA maksukäsitluse või maksuadministreerimise küsimus on sisuline põhifookus.
+3. Lisatud secondary-topic centrality reegel: secondary topic on lubatud ainult siis, kui see aitab sisuliselt avastatavust ja on tekstis keskne. Parem tühi secondary kui vale secondary.
+4. Laiendatud MTA/tolli reeglit: "Maksu- ja Tolliamet", "MTA" või "maksuhaldur" ei tohi anda primary, secondary ega situation tag'i "Eksport/toll", "ekspordib" või "impordib", kui sisuline teema on maksukäsitlus või maksuhaldus.
+5. Lisatud validation-run'i metoodika: kinnitatud baseline'i ei reklassifitseerita; uued read klassifitseeritakse eraldi; lõppfailis peab olema regression_check_approved_baseline.
+6. Lisatud uued title-domain triggerid: kindlustusandjate kriisilahendus, hea õigusloome ja normitehnika eeskiri, andmeliidu strateegia/tehisaru/andmeruum, seadme ohutuse seadus, keskkonnahoidlikud riigihanked, kutsesüsteemi reform, pakendiregister ja süsiniku sidumise sertifitseerimine.
+7. Täpsustatud, et õigusloome kvaliteedi teema võib olla internal-only/public_filter_visible=false, kuid andmestikus tuleb see korrektselt märkida, kui title-domain sellele viitab.
+
+Peamised uued parandused v2.1.4-s:
+1. Lisatud source-binding kontroll enne klassifitseerimist. source_file, title, PDF-ist ekstraheeritud tekst, evidence_short, zip_path ja file_sha256 peavad viitama samale dokumendile. Kui need ei klapi, ei tohi rida normaalselt klassifitseerida.
+2. Lisatud source_binding_audit ja source_quality_flag = source_text_mismatch reegel. Vale tekstiga seotud rida peab minema review queue'i.
+3. Planeeringud/load reegel muutub veel rangemaks: allowlist-sona uksi ei piisa. Planeeringu/luba/ehituse trigger peab olema pealkirjas, failinimes, oigusakti nimes, esimestes sisulistes loikudes voi olema dokumendi peamine moju.
+4. Kui planning-audit voi law-audit markib rea review'd vajavaks, peab sama kajastuma pohitabeli review_required valjas voi eraldi audit_review_required valjas.
+5. Lisatud TAIKS alias: "Teadus- ja arendustegevuse ja innovatsiooni korralduse seadus" ning varasem "Teadus- ja arendustegevuse ning innovatsiooni korralduse seadus".
+6. Lisatud law seed/candidate: Krediiditeabe jagamise seadus.
+7. GDPR / isikuandmete kaitse uldmaarus voib olla confirmed EU act, kui title, failinimi voi esimene sisuline loik seda nimetab.
+8. Kui title/failinimi nimetab konkreetset seadust, kuid law_tags_confirmed seda ei sisalda, peab rida minema review'sse.
+9. Kui source binding on vigane, ei tohi teema, seaduse, stance'i ega sectori klassifikatsiooni avalikuks kasutuseks usaldada.
+
+Varasemad v2.1.3 pohimuudatused jaavad kehtima:
+- Planeeringud/load ja vajab_lube_planeeringuid on allowlist-pohised.
+- Uldine sona "luba" ei ole piisav.
+- Burokraatia vahendamine saab tugeva primary-prioriteedi.
+- Title/failinime law-match on korgema prioriteediga kui body-only luhend.
+- Tsiviilkriisi ja riigikaitse seadus on law seed-list'is.
+- Tuleohutusulevaatus ei ole raamatupidamise/auditi teema.
+- Avaliku teenistuse seadus ei tohi minna kliima alla ilma sisulise kliima/keskkonnaseoseta.
+- Alkoholi/tubaka aktsiis ja alkoholiregistri burokraatia eristatakse keskse moju jargi.
+- v2.1.2 law-tagging reeglid jaavad kehtima: luhendipohised ESS/IKS/AOKS/KMS/TuMS false-positive'id tuleb ara hoida, stale evidence tuleb eemaldada ning confirmed law tag peab olema keskne ja tugeva toendiga.
+
+================================================================================
+1. ULDPOHIMOTE
+================================================================================
+
+Taksonoomia peab aitama ettevotjal kiiresti aru saada:
+- kas teema puudutab tema tegevusala;
+- millist ettevotluspoliitika voi oigusloome teemat see kasitleb;
+- milliste oigusaktidega see on sisuliselt seotud;
+- mida Koda on selles teemas teinud voi saavutanud;
+- milline info on varskem ja toenaoliselt asjakohasem.
+
+Avalikus kasutuses on kolm peamist leidmise viisi:
+1. Tegevusala
+2. Teema / valdkond
+3. Oigusakt kui tag/advanced vaade, mitte esilehe pohifilter
+
+Sisemiselt kogutakse lisaks:
+- koja seisukoht ehk stance;
+- value_type;
+- toovoidu tuup;
+- EL-seotus;
+- oigusloome kvaliteediprobleemid;
+- event relevance;
+- source quality;
+- kuupaevad ja sorteerimisloogika;
+- QA ja review valjad.
+
+================================================================================
+2. AVALIKUD TEEMAD / VALDKONNAD
+================================================================================
+
+Igal sisureal peab olema tapselt uks topic_primary.
+Lisaks voib olla kuni kolm topic_secondary vaartust.
+Secondary voib puududa.
+
+Avalikud teemad:
+
+1. Ettevotluskeskkond ja konkurentsivoime
+ID: ettevotluskeskkond_konkurentsivoime
+Kasutus: uldine majanduskeskkond, konkurentsivoime, ettevotlusvabadus, majanduskasv, konkurentsiseadus, avaliku sektori efektiivsus, investeerimiskindlus.
+
+2. Euroopa Liidu poliitika ja oigus
+ID: euroopa_liidu_poliitika_oigus
+Kasutus: EL eelarve, EL tulevik, Euroopa Komisjoni tooprogramm, EMSK/EESC, EL poliitikasuund, EL uldine konkurentsivoime. Konkreetse direktiivi/maaruse puhul enamasti secondary/eu_related, mitte primary.
+
+3. Maksud ja tasud
+ID: maksud_tasud
+Kasutus: maksukoormus, maksumuudatused, riigiloivud, aktsiisid, maamaks, julgeolekumaks, keskkonnatasud kui tasu/maksukoormus on oluline.
+
+4. Raamatupidamine, audit ja aruandlus
+ID: raamatupidamine_audit_aruandlus
+Kasutus: e-arved, majandusaasta aruanne, audit, ulevaatus, aruandluskohustused, kestlikkusaruandlus kui aruandluskohustus.
+
+5. Burokraatia ja halduskoormus
+ID: burokraatia_halduskoormus
+Kasutus: liigne aruandlus, registrid, vormid, kohustuste lihtsustamine, halduskoormuse vahendamine, uute ebamoistlike nouete arahoidmine.
+
+6. Toojoud ja toooigus
+ID: toojoud_toooigus
+Kasutus: TLS, tooaeg, puhkeaeg, paindlik tooaeg, tahtajalised toolepingud, kollektiivlepingud, toovaidlused, tootaja ja tooandja oigused/kohustused.
+
+7. Tootervishoid ja tooohutus
+ID: tootervishoid_tooohutus
+Kasutus: TTOS, tervisekontroll, tookeskkond, tootervishoiuarstid, tooohutus, radoon tooruumides, tooandja tervisekohustused.
+
+8. Valistoojoud ja ranne
+ID: valistoojoud_ranne
+Kasutus: VMS, sisserande piirarv, elamisload, viisad, luhiajaline tootamine, valismaalaste palkamine.
+
+9. Haridus, oskused ja jarelkasv
+ID: haridus_oskused_jarelkasv
+Kasutus: kutseharidus, kutsesusteem, OSKA, taiskasvanute koolitus, koolide ja ettevotete koostoo, oskustoojoud, praktika kui hariduse/oskuste teema.
+
+10. Teadus, arendus ja innovatsioon
+ID: teadus_arendus_innovatsioon
+Kasutus: TAI, tootearendus, innovatsioon, katsetamise reeglid, sandbox'id, teadusasutuste rahastus, rakendusuuringud.
+
+11. Pakend, jaatmed ja ringmajandus
+ID: pakend_jaatmed_ringmajandus
+Kasutus: jaatmereform, pakendiaruandlus, pakendiseadus, ringmajandus, jaatmetasud.
+
+12. Tootjavastutus ja probleemtooted
+ID: tootjavastutus_probleemtooted
+Kasutus: patareid, akud, probleemtooted, tootjavastutuse kohustused. Parent: pakend, jaatmed ja ringmajandus.
+
+13. Kliima, kestlikkus ja rohenouded
+ID: kliima_kestlikkus_rohenouded
+Kasutus: kliimakindla majanduse seadus, kliimaeesmargid, kliimateekaardid, CBAM, EUDR, CSDDD sisuline kestlikkuse/keskkonnamojuga osa.
+
+14. Energia, elektrihind ja varustuskindlus
+ID: energia_elektrihind_varustuskindlus
+Kasutus: elektrihind, taastuvenergia tasu, suurtarbijad, gaas, energiamajanduse arengukava, varustuskindlus, universaalteenus.
+
+15. Digi, andmed, AI ja kuberturvalisus
+ID: digi_andmed_ai_kuberturvalisus
+Kasutus: AI, andmed, kuberturvalisus, digitaalsed aruandlussusteemid, e-arved, infosusteemid, elektrooniline side, andmekaitse, digitaalsed avalikud teenused, digitaalsed tooteandmed.
+
+16. E-kaubandus ja tarbijakaitse
+ID: ekaubandus_tarbijakaitse
+Kasutus: e-pood, tarbija oigused, taganemisnupp, parandamiskohustus, puudusega toode tarbija vaates, tarbijalepingud, tarbijavaidlused, reklaam tarbijale.
+
+17. Finants, krediit ja rahapesu nouded
+ID: finants_krediit_rahapesu
+Kasutus: pangandus, krediit, krediidiinkassod, rahapesu, sanktsioonide finantsjarelevalve, hilinenud maksed, maksetahtajad, kapitalinouded finantssektoris.
+
+18. Arioigus, uhingud ja ariregister
+ID: arioigus_uhingud_ariregister
+Kasutus: ariseadustik, ariregister, juhtide vastutus, uhinguoigus, osakapital, tegelikud kasusaajad, MSUS, EU Inc / 28. reziim kui arioiguslik algatus.
+
+19. Intellektuaalomand ja autorioigus
+ID: intellektuaalomand_autorioigus
+Kasutus: autorioigus, patendid, kaubamargid, erakopeerimise tasu, intellektuaalomandi tasud.
+
+20. Tootenouded, ohutus ja turujarelevalve
+ID: tootenouded_ohutus_turujarelevalve
+Kasutus: tooteohutus, tehnilised nouded, vastavushindamine, turujarelevalve, kestlike toodete nouded, meditsiiniseadmed, toidumargistus, kemikaalid, vaarismetalltooted.
+
+21. Planeeringud, load, ehitus ja kinnisvara
+ID: planeeringud_load_ehitus_kinnisvara
+Kasutus: ruumiline planeerimine, ehitus, kinnisvara, maa, ehitusluba, keskkonnaluba, taristu, varjendid ja ehitusnouded.
+
+22. Riigihanked ja avaliku sektoriga ari
+ID: riigihanked_avaliku_sektori_ari
+Kasutus: riigihangete seadus, hankemenetlused, vaidlustuskomisjon, avaliku sektoriga lepingud.
+
+23. Toetused, riigiabi ja investeeringud
+ID: toetused_riigiabi_investeeringud
+Kasutus: riigiabi, toetused, investeeringutoetused, suurinvesteeringud, EL toetusmeetmed, EIS meetmed.
+
+24. Eksport, rahvusvahelistumine ja toll
+ID: eksport_rahvusvahelistumine_toll
+Kasutus: eksport, import, toll, sanktsioonid kaubanduse kontekstis, rahvusvaheline konkurentsivoime. Selged Koja teenused nagu ATA, paritolusertifikaat ja EEN partnerotsing ei ole eraldi poliitikateemad.
+
+25. Alkohol, tubakas ja aktsiisikaubad
+ID: alkohol_tubakas_aktsiisikaubad
+Kasutus: alkohol, tubakas, nendega seotud piirangud, alkoholiregister, tubakatoodete nouded, alkoholi- ja tubakaaktsiis. Kutuseaktsiis ei kuulu siia automaatselt.
+
+26. Riigikaitse, julgeolek ja kriisikindlus
+ID: riigikaitse_julgeolek_kriisikindlus
+Kasutus: riigikaitse, julgeolek, kriisivalmidus, varjendid, tsiviilkriis, Ukraina toetamine, kaitsetoostus, elutahtsad teenused, reservvaelased.
+
+27. Oigusloome kvaliteet ja kaasamine
+ID: oigusloome_kvaliteet_kaasamine
+Avalik filtris: ei, internal-only.
+Kasutus: liiga kiire menetlus, puudulik kaasamine, VTK puudumine, ebaselge joustumine, halduskoormuse hindamata jatmine, hea oigusloome rikkumine.
+
+================================================================================
+3. PRIMARY JA SECONDARY TEEMA REEGLID
+================================================================================
+
+1. topic_primary kirjeldab peamist sisulist moju ettevotjale.
+2. topic_primary ei tohi tuleneda uksikust juhuslikust marksonast.
+3. topic_secondary voib olla 0 kuni 3 vaartust.
+4. Secondary teema peab andma kasutajale reaalse leidmise vaartuse.
+5. Secondary teemasid ei lisata igaks juhuks.
+6. Kui dokumendis on mitu teemat, vali primary selle jargi, mis on peamine kohustus, risk, kulu, voimalus voi Koja seisukoha objekt.
+7. Kui primary on ebakindel, kasuta review_required=true ja selgita review_reasonis.
+
+================================================================================
+4. EL REEGEL
+================================================================================
+
+Euroopa Liidu poliitika ja oigus ei tohi muutuda primary-teemaks ainult seetottu, et tekst mainib direktiivi, maarust voi Euroopa Komisjoni ettepanekut.
+
+Primary peab jaama sisulise ettevotjamojuga teemale.
+
+EL voib olla secondary voi eu_related=true juhul, kui tekstis on selgelt:
+- EL oigusakt;
+- direktiiv;
+- maarus;
+- Euroopa Komisjoni ettepanek;
+- EL eelarve voi rahastus;
+- EMSK/EESC;
+- EL poliitika;
+- EL oiguse ulevotmine.
+
+EL voib olla primary ainult siis, kui tekst ise on EL uldpoliitika, EL eelarve, EL tuleviku, EMSK, Euroopa Komisjoni tooprogrammi voi EL konkurentsivoime kohta.
+
+Puhas Eesti riigisisene teema ei saa EU secondary tagi ainult selleparast, et valdkond on Euroopas reguleeritud.
+
+================================================================================
+5. ROHELINE RAAMAT REEGEL
+================================================================================
+
+"Roheline raamat" on dokumendituup, mitte kliimaindikaator.
+
+See ei tahenda automaatselt:
+- kliimapoliitikat;
+- roheteemat;
+- kestlikkust;
+- keskkonnanoudeid.
+
+Teema maaratakse sisu jargi.
+
+Naide:
+- Vaimse tervise roheline raamat -> mitte Kliima.
+- Kui fookus on tooandja, tootaja, tookeskkond voi tootervishoid, siis primary: Tootervishoid ja tooohutus.
+- Kui fookus on laiem rahvatervis ja seos ettevotjaga on ebaselge, siis review_required=true.
+
+================================================================================
+6. PLANEERINGUD, LOAD, EHITUS JA KINNISVARA - RANGE REEGEL
+================================================================================
+
+Kasuta teemat Planeeringud, load, ehitus ja kinnisvara ainult juhul, kui tekst sisuliselt puudutab:
+- ruumilist planeerimist;
+- ehitust;
+- kinnisvara;
+- maa kasutust;
+- ehitusluba;
+- keskkonnaluba;
+- ehitus- voi kasutusluba;
+- varjendeid voi hoonete nouded;
+- taristut;
+- fuusilist asukohta voi fuusilist arendust;
+- kinnisvaraga seotud kohustust.
+
+Ara kasuta seda teemat jargmistel juhtudel:
+- elamisluba;
+- tooluba;
+- viisa;
+- uldine tegevusluba;
+- menetlusluba;
+- registrikohustus;
+- riigihanked;
+- toovaidlused;
+- elektrooniline side;
+- universaalteenus;
+- konkurentsiseadus;
+- strateegiad voi tegevuskavad;
+- iga dokumendis esinev sona "luba".
+
+Situation tag vajab_lube_planeeringuid lisatakse ainult siis, kui ettevotte probleem on pariselt planeering, ehitus, maa, keskkonnaluba, ehitusluba, taristu voi kinnisvara.
+
+Elamisluba, viisa, luhiajaline tootamine ja tooluba kuuluvad teemasse Valistoojoud ja ranne, mitte planeeringute/lubade alla.
+
+================================================================================
+7. DIGI, ANDMED, AI JA KUBERTURVALISUS - RANGE REEGEL
+================================================================================
+
+Kasuta Digi, andmed, AI ja kuberturvalisus ainult siis, kui tekst sisuliselt puudutab:
+- AI;
+- andmeid;
+- isikuandmeid;
+- kuberturvalisust;
+- e-arveid;
+- digitaalset aruandlust;
+- platvormimajandust;
+- infosusteeme;
+- elektroonilist sidet;
+- digitaalset identiteeti;
+- automatiseeritud susteeme;
+- digitaalseid avalikke teenuseid;
+- digitaalset tootepassi;
+- online dispute resolutioni, kui see on keskne;
+- digitaalselt asutatavat voi hallatavat ariuhingut, kui see on keskne.
+
+Ara lisa digi-secondary teemat ainult seetottu, et:
+- menetlus toimub elektrooniliselt;
+- olemas on register;
+- dokument mainib andmeid juhuslikult;
+- taotlus esitatakse veebis;
+- haldusmenetluses kasutatakse infosusteemi, aga poliitiline probleem ei ole digitaalne.
+
+================================================================================
+8. E-KAUBANDUS JA TARBIJAKAITSE VS TOOTENOUDDED
+================================================================================
+
+Kasuta E-kaubandus ja tarbijakaitse primary-na, kui tekst puudutab:
+- puudusega toodet tarbija oiguste vaates;
+- tarbija oiguskaitsevahendeid;
+- tarbija oigusi;
+- e-poodi;
+- taganemisreegleid;
+- parandamiskohustust tarbija suhtes;
+- muuja kohustusi tarbija ees;
+- tarbijalepinguid;
+- tarbijavaidlusi;
+- reklaami tarbijale.
+
+Kasuta Tootenouded, ohutus ja turujarelevalve primary-na, kui peamine teema on:
+- tehniline vastavus;
+- tooteohutus;
+- turujarelevalve;
+- vastavushindamine;
+- tootepass;
+- tooteturule laskmise nouded;
+- toidumargistus;
+- kemikaalide nouded;
+- meditsiiniseadmed.
+
+Kestlike toodete, okodisaini, ringlussevotu ja tootepassi algatuste puhul on sageli primary Tootenouded ning secondary Kliima/kestlikkus ja vajadusel EL.
+
+================================================================================
+9. TOOJOU, TOOTERVISHOID JA VALISTOOJOU REEGLID
+================================================================================
+
+Toojoud ja toooigus:
+- toolepingud;
+- tooaeg ja puhkeaeg;
+- paindlik tooaeg;
+- tahtajalised lepingud;
+- kollektiivlepingud;
+- kollektiivne tootuli;
+- toovaidlused;
+- toovaidluse lahendamine;
+- tootaja ja tooandja oigused/kohustused.
+
+Tootervishoid ja tooohutus:
+- tervisekontroll;
+- tootervishoiuarstid;
+- tookeskkond;
+- tooohutus;
+- radoon tooruumides;
+- riskianaluus;
+- tooandja tervisekohustused.
+
+Valistoojoud ja ranne:
+- sisserande piirarv;
+- elamisluba;
+- viisa;
+- luhiajaline tootamine;
+- valismaalase tookohavahetus;
+- valistoojou palkamine;
+- VMS.
+
+Riigikaitse ei tohi saada primary-ks ainult seetottu, et tekst mainib kriitilisi teenuseid, katkemist, piiranguid voi sotsiaalset stabiilsust. Kui keskne teema on kollektiivne tootuli voi toovaidlus, on primary Toojoud ja toooigus.
+
+================================================================================
+10. RIIGIKAITSE, JULGEOLEK JA KRIISIKINDLUS
+================================================================================
+
+Kasuta seda teemat ainult siis, kui peamine teema on:
+- riigikaitse;
+- julgeolek;
+- kriisivalmidus;
+- tsiviilkriis;
+- varjendid;
+- elutahtsa teenuse toimepidevus;
+- kaitsetoostus;
+- reservvaelased;
+- Ukraina toetamine;
+- hadaolukorra seadus sisulise kriisikindluse kontekstis;
+- tsiviilkriisi ja riigikaitse seadus.
+
+Ara kasuta seda teemat ainult sonade "katkemine", "kriitiline", "piirang", "tookatkestus" voi "teenus" pohjal.
+
+================================================================================
+11. SECTOR / TEGEVUSALA REEGLID
+================================================================================
+
+Default:
+activity_primary = Koik tegevusalad / valdkondadeulene
+sector_scope = cross_sector
+
+Kasuta kitsast tegevusala ainult siis, kui kohustus, risk, kulu, soodustus voi moju on pariselt sektoripohine.
+
+Ara lisa tegevusala ainult seetottu, et:
+- naidetes mainitakse sektorit;
+- sektor voib samuti mojutatud olla;
+- Kojas on selles sektoris palju liikmeid;
+- teema on uldiselt ettevotetele oluline.
+
+Sector scope:
+- cross_sector: puudutab koiki voi enamikku ettevotteid;
+- mixed_sector: puudutab laiemalt, aga monele sektorile eriti tugevalt;
+- sector_specific: suunatud kindlale sektorile;
+- unknown_or_review: vajab ulevaatust.
+
+Avalikud app-facing tegevusala sektorid v1.1 järgi:
+- Tööstus ja tootmine
+- Kaubandus
+- Ehitus ja kinnisvara
+- Transport ja logistika
+- Majutus, toitlustus ja turism
+- Info, side ja IT
+- Põllumajandus, metsandus ja kalandus
+- Finants, kindlustus ja krediit
+- Haridus ja koolitus
+- Tervishoid, farmaatsia ja meditsiiniseadmed
+- Äriteenused ja kutseteenused
+- Meedia, loome- ja kultuurisektor
+
+Sisemine fallback / cross-sector väärtus:
+- Kõik tegevusalad / valdkondadeülene
+
+Reeglid:
+- App-facing public activity/filter/display väljades kasutatakse ainult ülaltoodud 12 sektorit.
+- `Kõik tegevusalad / valdkondadeülene` võib olla sisemine filter/fallback väärtus, kuid seda ei kuvata public display tag'ina.
+- Energeetika, riigihanked, õigusloome kvaliteet, maksud, tööjõud jms on topic'id või sisuteemad, mitte eraldi app-facing sektorid, kui need ei lange ühele 12 sektorist tugeva allikatõendi alusel.
+
+================================================================================
+12. SITUATION TAG REEGLID
+================================================================================
+
+Situation tagid ei ole avalik pohifilter, aga voivad hiljem aidata kasutajat segmenteerida.
+
+Lubatud tagid:
+- tooandja
+- kasutab_valistoojoudu
+- ekspordib
+- impordib
+- muub_epoes
+- osaleb_riigihangetel
+- pakendiettevotja
+- tekitab_jaatmeid
+- energiamahukas
+- vajab_lube_planeeringuid
+- esitab_aruandeid_andmeid
+- vajab_toetust_rahastust
+- reguleeritud_valdkond
+- maa_voi_kinnisvara_omanik
+- tegutseb_valisturgudel
+- vke
+- suurettevote
+- idu_voi_kasvuettevote
+
+Range reegel vajab_toetust_rahastust kohta:
+Kasuta ainult siis, kui teema puudutab toetuse, rahastuse, riigiabi, investeeringumeetme voi selge soodustuse taotlemist/saamist.
+
+Ara kasuta vajab_toetust_rahastust ainult seetottu, et tekstis on:
+- maksuvabastus;
+- tasu;
+- loiv;
+- maks;
+- kohustus;
+- annetuse maksukasitlus;
+- kulude kasv;
+- rahaline moju.
+
+Range reegel vajab_lube_planeeringuid kohta:
+Kasuta ainult planeeringu, ehituse, keskkonnaloa, maa, kinnisvara, taristu voi fuusilise arenduse korral. Mitte elamisloa, tooloa, viisa voi uldise tegevusloa korral.
+
+================================================================================
+13. OIGUSAKTIDE SUSTEEM
+================================================================================
+
+Oigusaktid on:
+- detailvaate tagid;
+- advanced leidmise alus;
+- eraldi seaduste vaate alus;
+- policy threadi ja seotud sisu uhendamise vahend.
+
+Need ei ole esilehe pohifilter.
+
+Oigusakti valjad:
+- law_name
+- law_abbreviation
+- jurisdiction: EE / EU
+- law_type: seadus / maarus / direktiiv / direktiivi ettepanek / maaruse ettepanek / strateegia / muu
+- law_tag_status: confirmed / candidate / rejected
+- confidence: high / medium / low
+- match_type: exact_name / inflected_name / abbreviation / title_match / filename_match / contextual_candidate
+- evidence_text
+- review_required
+
+================================================================================
+14. LAW TAG CENTRALITY REEGEL
+================================================================================
+
+Confirmed law tag ei tahenda "tekstis mainitud seadus".
+Confirmed law tag peab olema dokumendi peamine voi sisuliselt oluline oigusakt.
+
+Confirmed law tag on lubatud, kui oigusakt on:
+- pealkirjas;
+- failinimes;
+- arvamuse peamine eelnou;
+- esimeses sisulises loigus selgelt nimetatud;
+- voi tekstis selgelt keskne.
+
+Ara lisa confirmed law tagi, kui seadus:
+- on ainult korvalmainimine;
+- esineb ainult naitena;
+- on viidatud ainult uhes juhuslikus loigus;
+- on tuvastatud ainult luhendi juhusliku esinemise pohjal;
+- ei ole arvamuse peamine objekt.
+
+Kui oigusakt on toenaoline, kuid mitte piisavalt kinnitatud, kasuta law_tags_candidate.
+
+================================================================================
+15. LAW ABBREVIATION MATCH - V2.1.2 RANGE REEGEL
+================================================================================
+
+See on v2.1.2 koige olulisem parandus.
+
+Oigusakti luhendi match on kehtiv ainult siis, kui luhend esineb:
+- eraldiseisva tokenina;
+- case-sensitive kujul;
+- eelistatult uppercase kujul;
+- oiguslikus kontekstis;
+- ning seda toetab title, filename, full law name voi esimene sisuline loik.
+
+Ara matchi:
+- lowercase substringe;
+- sona sees olevaid tahekombinatsioone;
+- juhuslikke tahekombinatsioone;
+- tavasonade sees olevaid luhendeid;
+- body-only luhendit confirmed tagina.
+
+Luhikesed luhendid, mille puhul tuleb olla eriti range:
+- ESS
+- IKS
+- LS
+- AS
+- KMS
+- MKS
+- AOKS / AÕKS
+- TLS
+- TTOS
+- VMS
+- RHS
+- MSUS / MSÜS
+- HOS
+- AvTS
+- TuMS
+- SMS
+
+Reegel:
+Kui evidence on ainult "ess", "iks", "aoks", "aõks" voi muu luhike luhend body tekstis, ara loo confirmed law tagi.
+
+Sellisel juhul:
+- kas ara lisa law tagi uldse;
+- voi lisa candidate + review_required=true, kui umbritsev tekst selgelt viitab seadusele.
+
+Confirmed law tag peaks eelistama:
+1. pealkiri;
+2. failinimi;
+3. full law name;
+4. inflected full law name;
+5. esimene sisuline loik;
+6. alles siis luhend, ja ainult koos kontekstiga.
+
+Body-only abbreviation match ei ole piisav public-ready confirmed tagiks.
+
+Kui confirmed law tag pohineb ainult luhendil:
+- set review_required=true;
+- lisa review_reason: abbreviation_only_law_match;
+- v.a juhul, kui title/filename/full law name kinnitab sama seadust.
+
+================================================================================
+16. LAW EVIDENCE CLEANUP REEGEL
+================================================================================
+
+law_evidence_text voib sisaldada ainult nende oigusaktide toendeid, mis on law_tags_confirmed voi law_tags_candidate valjas.
+
+Kui law tag eemaldatakse confirmed/candidate valjast, tuleb eemaldada ka selle evidence.
+
+Stale evidence on viga.
+
+Naide:
+Kui Raamatupidamise seadus eemaldatakse law_tags_confirmed valjast, siis law_evidence_text ei tohi enam sisaldada "Raamatupidamise seadus: ...".
+
+================================================================================
+17. OIGUSAKTIDE SEED-LIST V2.1.2
+================================================================================
+
+Eesti oigusaktid:
+- Jaatmeseadus
+- Pakendiseadus
+- Toolepingu seadus / TLS / Toolepinguseadus / Toolepinguseaduse
+- Tootervishoiu ja tooohutuse seadus / TTOS
+- Maksukorralduse seadus / MKS
+- Tulumaksuseadus / TuMS
+- Kaibemaksuseadus / KMS
+- Sotsiaalmaksuseadus / SMS
+- Ariseadustik / AS / ÄS
+- Volaõigusseadus / VOS / VÕS
+- Ehitusseadustik / EhS
+- Planeerimisseadus / PlanS
+- Riigihangete seadus / RHS
+- Konkurentsiseadus / KonkS
+- Valismaalaste seadus / VMS
+- Isikuandmete kaitse seadus / IKS
+- Tarbijakaitseseadus / TKS
+- Reklaamiseadus / ReklS
+- Elektroonilise side seadus / ESS
+- Liiklusseadus / LS
+- Raamatupidamise seadus
+- Audiitortegevuse seadus
+- Toovoimetoetuse seadus
+- Pensionikogumise seadus
+- Kogumispensionide seadus
+- Keskkonnatasude seadus
+- Looduskaitseseadus
+- Metsaseadus
+- Maapoueseadus
+- Kliimakindla majanduse seadus
+- Elektrituruseadus
+- Maagaasiseadus
+- Alkoholi-, tubaka-, kutuse- ja elektriaktsiisi seadus
+- Tubakaseadus
+- Alkoholiseadus
+- Toiduseadus
+- Kemikaaliseadus
+- Toote nouetele vastavuse seadus
+- Autorioiguse seadus
+- Patendiseadus
+- Kaubamargiseadus
+- Karistusseadustik
+- Rahapesu ja terrorismi rahastamise tokestamise seadus / RahaPTS
+- Krediidiandjate ja -vahendajate seadus
+- Krediidiasutuste seadus
+- Kindlustustegevuse seadus
+- Majandustegevuse seadustiku uldosa seadus / MSUS / MSÜS
+- Mootorsoidukimaksu seadus
+- Julgeolekumaksu seadus
+- Maamaksuseadus
+- Riigiloivuseadus
+- Tootuskindlustuse seadus
+- Toovaidluse lahendamise seadus
+- Kollektiivlepingu seadus
+- Kollektiivse tootuli lahendamise seadus
+- Kutseseadus
+- Kutseoppeasutuse seadus
+- Taiskasvanute koolituse seadus
+- Teadus- ja arendustegevuse ning innovatsiooni korralduse seadus / TAIKS
+- Kuberturvalisuse seadus
+- Avaliku teabe seadus / AvTS
+- Infouhiskonna teenuse seadus
+- Vaartpaberituru seadus
+- Krediidiinkassode ja -ostjate seadus
+- Kriisiolukorra ja riigikaitse seadus
+- Tsiviilkriisi ja riigikaitse seadus
+- Hadaolukorra seadus / HOS
+- Tuleohutuse seadus
+- Paasteseadus
+- Atmosfaariõhu kaitse seadus / AOKS / AÕKS
+- Toostusheite seadus
+- Keskkonnamoju hindamise ja keskkonnajuhtimissusteemi seadus / KeHJS
+- Uhisveevargi ja -kanalisatsiooni seadus / UVVKS / ÜVVKS
+- Tolliseadus
+- Ravimiseadus
+- Vaarismetalltoodete seadus
+- Mittetulundusuhingute seadus
+- Riigivaraseadus
+- Rahvusvahelise sanktsiooni seadus
+- Kohtute seadus
+- Tsiviilkohtumenetluse seadustik
+- Kriminaalmenetluse seadustik
+- Vaarteomenetluse seadustik
+
+EL oigusaktid / algatused:
+- GDPR / isikuandmete kaitse uldmaarus
+- CSRD
+- CSDDD
+- Omnibus-paketid
+- DSA
+- DMA
+- AI Act
+- Data Act
+- Cyber Resilience Act
+- NIS2
+- CBAM
+- EUDR / raadamismaarus
+- PPWR / pakendi ja pakendijaatmete maarus
+- ViDA
+- Green Claims / rohevaidete direktiiv
+- Right to Repair / parandamisoiguse direktiiv
+- Consumer Credit Directive
+- Late Payment Regulation / Directive
+- BEFIT
+- EL peakontori maksususteemi algatus VKEdele
+- EU Inc. / 28. reziim
+- EL riigihangete direktiivid
+- EL taksonoomia maarus
+- EL mitmeaastane finantsraamistik
+- Patareide ja akude maarus / Batteries Regulation
+
+================================================================================
+18. STANCE
+================================================================================
+
+Lubatud stance vaartused:
+- toetab
+- ei_toeta
+- toetab_tingimusel
+- kriitiline
+- esitas_ettepanekud
+- neutraalne_info
+- toovoit_saavutatud
+
+Reeglid:
+- Kasuta uks primary stance.
+- esitas_ettepanekud: Koda teeb parandusettepanekuid, kuid ei toeta/ei torju kogu algatust selgelt.
+- kriitiline: olulised probleemid, aga mitte tingimata taielik vastuseis.
+- ei_toeta: Koda on selgelt vastu.
+- toetab_tingimusel: Koda toetab juhul, kui tingimusi muudetakse.
+- neutraalne_info: selgitav voi informatiivne sisu.
+- Ara loo vaartust "jalgib_teemat".
+
+================================================================================
+19. VALUE TYPE
+================================================================================
+
+Lubatud value_type:
+- huvide_esindamine
+- toovoit
+- hoiatus_voi_risk
+- selgitus
+- kaasa_raakimise_kutse
+- teenus_voi_tugi
+- taust_ja_analuus
+
+value_type on sisemine vali, mitte avalik pohifilter.
+
+================================================================================
+20. TOOVOIDU TUUBID
+================================================================================
+
+Toovoidul voib olla:
+- work_win_type_primary
+- work_win_type_secondary
+
+Lubatud vaartused:
+- kohustus_ara_hoitud
+- maksukulu_ara_hoitud
+- tahtaeg_pikendatud
+- noue_leevendatud
+- aruandlus_lihtsustatud
+- paindlikkus_lisatud
+- ettevotja_oigus_selgem
+- toetus_voi_soodustus_saadud
+- konkurentsivoime_kaitstud
+- ettepanek_arvesse_voetud
+- halduskoormus_vahendatud
+- rakendamine_lihtsustatud
+
+================================================================================
+21. OIGUSLOOME KVALITEEDI TAGID
+================================================================================
+
+Vali: law_making_issue_tags
+
+Lubatud vaartused:
+- liigne_kiirustamine_voi_luhike_tahtaeg
+- puudulik_kaasamine
+- vtk_puudub
+- ebaselge_joustumine
+- ebaselge_rakendamine
+- vastuolu_oigusloome_hea_tavaga
+- tagasiulatuv_moju
+- halduskoormus_hindamata
+
+Need on sisemised tagid. Need ei ole avalik teema, valja arvatud juhul, kui tulevikus tehakse eraldi oigusloome kvaliteedi vaade.
+
+================================================================================
+22. KUUPAEVAD JA SORTEERIMINE
+================================================================================
+
+Kasutada tuleb voimalikult tapseid kuupaevi.
+
+Valjad:
+- published_date
+- document_date
+- source_year
+- event_start_date
+- event_end_date
+- sort_date
+- date_confidence
+
+Juhul kui opinions failinimes voi dokumendis on kuupaev, kasuta seda document_date ja sort_date alusena.
+
+Avaliku vaate vaikimisi jarjestus:
+1. uuem sisu ees;
+2. toovoidud ja konkreetsed seisukohad enne uldist tausta;
+3. Koda.ee artiklid ja arvamused enne MAA tausta;
+4. vana sisu jaab leitavaks, kuid ei tohi varjutada uuemat;
+5. sama teema puhul eelistada kanoonilisemat allikat.
+
+Me ei loo kasitsi valja "joustumata", "kehtiv", "kehtetu" vms, sest andmeid ei kontrollita jooksvalt Riigi Teataja vastu.
+
+================================================================================
+23. EVENT / KOOLITUS / VISIIT
+================================================================================
+
+Uritused ei ole pohisisu, kuid voivad olla seotud voimalus.
+
+Vali: event_relevance_type
+
+Lubatud vaartused:
+- policy_relevant_event
+- awareness_or_capacity_event
+- future_relevant_event
+- generic_event
+- not_event
+
+Event lisavaljad:
+- event_start_date
+- event_end_date
+- event_is_future
+- event_policy_relevance
+- event_public_role
+
+Reeglid:
+- Toimunud uldine uritus ei lahe pohisisusse.
+- Toimunud teemakoolitus voib olla toetav viide.
+- Tulevikus toimuv relevantne koolitus/visiit/urituse voib ilmuda seotud voimalusena.
+- Uritus ei tohi varjutada arvamust, toovoitu ega sisulist uudist.
+
+================================================================================
+24. SOURCE QUALITY JA SCRAPE QA
+================================================================================
+
+Uue scrape'i puhul puhasta enne klassifitseerimist:
+- navigatsioon;
+- menuud;
+- footer;
+- ostukorv;
+- korduvad kontaktid;
+- boilerplate;
+- seotud teenuste korduvad plokid;
+- tehnilised kordused.
+
+Suurem kaal anda:
+- pealkirjale;
+- avaldamiskuupaevale;
+- URL-ile;
+- lead'ile;
+- esimestele sisulistele loikudele;
+- failinimele;
+- toovoidu lehe struktureeritud tekstile.
+
+Source quality valjad:
+- source_quality_flag: ok / boilerplate_risk / duplicate_risk / ocr_risk / draft_risk / needs_review
+- date_quality_flag: ok / missing / inferred / conflicting
+- numeric_claim_needs_review
+- possible_ocr_or_template_error
+- source_preference_rank
+- canonical_policy_thread_id
+
+Allika eelistusjarjekord:
+1. toovoidu leht
+2. Koda.ee arvamus / seisukoht
+3. Koda.ee sisuline uudis
+4. arvamuse originaaldokument
+5. MAA kokkuvote
+6. koolitus/uritus toetava viitena
+7. vana voi dubleeriv sisu
+
+================================================================================
+25. ANNUAL REPORT / MAA REEGEL
+================================================================================
+
+MAA kiht on context/background.
+
+Reeglid:
+- MAA pohjal uldiselt law tagi ei anta.
+- MAA annab ajalugu, toovoidu tausta ja kokkuvotlikku konteksti.
+- Kui sama teema on Koda.ee uudises, arvamuses voi toovoidu lehel, eelistatakse seda avalikus viites.
+- MAA ei tohi muutuda oigusakti otsingu pohitulemuseks.
+- MAA arvandmeid kasutada ettevaatlikult, eriti kui allikas on draft, OCR voi vastuoluline.
+
+================================================================================
+26. NUMERIC QA REEGEL
+================================================================================
+
+numeric_claim_needs_review = true ainult siis, kui:
+- avalik kokkuvote voi peamine valjavoetud vaide tugineb numbrile;
+- rida sisaldab olulist finants-, protsendi-, mahu-, arvu-, tahtaja- voi mojuvaidet, mida voib avalikult kuvada.
+
+Ara pane true ainult seetottu, et tekst sisaldab:
+- kuupaevi;
+- paragrahvinumbreid;
+- dokumendinumbreid;
+- oigusakti viiteid;
+- kohtuasja numbreid.
+
+================================================================================
+27. REVIEW_REQUIRED REEGEL
+================================================================================
+
+review_required=true tahendab, et rida vajab enne avalikku kasutust inimkontrolli.
+
+Ara pane review_required=true ainult seetottu, et:
+- stance on esitas_ettepanekud;
+- secondary teemasid on mitu;
+- EU on korrektselt lisatud;
+- row sisaldab tavalist confirmed law tagi;
+- teema on keeruline, aga klassifikatsioon on kindel;
+- sector_scope on cross_sector.
+
+Pane review_required=true kui:
+- classification_confidence on low voi medium-low;
+- primary topic on ebakindel;
+- law candidate on olemas, confirmed puudub ja oigusakt on avaliku leidmise jaoks oluline;
+- source tekst on liiga luhike;
+- source on OCR/template/boilerplate riskiga;
+- title ja body on vastuolus;
+- kitsas sector/activity on ebakindel;
+- mitu teemat voistleb primary rolli parast;
+- law evidence sisaldab stale evidence'i;
+- confirmed law tag pohineb ainult luhendil;
+- luhendipohine law match on kahtlane.
+
+qa_flags voib olla laiem hoiatusvali. review_required peab olema kitsam ja praktiliselt kasutatav.
+
+================================================================================
+28. KOHUSTUSLIKUD VALJAD OPINIONS-KIHIS
+================================================================================
+
+Opinions merge-ready valjad peaksid sisaldama vahemalt:
+- content_id
+- source_layer
+- source_type
+- source_file
+- title
+- document_date
+- source_year
+- sort_date
+- topic_primary
+- topic_secondary
+- activity_primary
+- activity_secondary
+- sector_scope
+- stance
+- value_type
+- law_tags_confirmed
+- law_tags_candidate
+- law_evidence_text
+- law_match_confidence
+- eu_related
+- eu_law_transposition
+- law_making_issue_tags
+- work_win_candidate
+- numeric_claim_needs_review
+- qa_flags
+- classification_confidence
+- review_required
+- review_reason
+- notes
+
+================================================================================
+29. SOOVITATAVAD SHEETID UUTE ANDMESTIKE LOOMISEL
+================================================================================
+
+Opinions pilot / full run:
+- 01_inventory
+- 02_classification
+- 03_law_tag_test
+- 04_review_cases
+- 05_rule_changes_applied
+- 06_qa_summary
+- 07_final_fields
+- 08_remaining_risks
+- 09_law_false_positive_audit
+
+Full run puhul:
+- opinions_v2_merge_ready
+- opinions_v2_review_required
+- opinions_v2_law_candidates
+- opinions_v2_low_confidence
+- opinions_v2_law_false_positive_audit
+- opinions_v2_qa_summary
+- opinions_v2_field_mapping
+
+================================================================================
+30. EDUKRITEERIUM ENNE FULL RUN'I
+================================================================================
+
+Enne kogu opinions ZIP-i tootlemist peab piloot naitama, et:
+- false primary topics on kadunud;
+- EL secondary ei ole ule kasutatud;
+- digi secondary ei ole ule kasutatud;
+- Planeeringud/load ei tule valedel pohjustel sisse;
+- vajab_lube_planeeringuid ilmub ainult paris planeeringu/ehituse/loa juhtudel;
+- kitsas sector tagging ei ole ule kasutatud;
+- law tagid ei teki luhendite juhuslikust esinemisest;
+- ESS/IKS/AOKS jms false-positive tagid on eemaldatud;
+- law_evidence_text ei sisalda stale evidence'it;
+- review_required on sisuline ja kasutatav;
+- remaining review cases on paris piirijuhtumid, mitte susteemsed vead.
+
+================================================================================
+31. PRAKTILISED PUNASED LIPUD KLASSIFITSEERIJAS
+================================================================================
+
+Kui need ilmuvad, on vaja QA-d:
+
+1. Elektroonilise side seadus / ESS tekib teemadele, mis ei puuduta elektroonilist sidet.
+2. Isikuandmete kaitse seadus / IKS tekib juhuslikult tekstides, kus andmekaitse pole keskne.
+3. Atmosfaariõhu kaitse seadus / AOKS tekib tekstides, mis ei puuduta FOKA, heidet, ohku voi atmosfaari.
+4. Planeeringud/load tekib elamisloa, tooloa, riigihanke, toovaidluse voi uldise menetluse pohjal.
+5. Digi tekib ainult registri olemasolu pohjal.
+6. TAI muutub primary-ks uldise majanduskava puhul, kuigi TAI on vaid uks alamteema.
+7. Toetus/rahastus situation tag tekib maksuvabastuse voi tasu pohjal.
+8. Riigikaitse tekib kollektiivse tootuli voi toooiguse teemal.
+9. Kliima tekib "roheline raamat" sonapaari pohjal.
+10. Law evidence sisaldab seadust, mida confirmed/candidate valjas enam ei ole.
+
+Kui punane lipp on tuvastatud, lisa qa_flags ja vajadusel review_required=true.
+
+================================================================================
+32. V2.1.3 PILOT CORRECTION ADDENDUM
+================================================================================
+
+See peatukk lisab v2.1.2 juhendile 125-realise piloodi pohjal opitud parandused.
+Avalike teemade nimekirja ei muudeta. Kui siin peatukis on konkreetsem reegel
+kui varasemas juhendi osas, siis kasuta konkreetsemat v2.1.3 reeglit.
+
+32.1 PLANEERINGUD/LOAD - ALLOWLIST-POHINE REEGEL
+
+Teemat Planeeringud, load, ehitus ja kinnisvara ning situation tagi
+vajab_lube_planeeringuid tohib kasutada ainult siis, kui tekstis on otsene ja
+sisuline seos alltoodud allowlistiga.
+
+Lubatud tugevad triggerid:
+- planeering;
+- detailplaneering;
+- uldplaneering;
+- riigi eriplaneering;
+- ehitus;
+- ehitis;
+- hoone;
+- rajatis;
+- kinnisasi;
+- kinnistu;
+- kinnisvara;
+- maakasutus;
+- maa kasutus;
+- ehitusluba;
+- kasutusluba;
+- keskkonnaluba;
+- kompleksluba;
+- veekasutusluba;
+- maavara kaevandamise luba;
+- taristu;
+- varjend;
+- varjumiskoht;
+- tuleohutusulevaatus;
+- tuleohutusnoue, kui see puudutab ehitist, hoonet voi rajatist;
+- fuusilise asukoha, kinnistu, ehitise voi rajatise kohustus.
+
+Keelatud voi vaga norgad triggerid, mis EI TOHI uksi planeeringute/lubade teemat
+luua:
+- luba uldsonana;
+- tegevusluba;
+- elamisluba;
+- tooluba;
+- viisa;
+- menetlusluba;
+- taotlus;
+- kooskollastus;
+- juhend;
+- VTK;
+- eelnou;
+- strateegia;
+- tegevuskava;
+- riigihange;
+- toovaidlus;
+- kollektiivne tootuli;
+- elektrooniline side;
+- universaalteenus;
+- konkurentsiseadus;
+- maamaks;
+- hilinenud maksed;
+- andmekogu;
+- register;
+- aruandlus.
+
+Kui tekstis esineb sona "luba", kuid pole selget seost ehituse, maa,
+planeeringu, keskkonnaloa, taristu voi kinnisvaraga, siis ara kasuta:
+- topic_secondary = Planeeringud, load, ehitus ja kinnisvara;
+- situation tag = vajab_lube_planeeringuid.
+
+32.2 VAJAB_LUBE_PLANEERINGUID TAGI ERITI RANGE REEGEL
+
+vajab_lube_planeeringuid on praktiline kasutajaolukorra tag. Seda tohib panna
+ainult siis, kui ettevote peab voi voib sisuliselt vajada:
+- ehitusluba;
+- kasutusluba;
+- keskkonnaluba;
+- planeeringut;
+- maakasutuse otsust;
+- kinnistu/ehitisega seotud luba;
+- taristu voi rajatise luba;
+- varjendi/hoone/tuleohutusulevaatuse kohustuse taitmist.
+
+Ara kasuta seda tagi, kui jutt on:
+- elamisloast;
+- tooloast;
+- viisast;
+- tegevusloast uldiselt;
+- riigihankest;
+- toovaidlusest;
+- maksu voi tasu muutusest;
+- toetuse saamisest;
+- elektroonilisest sidest;
+- universaalteenusest;
+- konkurentsijarelevalvest;
+- majanduskavast voi strateegiast;
+- avaliku teenistuse seadusest;
+- hilinenud maksetest.
+
+32.3 BUROKRAATIA PRIMARY PRIORITEET
+
+Kui pealkiri, failinimi voi esimene sisuline loik utleb, et teema on:
+- burokraatia vahendamine;
+- halduskoormuse vahendamine;
+- registri kaotamine;
+- aruandluskohustuse lihtsustamine;
+- kohustuse kaotamine;
+- ebamoistliku noude arahoidmine;
+- menetluse lihtsustamine;
+- vormi/andmekogu/teavituse kohustuse leevendamine,
+
+siis Burokraatia ja halduskoormus saab vaga tugeva primary-prioriteedi.
+
+Naide:
+- Alkoholiseaduse registri voi teavituskohustuse lihtsustamine -> primary
+  Burokraatia ja halduskoormus, secondary Alkohol, tubakas ja aktsiisikaubad.
+- Kui keskne on alkoholiaktsiisi maar voi maksutous -> primary Alkohol,
+  tubakas ja aktsiisikaubad, secondary Maksud ja tasud.
+
+32.4 TULEOHUTUSULEVAATUS EI OLE RAAMATUPIDAMISE/AUDITI TEEMA
+
+Sona "ulevaatus" ei tohi automaatselt viia teemasse Raamatupidamine, audit ja
+aruandlus.
+
+Tuleohutusulevaatus, tuleohutusnoue, automaatne tulekahjuteade, paastesusteem
+voi hoone tuleohutus on tavaliselt:
+- Planeeringud, load, ehitus ja kinnisvara, kui fookus on ehitisel/hoonel;
+- Burokraatia ja halduskoormus, kui fookus on kohustuse kaotamisel/lihtsustamisel;
+- Riigikaitse, julgeolek ja kriisikindlus, kui fookus on kriisivalmidusel.
+
+Raamatupidamine/audit sobib ainult finantsauditi, aruandluse, majandusaasta
+aruande voi raamatupidamise kontekstis.
+
+32.5 AVALIKU TEENISTUSE SEADUS JA KLIIMA FALSE-POSITIVE
+
+Avaliku teenistuse seadus, ametnikud, avalik sektor, avaliku sektori tootajad
+voi ametiasutuste korraldus ei ole kliima/kestlikkuse teema ilma vaga tugeva
+sisulise keskkonna-, kliima- voi rohenouete seoseta.
+
+Tavaline klassifikatsioon:
+- Ettevotluskeskkond ja konkurentsivoime, kui fookus on avaliku sektori
+  efektiivsusel voi ettevotluskeskkonnal;
+- Toojoud ja toooigus, kui fookus on toosuhete/teenistussuhete reeglitel;
+- Burokraatia ja halduskoormus, kui fookus on halduskoormusel.
+
+32.6 ALKOHOL/TUBAKAS/AKTSIIS - PRIMARY VALIK
+
+Kui teema on alkoholi voi tubaka muugipiirang, kaubanduspiirang, reklaam,
+registrikohustus, tarbimise vahendamise kava voi sektoripohine regulatsioon,
+kasuta:
+- primary Alkohol, tubakas ja aktsiisikaubad.
+
+Kui teema on alkoholi voi tubaka aktsiisimaar, aktsiisitous voi aktsiisipoliitika,
+kasuta:
+- primary Alkohol, tubakas ja aktsiisikaubad;
+- secondary Maksud ja tasud.
+
+Kui teema on alkoholiregistri, teavituskohustuse, vormi voi muu haldusliku
+kohustuse kaotamine/lihtsustamine, kasuta:
+- primary Burokraatia ja halduskoormus;
+- secondary Alkohol, tubakas ja aktsiisikaubad.
+
+Kutuseaktsiis ei kuulu automaatselt alkoholi/tubaka teema alla. Kutuseaktsiis
+on tavaliselt:
+- primary Maksud ja tasud;
+- secondary Energia, elektrihind ja varustuskindlus voi Transport ja logistika.
+
+32.7 TITLE/FILENAME LAW PRIORITY
+
+Kui title'is voi failinimes on konkreetne seadus, eelnou voi maarus, siis see on
+law tagi jaoks korgema prioriteediga kui body-only luhendid voi korvalmainimised.
+
+Reegel:
+1. Title/filename full law name -> tugev confirmed kandidaatus.
+2. Esimese sisulise loigu full law name -> tugev confirmed kandidaatus.
+3. Hilisem body full law name -> confirmed ainult siis, kui seadus on keskne.
+4. Body-only luhend -> candidate/review, mitte confirmed, v.a kui kontekst on vaga selge.
+5. Korvalmainitud seadus -> ara tagi voi jata candidate/review.
+
+Kui title'is on seadus A ja body sisaldab juhuslikku luhendit ESS/IKS/AOKS/KMS
+vms, siis ara lase luhendil seadust A varjutada.
+
+32.8 TSIIVILKRIISI JA RIIGIKAITSE SEADUS
+
+Lisa law seed-list'i:
+- Tsiviilkriisi ja riigikaitse seadus
+
+Seda tuleb eristada:
+- Kriisiolukorra ja riigikaitse seadusest;
+- Hadaolukorra seadusest / HOS;
+- Paasteseadusest;
+- Tuleohutuse seadusest.
+
+Kui title/failinimi utleb "Tsiviilkriisi ja riigikaitse seadus", peab see olema
+prioriteetne law tag. HOS voi TLS ei tohi seda varjutada, kui need on ainult
+korvalmainimised.
+
+32.9 RIIGIKAITSE VS TOOOIGUS
+
+Riigikaitse, julgeolek ja kriisikindlus sobib siis, kui peamine teema on:
+- tsiviilkriis;
+- riigikaitse;
+- kriisivalmidus;
+- varjendid;
+- elutahtsad teenused;
+- kaitsetoostus;
+- reservvaelased;
+- Ukraina toetamine;
+- ettevotte kriisikindluse kohustus.
+
+Ara kasuta riigikaitset, kui peamine teema on:
+- kollektiivne tootuli;
+- toovaidlus;
+- kollektiivleping;
+- toorahurisk;
+- toosuhete piirang,
+
+v.a kui tekst seob selle selgelt riigikaitse/kriisikohustusega. Tavalise
+toovaidluse voi kollektiivse tootuli puhul primary on Toojoud ja toooigus.
+
+32.10 RIIGIABI / TOETUSED EI OLE PLANEERING
+
+Riigiabi grupierand, investeeringutoetus, toetusmeede voi rahastustingimus ei
+ole planeeringute/lubade teema ainult selleparast, et meetmel on tingimused voi
+menetlus.
+
+Klassifikatsioon:
+- primary Toetused, riigiabi ja investeeringud;
+- secondary vastavalt sisule TAI, kliima, energia, eksport vms;
+- ara lisa Planeeringud/load, kui pole otsest ehitus/maa/keskkonnaloa seost.
+
+32.11 TOOTENOUDED JA OKODISAIN EI OLE PLANEERING
+
+Okodisain, tahkekutusekatlad, kestlikud tooted, digitaalne tootepass,
+tooteohutus, toodete parandatavus ja tooteturujarelevalve on tavaliselt:
+- primary Tootenouded, ohutus ja turujarelevalve;
+- secondary Kliima, kestlikkus ja rohenouded, kui kestlikkus/kliima on oluline;
+- secondary Euroopa Liidu poliitika ja oigus, kui tegemist on EL maaruse/
+  direktiivi/ettepanekuga.
+
+Ara lisa Planeeringud/load, kui tekst ei puuduta ehitusluba, keskkonnaluba,
+maakasutust voi fuusilise rajatise lubasid.
+
+32.12 MAAMAKS EI OLE PLANEERING
+
+Maamaksu, kinnisasja maksustamise voi kohaliku maksu teema klassifikatsioon on
+tavaliselt:
+- primary Maksud ja tasud;
+- secondary Ettevotluskeskkond ja konkurentsivoime voi Planeeringud/load ainult
+  siis, kui tekst sisuliselt puudutab maa kasutust, planeeringuid voi kinnisvara
+  arendust.
+
+Ara lisa vajab_lube_planeeringuid ainult seetottu, et tekstis on maa, kinnistu
+voi maamaks. Maksukohustus ei ole luba.
+
+32.13 UUTE PILOOTIDE QA TRIGGERID
+
+Jargmistes pilootides ja full run'is tuleb review queue'i voi auditisse panna
+vahemalt koik read, kus:
+- topic_secondary sisaldab Planeeringud, load, ehitus ja kinnisvara;
+- situation tag sisaldab vajab_lube_planeeringuid;
+- primary on Kliima, kuid title/failinimi ei viita keskkonnale, kliimale,
+  kestlikkusele, rohenouetele, heitele, loodusele, jaatmetele voi energiale;
+- title'is on konkreetne seadus, kuid law_tags_confirmed ei sisalda seda;
+- law_tags_confirmed sisaldab rohkem kui kaks seadust;
+- law_match_type on ainult body_abbreviation;
+- law_evidence_text sisaldab seadust, mida confirmed/candidate valjades pole;
+- primary on Raamatupidamine/audit, kuid "audit" voi "ulevaatus" viitab
+  tegelikult tehnilisele, tuleohutus- voi keskkonnaulevaatusele.
+
+Need read ei pea koik automaatselt olema avaliku kasutuse jaoks valed, kuid nad
+peavad minema QA auditisse, et susteemsed trigger-vead ei jaaks full run'i sisse.
+
+================================================================================
+33. V2.1.4 ADDENDUM: SOURCE-BINDING JA VIIMASE PILOODI PARANDUSED
+================================================================================
+
+See peatukk lisab v2.1.3-le viimase 150-realise piloodi pohjal opitud reeglid.
+Avalike teemade nimekiri ei muutu. Kui siin on vastuolu varasema peatukiga, kasuta
+v2.1.4 rangemat reeglit.
+
+33.1 SOURCE-BINDING KONTROLL ENNE KLASSIFITSEERIMIST
+
+Enne iga rea klassifitseerimist tuleb kontrollida, et jargmised valjad viitavad
+samale dokumendile:
+- source_file
+- zip_path
+- file_sha256 voi muu failipohine kontrollsumma
+- title
+- PDF-ist ekstraheeritud esimene sisuline pealkiri
+- evidence_short
+- body_text_clean voi muu kasutatav tekstikatkend
+- document_date, kui see parineb failinimest voi dokumendist
+
+Kui source_file/title utleb uhte asja, kuid evidence_short voi body_text_clean
+viitab teisele arvamusele, on tegemist source-binding veaga.
+
+Sellisel juhul:
+- ara kasuta seda rida normaalseks avalikuks klassifitseerimiseks;
+- ara usalda topic_primary, law_tags, stance'i, sectorit ega summary't;
+- sea source_quality_flag = source_text_mismatch;
+- sea review_required = true;
+- lisa review_reason = source_file/title does not match extracted text;
+- lisa rida source_binding_audit lehele;
+- kui voimalik, proovi sidumine parandada tegeliku PDF-i ja zip_path/file_sha256 pohjal;
+- kui sidumist ei saa parandada, jata klassifikatsioon tyhjaks voi margi low confidence.
+
+Source-binding viga on full run'i jaoks blocker. Enne taismahus andmestikku ei tohi
+jatkata, kui sample'is esineb korduvaid source_text_mismatch juhtumeid.
+
+33.2 SOURCE_BINDING_AUDIT SHEET
+
+Pilootides ja full run'is peab olema eraldi auditileht, kui tuvastatakse voi
+kontrollitakse source-binding riski.
+
+Soovituslikud valjad:
+- content_id
+- source_file
+- zip_path
+- file_sha256
+- title
+- extracted_title
+- evidence_short
+- document_date_from_filename
+- document_date_from_text
+- binding_status
+- mismatch_type
+- action_taken
+- source_quality_flag
+- review_required
+- review_reason
+
+binding_status vaartused:
+- ok
+- repaired
+- source_text_mismatch
+- missing_text
+- duplicate_file_risk
+- needs_manual_review
+
+mismatch_type vaartused:
+- title_evidence_mismatch
+- file_text_mismatch
+- date_mismatch
+- duplicate_text_under_different_file
+- missing_or_empty_pdf_text
+- ocr_noise
+- unknown
+
+33.3 PLANEERINGUD/LOAD: CENTRALITY RULE
+
+v2.1.3 allowlist jaab kehtima, kuid v2.1.4 lisab keskse moju reegli.
+
+Allowlist-sona uksi ei piisa. Naiteks "ehitus", "taristu", "rajatis",
+"kinnistu", "keskkonnaluba" voi "hoone" ei anna automaatselt
+Planeeringud, load, ehitus ja kinnisvara teemat.
+
+Planeeringud/load teema voi vajab_lube_planeeringuid tag on lubatud ainult siis,
+kui planeeringu/luba/ehituse seos on:
+- title'is;
+- failinimes;
+- oigusakti nimes;
+- esimeses sisulises loigus;
+- dokumendi peamine kohustus, risk, ettepanek voi moju;
+- voi selgelt seotud ettevotja vajadusega saada ehitus-, kasutus-, keskkonna-,
+  maa-, kinnisvara- voi taristuluba.
+
+Kui allowlist-sona esineb ainult:
+- korvalnaitega;
+- loetelus;
+- taustaviitena;
+- juhusliku kinnistu/rajatise mainimisena;
+- teises seaduses, mis ei ole dokumendi keskne teema,
+
+siis ara lisa Planeeringud/load topic'ut ega vajab_lube_planeeringuid tagi.
+
+33.4 PLANEERINGUTE FALSE-POSITIVE'ITE TYYPJUHUD
+
+Ara lisa Planeeringud, load, ehitus ja kinnisvara ega vajab_lube_planeeringuid,
+kui keskne teema on:
+- elektri universaalteenus;
+- riigihangete strateegilised pohimotted;
+- konkurentsiseadus;
+- majanduse konkurentsivoime tegevuskava;
+- elektroonilise side VTK, v.a kui keskne on fuusilise sidevorgu/taristu ehitus;
+- kutseoppe kvaliteedi juhend;
+- hilinenud maksed;
+- toovaidlus;
+- valismaalaste seadus / elamisluba / tooluba / viisa;
+- maamaks;
+- riigiabi grupierand;
+- okodisain / tahkekutusekatlad / kestlikud tooted;
+- jaatmeseadus/pakendiseadus ilma keskse keskkonnaloa, rajatise, taristu voi
+  maakasutuse teemata;
+- rahapesu/sanktsioonid, kui kinnistu voi vara mainimine on ainult korvaline;
+- vaarismetalltoodete nouete teema.
+
+Planeering/luba voib olla oige, kui keskne teema on:
+- keskkonnakompleksluba;
+- ehitusluba;
+- kasutusluba;
+- detailplaneering voi uldplaneering;
+- tuleohutusulevaatus kui hoone/premissi kohustus;
+- varjend, varjumiskoht voi kriisiehitis;
+- taristu ehitus voi fuusilise vorgu rajamine;
+- kinnisvara arendus, maakasutus voi kinnisasja oigused.
+
+33.5 AUDIT-REVIEW CONSISTENCY
+
+Kui auditileht markib, et rida vajab review'd, peab see olema kooskola pohitabeliga.
+
+Reegel:
+- kui source_binding_audit.review_required = true, siis 02_pohitabel.review_required = true;
+- kui law_false_positive_audit.review_required = true, siis 02_pohitabel.review_required = true;
+- kui planning_permit_audit.review_required = true, siis 02_pohitabel.review_required = true;
+- kui ei soovita pohitabeli review_required valja laiendada, lisa eraldi vali
+  audit_review_required = true.
+
+Ei tohi tekkida olukorda, kus auditileht utleb "review_required = true", kuid
+pohitabel utleb sama rea kohta "review_required = false" ilma selgituseta.
+
+33.6 TAIKS ALIASED
+
+Law seed-list peab sisaldama molemaid nimetuse variante:
+- Teadus- ja arendustegevuse ning innovatsiooni korralduse seadus
+- Teadus- ja arendustegevuse ja innovatsiooni korralduse seadus
+
+Alias:
+- TAIKS
+
+Kui title/failinimi sisaldab uhte nendest variantidest, peab TAIKS olema
+law_tags_confirmed, v.a kui source-binding on vigane.
+
+33.7 KREDIIDITEABE JAGAMISE SEADUS
+
+Lisa law seed/candidate list'i:
+- Krediiditeabe jagamise seadus
+
+Kui title/failinimi voi esimene sisuline loik nimetab krediiditeabe jagamise
+seadust/eelnou, kasuta seda confirmed voi candidate law tagina vastavalt evidence'i
+tugevusele.
+
+Tavaparing:
+- topic_primary: Finants, krediit ja rahapesu nouded;
+- secondary: Digi, andmed, AI ja kuberturvalisus ainult siis, kui andmevahetus,
+  infosusteem voi krediiditeabe jagamise andmetoote teema on keskne.
+
+33.8 GDPR / ISIKUANDMETE KAITSE ULDMÄÄRUS
+
+GDPR / isikuandmete kaitse uldmaarus voib olla confirmed EU act, kui:
+- title/failinimi nimetab isikuandmete kaitse uldmaarust;
+- voi esimene sisuline loik utleb, et arvamus puudutab GDPR-i / uldmaarust;
+- voi tekst kasitleb selgelt GDPR-i kohustusi.
+
+Kui title nimetab GDPR-i, ara jata seda ainult candidate'iks ilma pohjuseta.
+Kui tekst puudutab hoopis Eesti Isikuandmete kaitse seadust, erista:
+- GDPR / isikuandmete kaitse uldmaarus;
+- Isikuandmete kaitse seadus / IKS.
+
+Ara kasuta IKS/GDPR tagi juhusliku andmekaitse voi body-only luhendi pohjal, kui
+andmekaitse pole keskne.
+
+33.9 KAITSEVAETEENISTUSE SEADUS
+
+Lisa law seed/candidate list'i:
+- Kaitsevaeteenistuse seadus
+
+Kasuta seda siis, kui title/failinimi voi peamine tekst puudutab:
+- kaitsevaeteenistust;
+- reservvaelasi;
+- reservoppekogunemist;
+- toandja kohustusi seoses kaitsevaeteenistusega;
+- maksuerisust, kompensatsiooni voi toooiguslikku moju kaitsevaeteenistuse kontekstis.
+
+Kui keskne on maksuerisus, voib primary olla Maksud ja tasud ning secondary
+Riigikaitse, julgeolek ja kriisikindlus. Kui keskne on toosuhe, voib primary olla
+Toojoud ja toooigus. Kui keskne on reservvaelaste/kriisi/riigikaitse moju
+ettevotetele, voib primary olla Riigikaitse, julgeolek ja kriisikindlus.
+
+33.10 RIIGI TEATAJA SEADUS JA DIGIRIIK
+
+Kui title/failinimi nimetab Riigi Teataja seadust, ara klassifitseeri seda
+automaatselt Maksud ja tasud alla.
+
+Vali primary sisulise moju jargi:
+- Digi, andmed, AI ja kuberturvalisus, kui keskne on digiriik, avaldamine,
+  andmekogud, elektrooniline juurdepääs, infosusteemid voi masinloetavus;
+- Ettevotluskeskkond ja konkurentsivoime, kui keskne on oiguskeskkonna labi-
+  paistvus, teabe kättesaadavus voi normide avaldamine;
+- Maksud ja tasud ainult siis, kui keskne on riigiloiv, tasu voi maksekohustus.
+
+Law tag:
+- Riigi Teataja seadus, kui title/failinimi voi peamine tekst seda toetab.
+
+33.11 JULGEOLEKUMAKS JA MAKSUHALDURI VEEBIS AVALDAMINE
+
+Kui source puudutab julgeolekumaksu, maksuhalduri veebis andmete avaldamist,
+tulumaksu voi ettevotlustulu maksustamist, vali primary keskse moju jargi:
+- Maksud ja tasud, kui keskne on maksukohustus, maksuvabastus, maksumaar voi
+  maksuhalduri tegevus;
+- Digi, andmed, AI ja kuberturvalisus secondary, kui keskne on andmete avaldamine,
+  veebis kuvamine, andmetoode voi andmekaitse;
+- Burokraatia secondary, kui keskne on aruandlus/avaldamiskohustus.
+
+Ara kasuta Ariõigus, uhingud ja ariregister primary'na ainult seetottu, et avaldatakse
+ettevotte andmeid. Maksuvaldkonna sisu on tavaliselt Maksud ja tasud.
+
+33.12 EELNOU TITLE JA EVIDENCE PRIORITY
+
+Kui title/failinimi ja body_text/evidence_short ei klapi, source-binding reegel
+on ule koigi teiste reeglite.
+
+Kui need klapivad ja title/failinimi nimetab konkreetset seadust/eelnou,
+siis:
+- topic maaratakse ikkagi sisulise moju jargi;
+- law tagis saab title/failinime seadus korge prioriteedi;
+- body-only korvalmainimised ei tohi title law'd varjutada;
+- kui title law puudub law_tags_confirmed valjast, review_required = true.
+
+33.13 FULL RUN'I BLOKKERID
+
+Ara mine taismahus 759 PDF-i jooksule, kui piloot naitab:
+- korduvat source_text_mismatch probleemi;
+- planning/luba tagide susteemset ulekasutust;
+- law_evidence_text sisaldab stale evidence'it;
+- title/failinime seadused puuduvad confirmed law tagidest;
+- auditilehed ja pohitabeli review_required on vastuolus;
+- ESS/IKS/AOKS/KMS/TuMS vms luhendi false-positive'id taastuvad;
+- review_required on liiga lai voi liiga kitsas ega vasta tegelikule riskile.
+
+Full run on lubatav alles siis, kui:
+- source binding on kontrollitud;
+- planning/luba kasutus on keskne ja pohjendatud;
+- law tagid on kesksed ning tugeva evidence'iga;
+- auditite review signaalid on kooskola pohitabeliga;
+- uued 25 testjuhtu ei too esile uut susteemset veamustrit.
+
+================================================================================
+23. V2.1.5 VALIDATION JA ANTI-REGRESSION ADDENDUM
+================================================================================
+
+See lisa põhineb 150+50 validation-run'i kvaliteedikontrollil. Selle jooksu peamine õppetund oli, et kinnitatud 150 rea klassifikatsiooni ei tohi järgmises validation-run'is vabalt ümber klassifitseerida. Kui heaks kiidetud baseline uuesti lahti lasta, võib klassifikaator tuua tagasi varem juba parandatud vead.
+
+Avalike teemade, sektorite, stance'i, value_type'i ja work_win_type'i struktuuri v2.1.5 ei muuda. Muudatused puudutavad andmestike loomise protsessi, regressioonikontrolli, secondary-topic rangust ning mõningaid title-domain signaale.
+
+--------------------------------------------------------------------------------
+23.1. APPROVED BASELINE / REGRESSION-CONTROL REEGEL
+--------------------------------------------------------------------------------
+
+Kui ridade kogum on pärast QA-d kinnitatud, tuleb seda käsitleda approved baseline'ina.
+
+Approved baseline'i reeglid:
+- Ära reklassifitseeri kinnitatud ridu validation-run'is vabalt uuesti.
+- Kopeeri kinnitatud ridade klassifikatsiooniväljad muutmata kujul viimasest heakskiidetud failist.
+- Kinnitatud ridu võib kontrollida source-bindingu, failide olemasolu, duplikaatide ja auditite mõttes, kuid taxonomy/classification välju ei muudeta ilma selge eraldi põhjuseta.
+- Kui approved baseline'i reas avastatakse uus probleem, ära kirjuta seda vaikselt üle. Märgi see regression_check_approved_baseline lehel ning lisa review_reason.
+- Validation-run'i eesmärk on testida uusi ridu ja kontrollida, et baseline ei regresseeruks, mitte parandatud ridu uuesti nullist klassifitseerida.
+
+Kui tehakse validation-run formaadis "150 approved + 50 new":
+- approved 150 = locked baseline;
+- new 50 = uus klassifikatsioon;
+- lõppfailis võib olla 200 rida, kuid baseline'i ja uusi ridu peab olema võimalik eristada;
+- lisa väli `baseline_status` väärtustega `approved_locked`, `new_classified`, `baseline_review_needed`;
+- lisa leht `regression_check_approved_baseline`.
+
+`regression_check_approved_baseline` soovituslikud veerud:
+- content_id
+- source_file
+- approved_topic_primary
+- current_topic_primary
+- approved_topic_secondary
+- current_topic_secondary
+- approved_law_tags_confirmed
+- current_law_tags_confirmed
+- approved_situation_tags
+- current_situation_tags
+- changed_from_approved
+- change_allowed
+- regression_risk
+- reason
+- review_required
+
+Kui approved baseline muutub ilma eraldi põhjenduseta, on validation-run kehtetu.
+
+--------------------------------------------------------------------------------
+23.2. "MAKSUD JA TASUD" EI OLE FALLBACK-TOPIC
+--------------------------------------------------------------------------------
+
+`Maksud ja tasud` on suur ja oluline teema, kuid seda ei tohi kasutada fallback'ina kõigi rahaliste, halduslike või MTA-ga seotud tekstide puhul.
+
+Kasuta `Maksud ja tasud` primary-topic'una ainult siis, kui põhifookus on üks järgnevatest:
+- maks;
+- maksumäär;
+- maksuvabastus;
+- maksukohustus;
+- maksuadministreerimine;
+- maksukäsitlus;
+- MTA maksujuhend;
+- tulumaks;
+- käibemaks;
+- sotsiaalmaks;
+- maamaks;
+- julgeolekumaks;
+- keskkonnatasu;
+- aktsiis;
+- riigilõiv;
+- järelevalvetasu;
+- muu tasu või lõiv, kui see on dokumendi peamine objekt.
+
+Ära kasuta `Maksud ja tasud` primary-topic'una üksnes sellepärast, et:
+- tekstis on sõna "tasu" kõrvalteemana;
+- tekstis on rahaline mõju;
+- ettevõttel tekib kulu;
+- tekstis esineb Maksu- ja Tolliamet või MTA;
+- tekstis esineb maksuhaldur;
+- tekstis mainitakse riigilõivu kõrvalviitena;
+- õigusaktiga kaasneb kaudne rahaline mõju;
+- toetuse, meetme või tingimuse täitmine eeldab kulutusi.
+
+Kui title/main law viitab selgelt teisele valdkonnale, jääb primary selle valdkonna juurde. `Maksud ja tasud` võib minna secondary'ks ainult siis, kui maksu/tasu aspekt on tekstis tõesti sisuline ja kasutajale avastatavuse mõttes oluline.
+
+Näited:
+- `Tolliseadus` -> primary `Eksport, rahvusvahelistumine ja toll`, mitte `Maksud ja tasud`, kui jutt on tollimenetlusest.
+- `Data Act` / andmemäärus -> primary `Digi, andmed, AI ja küberturvalisus`, mitte `Maksud ja tasud`, isegi kui andmekasutusega kaasneb kulu.
+- `keskkonnakompleksluba` -> primary `Planeeringud, load, ehitus ja kinnisvara`, mitte `Maksud ja tasud`, kui põhifookus on loa taotlemine.
+- `toidu-, sööda- ja veterinaarjärelevalve tunnitasu` -> primary `Maksud ja tasud`, sest tunnitasu on peamine objekt; secondary `Tootenõuded, ohutus ja turujärelevalve`.
+
+--------------------------------------------------------------------------------
+23.3. SECONDARY-TOPIC CENTRALITY REEGEL
+--------------------------------------------------------------------------------
+
+Secondary topic ei ole kohustuslik. Parem tühi secondary kui vale või mürane secondary.
+
+Secondary topic on lubatud ainult siis, kui:
+- see kirjeldab tekstis sisuliselt olulist teist mõju;
+- see aitab ettevõtjal sisu leida;
+- see on title'is, failinimes, esimeses sisulises lõigus või dokumendi põhiosas selgelt toetatud;
+- see ei põhine üksikul kõrvalmainimisel.
+
+Ära lisa secondary't "igaks juhuks".
+
+Eriti tuleb vältida järgmisi automaatseid secondary-vigu:
+- Ära lisa `Maksud ja tasud` secondary'ks lihtsalt rahalise mõju või kulu tõttu.
+- Ära lisa `Digi, andmed, AI ja küberturvalisus` secondary'ks lihtsalt seetõttu, et menetlus toimub registris või veebis.
+- Ära lisa `Eksport, rahvusvahelistumine ja toll` secondary'ks seetõttu, et tekstis on "Maksu- ja Tolliamet" või MTA.
+- Ära lisa `Toetused, riigiabi ja investeeringud` secondary'ks sõnade "meede", "tingimused" või "taotlus" tõttu, kui tegelik valdkond on muu.
+- Ära lisa `Kliima, kestlikkus ja rohenõuded` secondary'ks lihtsalt EL-i, strateegia või sõna "roheline" tõttu.
+- Ära lisa `E-kaubandus ja tarbijakaitse` secondary'ks, kui tarbija või e-kaubandus ei ole sisuline mõju.
+
+Secondary topic peab läbima sama title-domain sanity kontrolli nagu primary, lihtsalt madalama prioriteediga.
+
+Soovituslik auditiväli:
+- `secondary_topic_evidence`
+- `secondary_topic_is_directly_supported`
+- `secondary_topic_review_reason`
+
+--------------------------------------------------------------------------------
+23.4. MTA / TOLL REEGLI LAIENDUS PRIMARY, SECONDARY JA SITUATION TAG'IDELE
+--------------------------------------------------------------------------------
+
+`Maksu- ja Tolliamet`, `MTA` või `maksuhaldur` ei tohi automaatselt anda:
+- primary topic `Eksport, rahvusvahelistumine ja toll`;
+- secondary topic `Eksport, rahvusvahelistumine ja toll`;
+- situation tag `ekspordib`;
+- situation tag `impordib`.
+
+Kasuta `Eksport, rahvusvahelistumine ja toll` ainult siis, kui sisuline teema on:
+- tollimenetlus;
+- tollideklaratsioon;
+- tollimaks;
+- tolliseadustik;
+- Tolliseadus;
+- impordi- või ekspordiprotseduur;
+- päritolu- või tollidokumendid;
+- sanktsioonid väliskaubanduse kontekstis;
+- piiriülene kaubandus;
+- kauba liikumine üle piiri.
+
+Kui allikas räägib:
+- MTA maksujuhendist;
+- maksukäsitlusest;
+- tulumaksust;
+- käibemaksust;
+- ettevõtte tulumaksust;
+- debt push-down'ist;
+- maksuadministreerimisest;
+- maksuaruandlusest;
+- maksuhalduri veebis avaldamisest;
+- maksuvõlast;
+- maksukohustusest;
+
+siis primary on tavaliselt `Maksud ja tasud`, mitte toll/eksport.
+
+Sama reegel kehtib situation tag'idele: `ekspordib` ja `impordib` tohib lisada ainult otsese väliskaubanduse, tolli, impordi, ekspordi või piiriülese kauba/teenuse liikumise tõendi korral.
+
+--------------------------------------------------------------------------------
+23.5. UUED TITLE-DOMAIN TRIGGERID V2.1.5
+--------------------------------------------------------------------------------
+
+Lisa need triggerid andmestike loomisel title-domain sanity kontrolli.
+
+1. Kindlustusandjate kriiside ennetamine ja lahendamine
+- Primary: `Finants, krediit ja rahapesu nõuded`
+- Activity/sector: `Finants, kindlustus ja krediit`
+- Mitte `Maksud ja tasud`, kui maks/tasu ei ole põhifookus.
+
+2. Hea õigusloome ja normitehnika eeskiri
+- Primary: `Õigusloome kvaliteet ja kaasamine`.
+- Kuna see teema on internal-only / public_filter_visible=false, võib avalikus kihis kasutada review'd või map'ida vajadusel `Bürokraatia ja halduskoormus`, kui põhifookus on halduskoormuse vähendamine.
+- Ära sunni seda maksude, digi või toetuste alla.
+
+3. Andmeliidu strateegia, tehisaru, AI, andmeruum, andmejagamine
+- Primary: `Digi, andmed, AI ja küberturvalisus`
+- Secondary: `Euroopa Liidu poliitika ja õigus`, kui EL strateegia/õigus on keskne.
+- Ära kasuta `Maksud ja tasud` lihtsalt mõju või kulude tõttu.
+
+4. Seadme ohutuse seadus, tehnilised nõuded, seadmete ohutus
+- Primary: `Tootenõuded, ohutus ja turujärelevalve`
+- Secondary sõltuvalt sisust: `Bürokraatia ja halduskoormus`, `Euroopa Liidu poliitika ja õigus` või sektor.
+
+5. Keskkonnahoidlikud riigihanked
+- Primary: `Riigihanked ja avaliku sektoriga äri`
+- Secondary: `Kliima, kestlikkus ja rohenõuded`
+- Ära kasuta primary `Digi`, kui digilahendus ei ole keskne.
+
+6. Kutsesüsteemi reform, kutse andmine, kutsestandardid, kutseeksamid
+- Primary: `Haridus, oskused ja järelkasv`
+- Secondary: `Toetused, riigiabi ja investeeringud` ainult siis, kui rahastus/toetus on tõesti põhisisuline instrument.
+
+7. Pakendiregister, pakendiandmete esitamine
+- Primary: `Pakend, jäätmed ja ringmajandus`
+- Secondary: `Digi, andmed, AI ja küberturvalisus` ainult siis, kui register/andmete esitamine on keskne.
+- Secondary: `Bürokraatia ja halduskoormus`, kui põhifookus on aruandluskoormuse vähendamine.
+
+8. Süsiniku sidumise sertifitseerimine, carbon removals, süsinikupõllundus
+- Primary: `Kliima, kestlikkus ja rohenõuded`
+- Secondary: `Euroopa Liidu poliitika ja õigus`, kui EL määrus/raamistik on keskne.
+- Secondary: `Põllumajandus, metsandus ja kalandus` sector/activity ainult siis, kui allikas on selgelt maa-, metsa- või põllumajanduse keskne.
+
+9. Kaitsetööstuse arendusprojektid, kaitsetööstuse toetus, kaitsevaldkonna innovatsioon
+- Primary: `Riigikaitse, julgeolek ja kriisikindlus`
+- Secondary: `Teadus, arendus ja innovatsioon` või `Toetused, riigiabi ja investeeringud`, kui vastav aspekt on keskne.
+- Activity/sector võib olla `Tööstus ja tootmine` või kitsam kaitsetööstuse märge, kui olemas.
+
+10. Hilinenud maksed, maksetähtajad, late payment directive/regulation
+- Primary: `Finants, krediit ja rahapesu nõuded`
+- Secondary: `Euroopa Liidu poliitika ja õigus`, kui EL direktiiv/määrus on keskne.
+- Ära kasuta `Maksud ja tasud`, kui jutt ei ole maksust või lõivust.
+
+--------------------------------------------------------------------------------
+23.6. VALIDATION-RUN'I SOOVITUSLIK METOODIKA
+--------------------------------------------------------------------------------
+
+Kui eesmärk on testida prompti/taksonoomiat uutel ridadel, kasuta järgmist töövoogu:
+
+1. Vali viimane QA-ga kinnitatud fail approved baseline'iks.
+2. Lukusta approved baseline'i klassifikatsiooniväljad.
+3. Vali uued testread, mis ei olnud baseline'is.
+4. Klassifitseeri ainult uued read.
+5. Koosta lõppfail, kus on baseline + uued read.
+6. Lisa `baseline_status` igale reale.
+7. Lisa `regression_check_approved_baseline`, kus kinnitatakse, et baseline ei muutunud.
+8. Lisa `new_cases_validation_audit`, kus hinnatakse ainult uusi ridu.
+9. Kui uutes ridades ilmneb uus süsteemne viga, paranda prompti/taksonoomiajuhendit ja rerun'i ainult uued read, mitte approved baseline'i.
+
+Soovituslikud `baseline_status` väärtused:
+- `approved_locked`
+- `new_classified`
+- `baseline_review_needed`
+- `new_review_required`
+
+Kui validation-run muudab approved baseline'i topic_primary, topic_secondary, law_tags, situation_tags, stance või value_type välju ilma eraldi põhjenduseta, loe see regressiooniks.
+
+--------------------------------------------------------------------------------
+23.7. FULL RUN'I EELTINGIMUSED V2.1.5 JÄRGI
+--------------------------------------------------------------------------------
+
+Enne full run'i peab viimane validation-run näitama, et:
+- approved baseline ei regresseeru;
+- uued read ei too välja uut süsteemset taxonomy-probleemi;
+- `Maksud ja tasud` ei ole üle kasutatud fallback'ina;
+- secondary topic'id ei ole mürased;
+- MTA/tolli reegel kehtib primary, secondary ja situation tag'idele;
+- source-binding audit töötab;
+- topic_sanity_audit töötab ja ei kinnita ilmseid title-domain vastuolusid;
+- situation_tag_audit kontrollib riskantseid tage otsese tõendi alusel;
+- law false-positive audit kontrollib lühendipõhiseid vigu;
+- planning/permit audit kontrollib, et lubade/planeeringute teema on keskne;
+- review_required on sisuline ega ole lihtsalt automaatselt liiga lai.
+
+Kui full run tehakse pärast approved pilot'it, võib full run klassifitseerida kõiki uusi ridu, kuid varem kinnitatud ridu tuleb käsitleda kontrollpunktina. Kui full run'is nende klassifikatsioon muutub, tuleb muutus tuua eraldi regressioonilehele ja põhjendada.
+
+
+
+================================================================================
+24. V2.1.6 METADATA AND EXTRACTION ADDENDUM
+================================================================================
+
+v2.1.6 ei muuda avalike teemade nimekirja. See peatükk lisab reeglid, mis puudutavad
+teksti ekstraheerimist, Koja boilerplate'i ignoreerimist ja adressaadi/ministeeriumi
+normaliseerimist. Need reeglid kehtivad opinions-kihi full run'ides ning kõigis
+hilisemates parandusringides.
+
+--------------------------------------------------------------------------------
+24.1. FIRST_SUBSTANTIVE_PARAGRAPH BOILERPLATE-SKIP REEGEL
+--------------------------------------------------------------------------------
+
+`first_substantive_paragraph` peab olema dokumendi esimene sisuline lõik, mitte esimene
+tehniliselt loetav tekstiplokk.
+
+`first_substantive_paragraph` peab vahele jätma:
+- kirjapäise ja kontaktandmed;
+- dokumendi numbri, kuupäeva, adressaadi ja viite read;
+- tervituse ja formaalsed tänuavangud, nt "Täname võimaluse eest avaldada arvamust";
+- Koja üldise boilerplate'i;
+- Koja liikmeskonna või esindusrolli üldkirjelduse;
+- lõigud stiilis "Kaubanduskoda esindab ja kaitseb kõigi ettevõtjate ühishuvisid";
+- lõigud stiilis "Kaubanduskoja liikmed annavad üle 40 protsendi...";
+- üldised laused Koja mitteriikliku, apoliitilise või vabatahtliku olemuse kohta;
+- signatuurid, jalused, kontaktisikute andmed ja failitehnilised tekstid;
+- sisukorra, pealkirjaloendi või PDF/OCR artefaktid;
+- lühikesed üherealised vormelid, mis ei kirjelda eelnõu sisu.
+
+Esimene sisuline lõik on esimene lõik, mis kirjeldab vähemalt üht järgmistest:
+- konkreetset eelnõu, määrust, seadust, strateegiat või poliitikadokumenti;
+- probleemi, mille kohta Koda arvamust avaldab;
+- muudatuse ärimõju ettevõtjatele;
+- Koja seisukohta, vastuseisu, toetust või ettepanekut;
+- eelnõu eesmärki või kavandatavat muudatust;
+- õigusakti keskset valdkonda;
+- ettevõtjatele tekkivat kohustust, riski, kulu, õigust või võimalust.
+
+Kui dokumendis on mitu formaalset avangut, tuleb need kõik vahele jätta. Kui sisuline
+tekst algab alles teisel või kolmandal leheküljel, peab `first_substantive_paragraph`
+võtma sealt, mitte boilerplate'i lõigust.
+
+Näited boilerplate'ist, mida ei tohi kasutada sisulise lõiguna:
+- "Kaubanduskoda esindab ja kaitseb kõigi ettevõtjate ühishuvisid..."
+- "Kaubanduskoja liikmed annavad üle 40 protsendi Eesti ettevõtete käibest..."
+- "Eesti Kaubandus-Tööstuskoda on mitteriiklik ja apoliitiline organisatsioon..."
+- "Täname võimaluse eest avaldada arvamust..." juhul, kui lõik ei kirjelda sisuliselt eelnõu.
+
+Lubatud on kasutada lõiku, mis algab tänuga, ainult siis, kui samas lõigus on selgelt
+kirjas konkreetne eelnõu ja selle peamine sisu või ärimõju. Kui tänulõik nimetab vaid
+dokumendi nime, kuid ei kirjelda sisu, tuleb otsida järgmine sisuline lõik.
+
+--------------------------------------------------------------------------------
+24.2. FIRST_SUBSTANTIVE_PARAGRAPH KASUTAMINE KLASSIFITSEERIMISES
+--------------------------------------------------------------------------------
+
+`first_substantive_paragraph` on abiväli source-bindingu ja topic sanity jaoks. See ei
+ole ainus klassifitseerimise alus.
+
+Topic'i määramisel tuleb kasutada koos:
+- title;
+- filename;
+- title_extracted_from_pdf;
+- main law / domain signal;
+- first substantive heading;
+- first substantive paragraph;
+- korduvad sisulised märksõnad;
+- Koja tegelik seisukoht või ettepanek.
+
+Kui `first_substantive_paragraph` sisaldab Koja boilerplate'i või OCR-müra, tuleb:
+- märkida `qa_flags` väärtusesse `first_substantive_paragraph_boilerplate_or_noise`;
+- võimalusel täita `first_substantive_paragraph_corrected` või kasutada auditilehel selgitust;
+- mitte teha topic otsust boilerplate'i põhjal.
+
+Kui sisulist lõiku ei õnnestu usaldusväärselt leida:
+- `classification_confidence` ei tohi olla high, välja arvatud juhul, kui title/main law annab väga tugeva signaali;
+- `review_required = true`, kui title-domain pole üheselt selge;
+- `source_binding_status` võib jääda ok, kui fail ise on õige, kuid extraction quality tuleb flag'ida.
+
+--------------------------------------------------------------------------------
+24.3. RECIPIENT / MINISTRY METADATA SCHEMA
+--------------------------------------------------------------------------------
+
+Opinions-kihis tuleb adressaat säilitada ja normaliseerida eraldi metadata-väljadena.
+Recipient ei ole topic taxonomy. Recipient-filter aitab kasutajal vaadata, millisele
+ministeeriumile või asutusele Koda on mingi teema kohta seisukohti esitanud.
+
+Lisa või säilita järgmised väljad:
+
+1. `recipient_raw`
+- Dokumendist leitud adressaat/adressaadid täpselt algsel kujul.
+- Säilita kirjaviis, lühendid ja ajaloolised nimed.
+- Ära paranda raw väärtust käsitsi, kui tegu on source'ist loetud kujuga.
+
+2. `recipient_normalized`
+- Ühtlustatud asutuse nimi.
+- Kasuta tänapäevast või kokkulepitud standardnime, kuid säilita ajalooline seos.
+- Näiteks `MKM`, `Majandus-ja Kommunikatsiooniministeerium` ja `Majandus- ja Kommunikatsiooniministeerium` normaliseeritakse samasse väärtusesse.
+
+3. `recipient_filter_group`
+- Kasutajale nähtav filtergrupp.
+- Võib koondada ajaloolised ja tänased asutused, kui see aitab kasutajal sisu leida.
+- Näiteks `Kliimaministeerium / endine Keskkonnaministeerium`.
+
+4. `recipient_type`
+Lubatud väärtused:
+- `ministry`
+- `parliament_committee`
+- `government`
+- `agency`
+- `eu_institution`
+- `local_government`
+- `other_public_body`
+- `private_or_association`
+- `multiple`
+- `unknown`
+
+5. `recipient_secondary`
+- Kui kiri on mitmele adressaadile, lisa teisene adressaat või adressaatide loend.
+- Kui mitu adressaati on võrdselt olulised, võib `recipient_type = multiple`.
+
+6. `recipient_normalization_review_required`
+Lubatud väärtused:
+- `true`
+- `false`
+
+Märgi `true`, kui:
+- adressaat on OCR-i tõttu moonutatud;
+- asutus on ajalooliselt ümber nimetatud ja mapping pole kindel;
+- adressaate on mitu ja pole selge, milline peaks olema public filter;
+- raw väärtus on ainult isikunimi ilma asutuseta;
+- kiri on saadetud töörühmale, komisjonile või mitteametlikule kontaktile.
+
+--------------------------------------------------------------------------------
+24.4. RECIPIENT NORMALIZATION REEGLID JA NÄITED
+--------------------------------------------------------------------------------
+
+Recipient-normalization peab olema konservatiivne. Raw väärtus jääb alati alles.
+Normaliseeritud väärtus on mõeldud filtriks, mitte õiguslikuks väiteks.
+
+Näited:
+
+Raw väärtused:
+- `Rahandusministeerium`
+- `Rahandusministeeriumi maksupoliitika osakond`
+- `RM`
+Normaliseeritud:
+- `Rahandusministeerium`
+Filter group:
+- `Rahandusministeerium`
+Type:
+- `ministry`
+
+Raw väärtused:
+- `MKM`
+- `Majandus- ja Kommunikatsiooniministeerium`
+- `Majandus-ja Kommunikatsiooniministeerium`
+- `Majandusministeerium`
+Normaliseeritud:
+- `Majandus- ja Kommunikatsiooniministeerium`
+Filter group:
+- `Majandus- ja Kommunikatsiooniministeerium / majandusvaldkond`
+Type:
+- `ministry`
+
+Raw väärtused:
+- `Keskkonnaministeerium`
+- `Kliimaministeerium`
+Normaliseeritud:
+- Kui dokument on ajalooliselt Keskkonnaministeeriumile saadetud, võib `recipient_normalized = Keskkonnaministeerium`.
+- Public filter võib olla `Kliimaministeerium / endine Keskkonnaministeerium`.
+Filter group:
+- `Kliimaministeerium / endine Keskkonnaministeerium`
+Type:
+- `ministry`
+
+Raw väärtused:
+- `Haridus- ja Teadusministeerium`
+- `HTM`
+Normaliseeritud:
+- `Haridus- ja Teadusministeerium`
+Filter group:
+- `Haridus- ja Teadusministeerium`
+Type:
+- `ministry`
+
+Raw väärtused:
+- `Sotsiaalministeerium`
+- `SoM`
+Normaliseeritud:
+- `Sotsiaalministeerium`
+Filter group:
+- `Sotsiaalministeerium`
+Type:
+- `ministry`
+
+Raw väärtused:
+- `Justiitsministeerium`
+- `Justiits- ja Digiministeerium`
+Normaliseeritud:
+- Säilita ajalooline nimi `recipient_raw` väljal.
+- `recipient_normalized` võib olla konkreetne dokumendi-aegne asutus.
+- Public filter group võib koondada: `Justiitsministeerium / Justiits- ja Digiministeerium`.
+Type:
+- `ministry`
+
+Raw väärtused:
+- `Riigikogu rahanduskomisjon`
+- `Riigikogu majanduskomisjon`
+- `Riigikogu õiguskomisjon`
+Normaliseeritud:
+- konkreetne komisjon, nt `Riigikogu rahanduskomisjon`.
+Filter group:
+- `Riigikogu komisjonid`
+Type:
+- `parliament_committee`
+
+Raw väärtused:
+- `Vabariigi Valitsus`
+- `Riigikantselei`
+Normaliseeritud:
+- vastav asutus.
+Filter group:
+- `Vabariigi Valitsus / Riigikantselei`
+Type:
+- `government`
+
+Raw väärtused:
+- `Maksu- ja Tolliamet`
+- `MTA`
+Normaliseeritud:
+- `Maksu- ja Tolliamet`
+Filter group:
+- `Maksu- ja Tolliamet`
+Type:
+- `agency`
+
+NB: MTA recipient ei tähenda automaatselt topic'ut `Eksport, rahvusvahelistumine ja toll`.
+Topic määratakse sisust, mitte adressaadist.
+
+--------------------------------------------------------------------------------
+24.5. RECIPIENT EI TOHI MÄÄRATA TOPIC_PRIMARY'T
+--------------------------------------------------------------------------------
+
+Recipient/adressaat on metadata-filter. See ei tohi automaatselt määrata `topic_primary` väärtust.
+
+Näited:
+- Rahandusministeeriumile saadetud kiri võib olla `Maksud ja tasud`, kuid võib olla ka `Riigihanked`, `Finants`, `Raamatupidamine`, `Bürokraatia` või muu teema.
+- Kliimaministeeriumile saadetud kiri võib olla `Kliima`, kuid võib olla ka `Pakend, jäätmed`, `Energia`, `Planeeringud` või `Maksud ja tasud`.
+- Majandus- ja Kommunikatsiooniministeeriumile saadetud kiri võib olla `Ettevõtluskeskkond`, `Digi`, `Energia`, `Tööjõud`, `Tootenõuded` või muu teema.
+- MTA-le saadetud kiri ei tähenda tolli/eksporti, kui sisu puudutab maksukäsitlust.
+
+Kui recipient ja title-domain lähevad eri suunda, vali topic sisu järgi ning säilita recipient metadata-väljadel.
+
+--------------------------------------------------------------------------------
+24.6. MAKSUD VS FINANTS TÄPSUSTUS V2.1.6
+--------------------------------------------------------------------------------
+
+Järgmised allikad kuuluvad üldjuhul `Maksud ja tasud` alla, mitte `Finants, krediit ja rahapesu nõuded`, kui teema ei puuduta finantssektorit, krediiti, kindlustust, rahapesu, sanktsioone, võlgnevuste sissenõudmist või maksetähtaegu:
+
+- `Sotsiaalmaksuseadus`;
+- `Tulumaksuseadus`;
+- `Käibemaksuseadus`;
+- `Maksukorralduse seadus`;
+- TSD vormid;
+- maksudeklaratsioonid;
+- maksutõendid;
+- töötuskindlustusmaksete deklareerimine;
+- kogumispensioni makse deklareerimine;
+- maksuseadustest tulenevate deklaratsioonide ja tõendite vormide kinnitamine;
+- maksuvabastus;
+- maksukohustus;
+- maksu tasumise kohustusest vabastamine;
+- mitteresidendist tööandja sotsiaalmaksu või töötuskindlustusmakse kohustus.
+
+Näited:
+
+1. Sotsiaalmaksuseaduse muutmine, mille keskne sisu on sotsiaalmaksu või töötuskindlustusmaksete maksmise kohustusest vabastamine:
+- Primary: `Maksud ja tasud`
+- Mitte: `Finants, krediit ja rahapesu nõuded`
+
+2. Tulumaksuseadusest, sotsiaalmaksuseadusest, kogumispensionide seadusest ja töötuskindlustuse seadusest tulenevate deklaratsioonide ja tõendite vormide määrus:
+- Primary: `Maksud ja tasud`
+- Secondary: `Raamatupidamine, audit ja aruandlus` ainult siis, kui aruandlus/deklaratsioonivormide esitamise kohustus on sisuliselt oluline avastatavuse jaoks.
+- Mitte: `Finants, krediit ja rahapesu nõuded`
+
+3. TSD vormide muutmine seoses tulumaksuseaduse muudatustega:
+- Primary: `Maksud ja tasud`
+- Secondary: `Raamatupidamine, audit ja aruandlus` võib olla lubatud, kui vormide esitamine/aruandlus on keskne.
+
+4. Magustatud joogi maksu seaduse eelnõu:
+- Primary: `Maksud ja tasud`
+- Secondary võib sõltuda sisust, kuid maks on primary, kui eelnõu keskne objekt on maks.
+
+`Finants, krediit ja rahapesu nõuded` sobib, kui allika keskne sisu on:
+- finantsasutused;
+- krediiditurud;
+- kindlustus;
+- pangandus;
+- rahapesu ja terrorismi rahastamise tõkestamine;
+- rahvusvahelised sanktsioonid compliance kontekstis;
+- võlgade sissenõudmine;
+- hilinenud maksed ja maksetähtajad ettevõtetevahelistes suhetes;
+- finantsjärelevalve.
+
+--------------------------------------------------------------------------------
+24.7. EXISTING DATASET REPAIR SOOVITUSED V2.1.6 PÕHJAL
+--------------------------------------------------------------------------------
+
+Kui v2.1.6 rakendatakse juba loodud full opinions failile, ei ole vaja teha uut full run'i.
+Soovitatav on targeted fix:
+
+1. Ära puutu approved baseline ridu, kui need on lukus.
+2. Paranda ainult teadaolevad uute full-run ridade vead.
+3. Lisa või täida recipient metadata-väljad, kui neid pole või kui need on ainult raw kujul.
+4. Märgi boilerplate'i tõttu kasutud first_substantive_paragraph väärtused QA flag'iga või täida parandatud extraction-väli.
+5. Ära muuda `topic_primary` ainult recipient'i põhjal.
+6. Tee regression check pärast iga parandust.
+
+Tüüpilised parandused, mida v2.1.6 toetab:
+- sotsiaalmaksu/tulumaksu/TSD vormide read -> `Maksud ja tasud`, mitte `Finants`;
+- magustatud joogi maksu read -> `Maksud ja tasud`;
+- recipient public filter fields -> normaliseeritud metadata, mitte uus topic;
+- Koja boilerplate'i lõigud -> mitte kasutada sisulise paragraph'ina.
+
+--------------------------------------------------------------------------------
+24.8. V2.1.6 FULL RUN'I / PARANDUSRINGI KVALITEEDIKONTROLL
+--------------------------------------------------------------------------------
+
+Iga v2.1.6 alusel loodud või parandatud opinions fail peab QA-s kontrollima:
+
+1. Kas `first_substantive_paragraph` jätab Koja boilerplate'i vahele.
+2. Kas boilerplate/noise juhtumid on flag'itud.
+3. Kas `recipient_raw` on säilitatud.
+4. Kas `recipient_normalized` ja `recipient_filter_group` on täidetud, kui recipient on tuvastatav.
+5. Kas ministeeriumi/adressaadi filter ei muuda topicut automaatselt.
+6. Kas maksuseaduste deklaratsioonide, TSD vormide ja sotsiaalmaksu/tulumaksu ridade primary on `Maksud ja tasud`, kui maks on keskne.
+7. Kas `Finants, krediit ja rahapesu nõuded` ei ole kasutatud tavaliste maksudeklaratsioonide või sotsiaalmaksu/tulumaksu vormide puhul.
+8. Kas approved baseline ei regresseeru.
+9. Kas recipient-normalization ebaselged juhtumid on review's.
+10. Kas public filter group'id on piisavalt koondatud, et kasutaja leiaks ajaloolised ja tänapäevased ministeeriumiteemad koos.
+
+Kui need kontrollid läbivad ja muid blockereid pole, võib fail liikuda controlled merge'i.
+
+================================================================================
+25. V0.9.2 DATA QUALITY / IMPORT / DISPLAY ADDENDUM
+================================================================================
+
+See peatükk täiendab v2.1.6 juhendit. Avalike teemade, tegevusalade, stance'i,
+value_type'i ja work_win_type'i nimekirju ei muudeta. Muudatused puudutavad seda,
+kuidas andmeid kontrollitakse, imporditakse, avalikult kuvatakse, järjestatakse ja
+seotakse.
+
+Põhimõte:
+Avalikus väärtusotsingu tööriistas ei tohi ebakindlat, importimisel tekkinud või
+tuletatud infot kuvada kindla faktina. Kui kuupäev, tegevusala, seos, õigusakt,
+recipient või public-readiness ei ole allikaga kontrollitav, tuleb rida piirata,
+downgrade'ida või märkida review'sse.
+
+--------------------------------------------------------------------------------
+25.1. TÖÖVÕITUDE KUUPÄEVAMUDEL
+--------------------------------------------------------------------------------
+
+Töövõidul ei piisa ühest kuupäevaväljast. Töövõidu avalik kuupäev peab eristama
+allika avaldamise aega, töövõidu aastat, õigusliku muudatuse jõustumist ja
+tulevast tähtaega.
+
+Soovituslikud või kohustuslikud väljad töövõitude kihis:
+
+- `source_date`
+  Allika avaldamise või dokumendi kuupäev. Näiteks Koda.ee uudise avaldamise kuupäev
+  või arvamuse/dokumendi kuupäev.
+
+- `source_year`
+  Allika aasta, kui täpne kuupäev puudub või allikas on aastaaruanne/MAA.
+
+- `achievement_year`
+  Aasta, millesse töövõit sisuliselt kuulub. Aastaaruande põhise töövõidu puhul on
+  tavaliselt aruande aasta.
+
+- `effective_date`
+  Kuupäev, mil õiguslik muudatus jõustus või hakkas rakenduma, kui see on allikas
+  selgelt eristatud.
+
+- `deadline_date`
+  Kuupäev, kuhu kohustus, tähtaeg või aruandlus lükkus. Tähtaeg ei ole automaatselt
+  töövõidu kuupäev.
+
+- `display_date`
+  Avalikus vaates kuvatav kuupäev või aasta. See peab tuginema `date_basis` väljal
+  kirjeldatud kontrollitud alusele.
+
+- `display_date_precision`
+  Lubatud väärtused:
+  - `day`
+  - `month`
+  - `year`
+  - `unknown`
+
+- `date_confidence`
+  Lubatud väärtused:
+  - `high`
+  - `medium`
+  - `low`
+  - `unverified`
+
+- `date_basis`
+  Lühike selgitus, miks just see public/display kuupäev valiti.
+  Näited:
+  - `koda_news_published_date`
+  - `opinion_document_date`
+  - `annual_report_year`
+  - `law_effective_date`
+  - `deadline_date_stored_separately`
+  - `manual_verified_source`
+  - `unverified_import_placeholder`
+
+- `date_review_required`
+  `true`, kui kuupäev vajab enne avalikku kuvamist kontrolli.
+
+- `date_repair_notes`
+  Andmeparanduse või QA kommentaar.
+
+Reegel:
+Avalikus UI-s tohib täpse päeva-kuupäevaga töövõitu kuvada ainult siis, kui
+`display_date_precision = day` ja `date_confidence = high`.
+
+Kui töövõit on kindlalt õige, aga täpne kuupäev ei ole kindel:
+- kasuta `display_date_precision = year`;
+- kuva ainult aasta;
+- ära näita importimisel tekkinud täpset päeva.
+
+Kui kuupäev on kahtlane:
+- `date_confidence = low` või `unverified`;
+- `date_review_required = true`;
+- public display peab olema piiratud või peidetud.
+
+--------------------------------------------------------------------------------
+25.2. SUSPICIOUS-DATE GATE
+--------------------------------------------------------------------------------
+
+Järgmised kuupäevad või kuupäevamustrid on töövõitude puhul punased lipud ja
+ei tohi ilma allikatõendita minna avalikku täpse kuupäevana:
+
+- `2026-06-24`
+- `2026-12-31`
+- iga `31.12` / `31 December` kuupäev, kui see näib aasta-lõpu placeholder'ina;
+- importimise kuupäev;
+- current-date default;
+- faililoome või töötluse kuupäev;
+- tulevikukuupäev, kui allikas ei ütle selgelt, et see on sündmuse/otsuse kuupäev;
+- täpne kuupäev, mis ei esine allika uudises, arvamuses, töövõidu lehel, MAA-s või
+  usaldusväärses seotud dokumendis;
+- kuupäev, mis on tegelikult jõustumiskuupäev või tähtaeg, kuid imporditi töövõidu
+  achievement/display kuupäevaks.
+
+Kui suspicious-date muster tuvastatakse:
+- ära kasuta seda `display_date` väärtusena täpse avaliku kuupäevana;
+- proovi leida `source_date` või `achievement_year`;
+- kui allikas kinnitab ainult aasta, kasuta aasta täpsust;
+- täida `date_review_required = true`, kui allikas ei kinnita parandust;
+- lisa `qa_flags` väärtusesse `suspicious_work_win_date`.
+
+Konkreetsed regression-testid:
+- `TOOVOIT-0016` / "Panditulumaks asendati mõistlikuma meetmega" ei tohi avalikus
+  display/achievement kuupäevas olla `2026-06-24` ega `24. juuni 2026`.
+- "Börsiettevõtete juhtorganite soolise tasakaalu aruandluse esitamise kohustus
+  lükkus edasi" ei tohi avalikus display/achievement kuupäevas olla `2026-12-31`
+  ega `31. detsember 2026`. Kui allikas ütleb, et kohustus lükkus 30.06.2026 peale,
+  tuleb see talletada `deadline_date` väljal, mitte töövõidu kuupäevana.
+
+--------------------------------------------------------------------------------
+25.3. PUBLIC DATE DISPLAY REEGLID
+--------------------------------------------------------------------------------
+
+Public display kuupäevade üldreeglid:
+
+1. Täpne kuupäev (`day`) on lubatud ainult allikaga kontrollitud juhul.
+2. Aastaaruande/MAA põhine töövõit kuvatakse tavaliselt aastana, mitte väljamõeldud
+   kuupäevana.
+3. Kui Koda.ee uudis on töövõidu peamine allikas, võib kasutada uudise avaldamise
+   kuupäeva `source_date` ja `display_date` alusena.
+4. Kui töövõit kirjeldab tulevikus jõustuvat muudatust, erista:
+   - töövõidu allikas/saavutamise aeg;
+   - õigusliku muudatuse `effective_date`;
+   - kohustuse/tähtaja `deadline_date`.
+5. Ära kasuta `effective_date` või `deadline_date` väärtust töövõidu avaliku
+   achievement date'ina, kui töövõit saavutati varem.
+6. Kui kuupäevad on vastuolus, sea `date_confidence = low` ja `date_review_required = true`.
+7. Kui kuupäev on teadmata, aga sisu on public-ready, võib avalikus vaates kuupäeva
+   peita või kuvada ainult aasta.
+
+--------------------------------------------------------------------------------
+25.4. PUBLIC_READINESS STAATUSED
+--------------------------------------------------------------------------------
+
+Avalik indeks peab eristama sisuliselt valmis, piiratud, review'd vajavat ja
+arhiivset sisu.
+
+Soovituslik väli:
+- `public_readiness`
+
+Lubatud väärtused:
+- `public_ready`
+  Rida on avalikuks kasutuseks sobiv. Peamised kuupäevad, topic, tegevusala,
+  seosed ja allikaviited on piisava confidence'iga.
+
+- `public_ready_limited`
+  Rida võib avalikus otsingus esineda, kuid osa välju tuleb piirata.
+  Näiteks: kuvatakse ainult aasta, mitte täpne kuupäev; seotud sisu ei kasutata;
+  tegevusala ranking'us on madal confidence.
+
+- `needs_review`
+  Rida ei tohiks minna avalikku top-tulemusse enne inimkontrolli.
+  Sobib staging/review queue jaoks.
+
+- `blocked`
+  Rida ei sobi avalikku indeksisse enne parandust, sest allikas, kuupäev,
+  source-binding või klassifikatsioon on eksitav.
+
+- `archive_only`
+  Rida võib jääda andmestikku, kuid ei ole väärtusotsingu põhisisu.
+  Tüüpilised näited: aegunud koolitused, vanad geneerilised üritused,
+  korduvad kutsed, tehnilised teated, ostukorvi/teenuseplokid.
+
+Reeglid:
+- suspicious-date töövõit ei tohi olla `public_ready` täpse display kuupäevaga.
+- nõrga tegevusala vastega uudis ei tohi olla tegevusalapõhise lehe top-tulemus.
+- nõrga related confidence'iga seos ei tohi toita "Veel samal teemal" plokki.
+- aegunud event/koolitus on vaikimisi `archive_only`, kui see ei sisalda tugevat
+  poliitika-, seisukoha- või töövõidu tõendit.
+
+--------------------------------------------------------------------------------
+25.5. TEGEVUSALA RELEVANCE JA RANKING'U REEGLID
+--------------------------------------------------------------------------------
+
+Tegevusala ei ole lihtsalt silt, vaid public-result relevantsi alus.
+Kitsas tegevusala peab olema allikaga sisuliselt põhjendatud.
+
+Soovituslikud väljad:
+- `activity_primary`
+- `activity_secondary`
+- `sector_scope`
+- `activity_confidence`
+- `activity_basis`
+- `activity_review_required`
+
+`activity_confidence` lubatud väärtused:
+- `high`
+- `medium`
+- `low`
+- `unverified`
+
+Ranking'u põhimõte tegevusala lehel:
+1. Direct `activity_primary` match on kõige tugevam.
+2. Tugev `activity_secondary` match on järgmine.
+3. Sama narrow topic + tugev title/body semantic match võib toetada tulemust.
+4. `Kõik tegevusalad / valdkondadeülene` on fallback, mitte top-ranking põhjus.
+5. Cross-sector tulemus võib ilmuda alles pärast otseseid ja tugevaid secondary vasteid.
+6. Kui piisavalt relevantseid tulemusi pole, kuva vähem tulemusi, mitte valesid.
+
+Ära lisa kitsast tegevusala ainult seetõttu, et:
+- sektorit mainitakse näites;
+- sektor võiks kaudselt mõjutatud olla;
+- teema on kõigile ettevõtetele oluline;
+- app'i leht vajab rohkem tulemusi;
+- sama topic on sektorile mõnikord asjakohane;
+- mõni Koja liige selles sektoris võiks olla huvitatud.
+
+Haridus ja koolitus:
+Kasuta ainult siis, kui allikas käsitleb selgelt:
+- haridust;
+- kutseharidust;
+- kutsesüsteemi;
+- oskusi;
+- tööjõu järelkasvu;
+- koolide ja ettevõtete koostööd;
+- õpetajaid, õppekavu, praktikat;
+- täiskasvanute koolitust;
+- OSKA või tööjõu oskuste prognoosi;
+- koolituspoliitikat.
+
+Ära kasuta `Haridus ja koolitus` lihtsalt sellepärast, et:
+- sisu on webinar/koolitus kui ürituse formaat;
+- ettevõtja saab midagi õppida;
+- teema on üldiselt kasulik;
+- artiklis on sõna "koolitus", aga tegelik teema on maks, kemikaal, käibemaksuandmed,
+  korruptsioon, ettevõtte ost/müük või muu valdkond.
+
+Põllumajandus, metsandus ja kalandus:
+Kasuta ainult siis, kui allikas käsitleb selgelt:
+- põllumajandust;
+- metsandust;
+- kalandust;
+- maapiirkonna ettevõtlust;
+- maa- või metsakasutust;
+- toorme/esmase tootmise sektorit;
+- põllumajandus- või metsandusspetsiifilisi keskkonna-, ekspordi-, toote- või
+  konkurentsiküsimusi.
+
+Ära kasuta seda tegevusala lihtsalt riigikaitse, üldise tööjõu, üldise maksu,
+üldise EL-poliitika või broad business environment sisu puhul.
+
+Konkreetsed regression-testid:
+- `haridus-ja-koolitus` lehe top uudistes ei tohi olla kemikaaliohutuse, EL
+  korruptsioonivastase võitluse, EL käibemaksuandmete ligipääsu või geneerilise
+  ettevõtte ostu/müügi sisu ilma tugeva haridusseoseta.
+- `pollumajandus-metsandus-ja-kalandus` lehel ei tohi riigikaitselise järelkasvu
+  fondi memorandum järjestuda põllumajanduse, metsanduse, kalanduse, maa-, toidu-,
+  keskkonna- või maaettevõtluse sisust kõrgemale, kui otsene seos puudub.
+
+--------------------------------------------------------------------------------
+25.6. TÖÖVÕITUDE RELEVANCE JA RANKING
+--------------------------------------------------------------------------------
+
+Töövõidud kipuvad olema laiad. Avalikus UI-s tuleb neid järjestada relevance-first,
+verified-recency second.
+
+Soovituslikud ranking signaalid:
+- `activity_match_type`
+  - `primary`
+  - `secondary`
+  - `topic_only`
+  - `cross_sector_fallback`
+  - `none`
+
+- `work_win_relevance_confidence`
+  - `high`
+  - `medium`
+  - `low`
+
+- `verified_recency_score`
+  Kasutatakse ainult siis, kui `date_confidence` on piisav.
+
+Reeglid:
+1. Konkreetse tegevusala otsingus ei tohi broad/cross-sector töövõit tõusta ette
+   otseselt sektoriga seotud töövõidust.
+2. Vana, aga otseselt relevantne töövõit võib olla parem kui uus, aga broad fallback.
+3. Uuem sisu saab boost'i ainult siis, kui kuupäev on verified või vähemalt medium confidence.
+4. Tõendamata kuupäevaga töövõit ei tohi saada recency boost'i.
+5. Kui töövõit on kogu ettevõtluskeskkonna jaoks oluline, jäta see cross-sectoriks;
+   ära sunni kitsasse tegevusalasse.
+
+--------------------------------------------------------------------------------
+25.7. "VEEL SAMAL TEEMAL" / RELATED-CONTENT APPROVAL REEGEL
+--------------------------------------------------------------------------------
+
+"Veel samal teemal" on avalikus UI-s tugev sisuline väide. See ei tohi tugineda ainult
+broad topic/activity kattuvusele.
+
+Soovituslikud väljad:
+- `policy_thread_id`
+- `canonical_policy_thread_id`
+- `related_content_ids`
+- `related_confidence`
+- `related_basis`
+- `related_review_required`
+
+`related_confidence` lubatud väärtused:
+- `high`
+- `medium`
+- `low`
+- `rejected`
+
+Approved related link on lubatud, kui vähemalt üks tugev tõend on olemas:
+1. sama konkreetne eelnõu, seadus, määrus või EL õigusakt;
+2. sama policy thread / sama Koja seisukohtade jada;
+3. sama töövõit ja selle aluseks olnud arvamus/uudis/MAA lõik;
+4. allikas viitab otseselt teisele allikale;
+5. sama konkreetne ettepanek, probleem või tulemus;
+6. curated/approved link käsitsi kontrollitud evidence'iga.
+
+Nõrk seos, mis ei ole approved-link'i jaoks piisav:
+- ainult sama broad topic;
+- ainult sama broad tegevusala;
+- ainult mõlemad on "maksud", "tööjõud", "ettevõtluskeskkond" vms;
+- ainult sama aasta;
+- ainult sama content type;
+- ainult mõlemad on cross-sector;
+- ainult sarnane üldine pealkirjatoon.
+
+Kui seos on nõrk:
+- `related_confidence = low` või `rejected`;
+- ära kasuta "Veel samal teemal" plokis;
+- vajadusel jäta candidate link eraldi auditisse.
+
+Konkreetsed regression-testid:
+- `TOOVOIT-0016` / panditulumaksu töövõit ei tohi "Veel samal teemal" plokis
+  seostuda noorte töötamise, välismaalaste palkamise, kohtumenetluse kiirendamise
+  või kütuseaktsiisi sisuga, välja arvatud juhul, kui olemas on konkreetne approved
+  policy-thread tõend.
+
+--------------------------------------------------------------------------------
+25.8. WEB/NEWS PUBLIC-RELEVANCE GATE
+--------------------------------------------------------------------------------
+
+Koda.ee uudised on eri kvaliteediga: osa on poliitika/value content, osa on üritused,
+teenused, partnerinfo, ajakirjalood või geneerilised teated. Public value-discovery
+indeks peab neid eristama.
+
+Soovituslikud väljad:
+- `web_content_role`
+- `public_relevance_score`
+- `public_relevance_notes`
+- `event_relevance_type`
+- `public_readiness`
+
+`web_content_role` lubatud väärtused:
+- `policy_position`
+- `work_win_evidence`
+- `policy_explainer`
+- `business_relevant_news`
+- `service_or_member_benefit`
+- `event_or_training`
+- `profile_or_interview`
+- `partner_or_third_party_notice`
+- `archive_or_low_relevance`
+
+Reeglid:
+1. Tegevusala lehe "Koja uudised" plokk peab eelistama policy/value/business relevant
+   sisu, mitte aegunud üritusi või juhuslikku partnerinfot.
+2. Kui uudis on event/training, ei tähenda see automaatselt `Haridus ja koolitus`.
+3. Aegunud koolitused ja sündmused on enamasti `archive_only`.
+4. Partnerite või kolmandate osapoolte teated ei tohi varjutada Koja enda seisukohti,
+   töövõite või sisulisi uudiseid.
+5. Kui uudis on üldine/cross-sector, ei tohi see kitsas tegevusala topis olla enne
+   otseselt sektoriga seotud uudiseid.
+6. Public result võib kuvada vähem kui planeeritud arv kaarte, kui kvaliteetne vaste
+   puudub.
+
+--------------------------------------------------------------------------------
+25.9. RECIPIENT / MINISTRY METADATA PUBLIC-FILTER REEGEL
+--------------------------------------------------------------------------------
+
+v2.1.6 recipient metadata jääb kehtima. v0.9.2 täpsustab, et recipient/ministry
+väli peab olema kasutatav importides ja app'i advanced filters osas, kuid ei tohi
+mõjutada topicut ega tegevusala.
+
+Recipient/ministry väljad:
+- `recipient_raw`
+- `recipient_normalized`
+- `recipient_filter_group`
+- `recipient_type`
+- `recipient_secondary`
+- `recipient_normalization_review_required`
+
+Täiendav soovituslik väli:
+- `recipient_basis`
+  Näitab, kust recipient tuvastati: dokumendi päis, adressaadiplokk, e-kiri,
+  failinimi, käsitsi kontroll.
+
+Reeglid:
+1. Säilita `recipient_raw` võimalikult täpselt allika järgi.
+2. Normaliseeri `recipient_normalized` konservatiivselt.
+3. `recipient_filter_group` peab koondama ajaloolised ja tänapäevased nimetused nii,
+   et kasutaja leiaks sisu, kuid raw väärtus säiliks.
+4. Recipient on advanced metadata-filter.
+5. Recipient ei määra `topic_primary`, `topic_secondary`, `activity_primary` ega
+   `activity_secondary`.
+6. Kui recipient on puudu, jääb rida otsingus leitavaks, kuid ei ilmu konkreetse
+   ministeeriumi filtris.
+7. Kui mapping on ebaselge, kasuta `recipient_normalization_review_required = true`.
+
+--------------------------------------------------------------------------------
+25.10. UUE INFO DIGEST / IMPORT WORKFLOW
+--------------------------------------------------------------------------------
+
+Uus info ei tohi minna otse public index'isse ilma QA gate'ideta.
+
+Soovituslik pipeline:
+
+1. `raw_source`
+   Säilita originaalallikas, URL, failinimi, scrape timestamp ja source layer.
+
+2. `extraction`
+   Puhasta boilerplate, menüüd, footerid, ostukorv, kontaktid, dubleeritud plokid ja
+   OCR-müra. Tuvasta title, published_date, first_substantive_paragraph.
+
+3. `source_binding`
+   Kontrolli, et title, URL/fail, body, evidence ja kuupäev kuuluvad samale allikale.
+
+4. `taxonomy_classification`
+   Määra topic, activity, stance, value_type, law tags ja situation tags juhendi järgi.
+
+5. `recipient_normalization`
+   Täida recipient/ministry metadata, kui allikas seda sisaldab.
+
+6. `date_verification`
+   Eralda source_date, achievement_year, effective_date, deadline_date ja display_date.
+   Rakenda suspicious-date gate.
+
+7. `thread_and_related_linking`
+   Seo ainult sama policy thread'i, sama õigusakti/ettepaneku või approved evidence'i
+   alusel. Ära kinnita broad-overlap seoseid.
+
+8. `public_readiness_gate`
+   Määra public_readiness. Kahtlased read lähevad review'sse või piiratud avalikku
+   kuvamisse.
+
+9. `public_index`
+   Avalikku indeksisse lähevad ainult public-ready või limited reeglitele vastavad
+   read. App peab oskama limited välju mitte üle kuvada.
+
+--------------------------------------------------------------------------------
+25.11. FIELD MAPPING FOR APP IMPORT
+--------------------------------------------------------------------------------
+
+App'i import peab austama järgmisi välja-eristusi.
+
+Date fields:
+- `published_date` / `source_date`: allika kuupäev
+- `achievement_year`: töövõidu sisuline aasta
+- `effective_date`: jõustumine
+- `deadline_date`: tulevane tähtaeg
+- `display_date`: avaliku vaate kuupäev/aasta
+- `display_date_precision`: kui täpselt kuvada
+- `date_confidence`: kas display date on usaldusväärne
+- `date_basis`: miks see kuupäev valiti
+
+Relevance fields:
+- `activity_primary`
+- `activity_secondary`
+- `sector_scope`
+- `activity_confidence`
+- `public_relevance_score`
+- `public_readiness`
+
+Related fields:
+- `policy_thread_id`
+- `canonical_policy_thread_id`
+- `related_confidence`
+- `related_basis`
+- `related_review_required`
+
+Recipient fields:
+- `recipient_raw`
+- `recipient_normalized`
+- `recipient_filter_group`
+- `recipient_type`
+- `recipient_secondary`
+- `recipient_normalization_review_required`
+
+App display rules:
+- Kui `date_confidence` ei ole high, ära kuva täpset töövõidu kuupäeva.
+- Kui `display_date_precision = year`, kuva ainult aasta.
+- Kui `public_readiness = public_ready_limited`, järgi piiranguid.
+- Kui `related_confidence` ei ole high või curated medium, ära näita "Veel samal teemal".
+- Kui activity match on ainult cross-sector fallback, ära tõsta kitsal tegevusala lehel topi.
+
+--------------------------------------------------------------------------------
+25.12. QA JA REGRESSION TESTID
+--------------------------------------------------------------------------------
+
+Iga uue import/digest või data repair run'i järel tuleb kontrollida vähemalt:
+
+1. Töövõitude suspicious dates:
+   - mitu suspicious kuupäeva leiti;
+   - mitu parandati;
+   - mitu jäi manual review'sse.
+
+2. `TOOVOIT-0016`:
+   - ei sisalda avaliku display/achievement kuupäevana `2026-06-24`;
+   - ei kuvata "24. juuni 2026";
+   - related links ei sisalda unrelated youth work / foreign labour / court proceedings /
+     fuel excise seoseid ilma approved evidence'ita.
+
+3. Börsiettevõtete soolise tasakaalu töövõit:
+   - ei sisalda avaliku display/achievement kuupäevana `2026-12-31`;
+   - kui 30.06.2026 esineb, peab see olema `deadline_date`, mitte töövõidu kuupäev.
+
+4. Haridus ja koolitus tegevusala:
+   - top uudised on sisuliselt hariduse, koolituse, oskuste, kutsehariduse,
+     järelkasvu või koolituspoliitika kohta;
+   - kemikaaliohutus, EL korruptsioon, käibemaksuandmed ja geneeriline ettevõtte
+     ost/müük ei ole topis ilma tugeva haridusseoseta.
+
+5. Põllumajandus, metsandus ja kalandus:
+   - top uudised on sisuliselt põllumajanduse, metsanduse, kalanduse, maa, toidu,
+     maaettevõtluse või sektori keskkonna/toote/ekspordi teema kohta;
+   - riigikaitselise järelkasvu fondi memorandum ei tohi sektoritulemusi varjutada
+     ilma otsese sektoritõendita.
+
+6. Cross-sector fallback:
+   - cross-sector sisu ei järjestu enne otseseid primary/secondary tegevusala vasteid.
+
+7. Recipient/ministry:
+   - recipient_filter_group on olemas seal, kus allikas sisaldab adressaati;
+   - recipient ei muuda topicut ega tegevusala;
+   - ebaselged recipient mappingud on review's.
+
+8. Public readiness:
+   - `needs_review`, `blocked` ja `archive_only` read ei ilmu public top tulemustes;
+   - `public_ready_limited` read ei kuva piiratud välju üle.
+
+Kui need testid ei läbi, ei tohi andmestikku pidada controlled merge'i või production
+import'i jaoks valmis.
+
+--------------------------------------------------------------------------------
+25.13. DATA REPAIR OUTPUT SHEET SOOVITUSED
+--------------------------------------------------------------------------------
+
+Kui tehakse v0.9.2 põhjal data repair, soovituslikud väljundfailid ja lehed:
+
+Töövõidud:
+- main repaired sheet;
+- `toovoidud_date_repairs`;
+- `toovoidud_relevance_repairs`;
+- `toovoidud_remaining_review`.
+
+Web/news:
+- main repaired sheet;
+- `web_activity_repairs`;
+- `web_related_link_repairs`;
+- `web_public_readiness_changes`;
+- `web_remaining_review`.
+
+Opinions:
+- main repaired sheet;
+- `recipient_repairs`;
+- `recipient_remaining_review`;
+- `opinion_topic_regression_check`.
+
+Üldraport:
+- `repair_summary`;
+- `known_blocker_checks`;
+- `suspicious_dates_all`;
+- `related_link_repairs`;
+- `recipient_metadata_repairs`;
+- `public_readiness_changes`;
+- `field_mapping_for_app_import`;
+- `remaining_manual_review`.
+
+--------------------------------------------------------------------------------
+25.14. KVALITEEDIPÕHIMÕTE
+--------------------------------------------------------------------------------
+
+Avalikus tööriistas on "vähem, aga õige" parem kui "palju, aga vale".
+
+Kui valik on:
+- kuvada vähem tulemusi või kuvada nõrku tulemusi;
+- kuvada ainult aasta või kuvada tõendamata täpne kuupäev;
+- jätta related plokk tühjaks või näidata broad-topic seoseid;
+- jätta rida review'sse või teha confident, kuid kontrollimata klassifikatsioon;
+
+siis vali konservatiivne variant:
+- vähem tulemusi;
+- aasta või kuupäeva peitmine;
+- seotud sisu peitmine;
+- review queue.
+
+================================================================================
+
+================================================================================
+26. V0.9.4 APP-IMPORT, WEB/NEWS QUALITY JA PATCH-WORKFLOW ADDENDUM
+================================================================================
+
+See peatükk täiendab v0.9.2 juhendit Koda app'i tegeliku andmetöö põhjal.
+Avalike teemade nimekirja ei muudeta. Muudatused puudutavad eelkõige:
+- app-facing tegevusalade normaliseerimist;
+- web/news sisurea rolli määramist;
+- avaliku summary kvaliteeti;
+- sektorilehtede nähtavust ja ranking'ut;
+- final import eligibility reegleid;
+- väikeste kontrollitud patch'ide töövoogu.
+
+Põhimõte:
+Avalikus app'is ei tohi kuvada rida sektori, summary, related-link'i või ranking'u kaudu kindla ja kasuliku
+sisuna, kui see põhineb ainult nõrgal märksõnal, lead'i kopeerimisel, inimese ettevõtte taustal, broad-topic
+kattuvusel või patch'i käigus tekkinud sisemistel märkustel.
+
+--------------------------------------------------------------------------------
+26.1. KANOONILISED APP-FACING TEGEVUSALAD V1.1
+--------------------------------------------------------------------------------
+
+App'is kasutatavad avalikud tegevusala/filter label'id peavad olema kanoonilised ja ühtsed.
+
+v1.1 lukustab Koda app'i public sector schema 12 sektorile. Kõigis app-facing activity väljades
+kasutatakse ainult allolevaid 12 sektorit või sisemist cross-sector/fallback väärtust.
+
+Lubatud app-facing sektorid:
+- `Tööstus ja tootmine`
+- `Kaubandus`
+- `Ehitus ja kinnisvara`
+- `Transport ja logistika`
+- `Majutus, toitlustus ja turism`
+- `Info, side ja IT`
+- `Põllumajandus, metsandus ja kalandus`
+- `Finants, kindlustus ja krediit`
+- `Haridus ja koolitus`
+- `Tervishoid, farmaatsia ja meditsiiniseadmed`
+- `Äriteenused ja kutseteenused`
+- `Meedia, loome- ja kultuurisektor`
+
+Sisemine fallback / cross-sector väärtus:
+- `Kõik tegevusalad / valdkondadeülene`
+
+Mitte kasutada app-facing sektorina:
+- `Ehitus`
+- `Kinnisvara`
+- `Energeetika`
+- `Põllumajandus ja toit`
+- `Finants ja kindlustus`
+- `Haridus`
+- `Professionaalsed teenused`
+- `Avalik sektor ja riigihanked`
+
+Need väärtused võivad esineda vanades tööfailides või vahepealsetes taksonoomiaversioonides, kuid v1.1 production
+app-importis neid public activity/filter/display väljadena ei kasutata.
+
+Reeglid:
+1. Ära loo jooksvalt uusi tegevusala nimesid.
+2. Ära kasuta samas failis paralleelseid sektori label'eid.
+3. Kui artikkel/arvamus/töövõit on kogu ettevõtluskeskkonna jaoks oluline, ära sunni seda kitsasse sektorisse.
+4. Kitsas sektor on lubatud ainult siis, kui kohustus, risk, kulu, soodustus või mõju on päriselt sektoripõhine.
+5. `Kõik tegevusalad / valdkondadeülene` võib olla sisemine filter/fallback väärtus, kuid seda ei kuvata
+   `public_activity_display_tags` väljas.
+6. Cross-sector sisu võib olla sektorilehel ainult demoted/fallback tulemusena (`public_sector_page_allowed = LIMITED`),
+   mitte kitsaste sektorite top-tulemusena.
+7. Kui kitsas sektorseos puudub, on parem kuvada vähem otseseid sektoritulemusi ja lisada vajadusel LIMITED fallback,
+   mitte kuvada vale sektorivaste.
+
+v1.1 mapping vanadest/vahepealsetest label'itest app'i 12 sektorisse:
+- `Ehitus` + `Kinnisvara` -> `Ehitus ja kinnisvara`, ainult kui allikas toetab ehitus/kinnisvara sektoriseost.
+- `Põllumajandus ja toit` -> `Põllumajandus, metsandus ja kalandus`, ainult kui allikas toetab põllumajanduse, metsanduse, kalanduse või esmase/toidutootmise sektoriseost.
+- `Finants ja kindlustus` -> `Finants, kindlustus ja krediit`.
+- `Haridus` -> `Haridus ja koolitus`.
+- `Professionaalsed teenused` -> `Äriteenused ja kutseteenused`.
+- `Tervishoid` -> `Tervishoid, farmaatsia ja meditsiiniseadmed`.
+- `Energeetika` / `Energia ja ressursimahukas tegevus` -> ei ole eraldi app-facing sektor. Kaardista 12 sektorisse ainult tugeva allikatõendi korral, nt tööstuslik energiakasutus -> `Tööstus ja tootmine`, transpordikütus -> `Transport ja logistika`. Kui otsest sektoritõendit pole, kasuta cross-sector/LIMITED.
+- `Avalik sektor ja riigihanked` -> ei ole app-facing tegevusala. Kui sisu on päriselt riigihangete või avaliku sektoriga äri kohta, kasuta topic'ut `Riigihanked ja avaliku sektoriga äri`, kuid activity jääb cross-sector/LIMITED või 12 sektorist sobivaks ainult siis, kui konkreetne sektor on allikaga tõendatud.
+
+--------------------------------------------------------------------------------
+26.2. APP-SAFE TEGEVUSALA VÄLJAD
+--------------------------------------------------------------------------------
+
+Vana `activity_primary` ja `activity_secondary` võivad jääda legacy/source-taxonomy väljadeks, kuid app ei tohi
+neid otse kasutada avaliku sektorilehe filtrina.
+
+App peab kasutama järgmisi välju:
+- `public_activity_filter_tags`
+- `public_activity_display_tags`
+- `public_activity_reason`
+- `public_activity_evidence`
+- `public_sector_page_allowed`
+- `public_activity_confidence`
+
+Väljade tähendus:
+
+`public_activity_filter_tags`
+- Masinloetav semikooloniga eraldatud tegevusalade loend.
+- Võib sisaldada `Kõik tegevusalad / valdkondadeülene`, kui rida on päriselt cross-sector.
+
+`public_activity_display_tags`
+- Avalikult kuvatavad tegevusala sildid.
+- Ei tohi sisaldada `Kõik tegevusalad / valdkondadeülene`.
+
+`public_activity_reason`
+- Lühike põhjendus, miks need sektorid valiti.
+
+`public_activity_evidence`
+- Lühike tõend pealkirjast, summary'st või allikatekstist.
+
+`public_sector_page_allowed`
+- Lubatud väärtused: `TRUE`, `FALSE`, `LIMITED`.
+- `TRUE`: võib sektorilehel ilmuda.
+- `LIMITED`: võib ilmuda ainult demote'ituna või laiema konteksti tulemuses.
+- `FALSE`: sektorilehel ei kuvata.
+
+v1.1 täpsustus:
+- `TRUE` on ainult otsese ja allikaga tõendatud 12 sektori vaste jaoks.
+- `LIMITED` on cross-sector/fallback sisu jaoks, mis on ettevõtjatele üldiselt oluline, kuid ei ole konkreetse sektori top-tulemus.
+- `FALSE` on sisu jaoks, mida ei tohiks sektorilehel kuvada ka fallback'ina.
+
+`public_activity_confidence`
+- Lubatud väärtused: `high`, `medium`, `low`.
+
+Avaliku tegevusala tagi tohib lisada ainult siis, kui artiklil/arvamusel/töövõidul on sisuline mõju selle
+tegevusala ettevõtjatele.
+
+Ära lisa sektorit ainult seetõttu, et:
+- uudises mainitud isik töötab selle sektori ettevõttes;
+- juhatuse liige, kõneleja või intervjueeritav on sellest sektorist;
+- artiklis mainitakse ühte ettevõtet;
+- sektor esineb ühes kõrvalises lauses;
+- kvartaliülevaade mainib sektorit möödaminnes;
+- üritus toimub selles sektoris tegutsevas ettevõttes;
+- teema on üldiselt kõigile ettevõtjatele oluline.
+
+--------------------------------------------------------------------------------
+26.3. PERSON / COMPANY EI LOO SEKTORISEOST
+--------------------------------------------------------------------------------
+
+Isiku või ettevõtte taust ei ole piisav sektoritag'i alus.
+
+Reegel:
+Kui uudis räägib Koja juhtimisest, juhatusest, töötajatest, tunnustustest või organisatsioonist,
+siis ei tohi sellele lisada tegevusala selle põhjal, millises sektoris uudises mainitud isik või tema ettevõte tegutseb.
+
+Regressiooninäide:
+`Eesti Kaubandus-Tööstuskoja juhatuse esimeheks sai Oliver Väärtnõu`
+- content_role: `organization_news`
+- `public_activity_filter_tags`: tühi
+- `public_activity_display_tags`: tühi
+- `public_sector_page_allowed`: `FALSE`
+- ei tohi ilmuda `Info, side ja IT` või `Tööstus ja tootmine` sektorilehel ainult seetõttu, et isiku ettevõttel on IT-seos.
+
+--------------------------------------------------------------------------------
+26.4. WEB/NEWS CONTENT ROLE REEGLID
+--------------------------------------------------------------------------------
+
+Web/news ridadel peab olema app'i jaoks eraldi rolliväli:
+- `content_role_final` või `web_content_role`
+
+Lubatud väärtused:
+- `policy_news`
+- `opinion_related_news`
+- `work_win_news`
+- `sector_specific_news`
+- `background_analysis`
+- `roundup_or_digest`
+- `organization_news`
+- `event_or_training`
+- `member_story`
+- `service_or_product_news`
+- `ukraine_or_charity_support`
+- `archive_or_listing_page`
+- `non_article_page`
+- `unclear_needs_review`
+
+Reeglid:
+1. `policy_news`, `opinion_related_news`, `work_win_news` ja `sector_specific_news` on tavaliselt app'i põhisisu.
+2. `roundup_or_digest` võib olla avalikus otsingus, kuid sektorilehel pigem demote'ituna.
+3. `organization_news` võib olla üldotsingus, kuid ei tohi ilmuda sektorilehel ilma selge sektoripõhise ärimõjuta.
+4. `event_or_training` ei tähenda automaatselt `Haridus` tegevusala. Sündmuse formaat ei ole sektor.
+5. Vanad ürituse/koolituse teated on tavaliselt `archive_only` või `hide_from_sector_pages`, kui neil puudub püsiv poliitika- või ärisisu.
+6. `ukraine_or_charity_support` ei ole automaatselt `Tööstus ja tootmine` ega `Riigikaitse` tegevusala tulemus.
+7. `archive_or_listing_page` ja `non_article_page` ei tohi olla app'is artiklina nähtavad.
+
+Regressiooninäide:
+`Riigikaitse Edendamise Sihtasutus toimetas Ukraina rahvuskaardile ligi veerand miljoni eest varustust`
+- content_role: tavaliselt `ukraine_or_charity_support`
+- sektorilehel ei kuvata, kui artikkel ei räägi sisuliselt kaitsetööstuse ettevõtetest, tootmisest,
+  hangetest või tööstuslikust ärimõjust.
+
+Regressiooninäide:
+`Uudiste arhiiv`
+- content_role: `archive_or_listing_page`
+- `recommended_app_visibility_final`: `archive_only`
+- rank score: 0
+- app import candidate: `FALSE`
+
+--------------------------------------------------------------------------------
+26.5. SUMMARY VÄLJADE ROLLID WEB/NEWS KIHIS
+--------------------------------------------------------------------------------
+
+Web/news kihis tuleb eristada source/extraction välju ja avalikku app summary't.
+
+Väljade rollid:
+
+`lead_text`
+- Allikast ekstraheeritud lead või esimene kirjeldav lause.
+- Ei ole iseenesest avalik app summary.
+
+`first_substantive_paragraph`
+- Esimene sisuline lõik allikast.
+- Abiväli source-bindingu, summary ja QA jaoks.
+- Ei ole avalik app summary.
+
+`article_summary`
+- Lühike neutraalne artikli sisu kokkuvõte.
+- Ei tohi olla lihtsalt lead'i koopia, v.a kui allikas ongi väga lühike ning see on QA-s põhjendatud.
+
+`app_public_summary_ee`
+- Avalikus Koda app'is kuvatav kasutajasõbralik kokkuvõte.
+- Peab selgitama, mis juhtus/muutus, mida Koda ütles/tegi/saavutas ning miks see ettevõtjale oluline on.
+
+`evidence_short`
+- Lühike tõend või allikapõhine ankur.
+- Ei tohi olla sama mis summary.
+
+Reeglid:
+1. `app_public_summary_ee` ei tohi olla sama mis `lead_text`.
+2. `app_public_summary_ee` ei tohi olla sama mis `article_summary`.
+3. `app_public_summary_ee` ei tohi olla sama mis `first_substantive_paragraph`.
+4. `app_public_summary_ee` ei tohi olla sama mis `evidence_short`.
+5. `app_public_summary_ee` ei tohi olla ainult artikli esimene lause.
+6. `app_public_summary_ee` ei tohi lõppeda `...` või `…`.
+7. Summary peab olema sisuline, mitte templilause.
+
+Hea summary vastab vähemalt kolmele küsimusele:
+- mis juhtus või mida kavandati;
+- mida Koda ütles, tegi, toetas, kritiseeris või saavutas;
+- miks see ettevõtjale või konkreetsele tegevusalale oluline on.
+
+--------------------------------------------------------------------------------
+26.6. ANTI-TEMPLATE JA ANTI-META-LANGUAGE FAIL-LIST
+--------------------------------------------------------------------------------
+
+Avalikus summary's ei tohi olla sisemisi tööprotsessi, source-layer'i ega template-keele fraase.
+
+Opinions ja web/news avaliku summary fail-list sisaldab vähemalt:
+- `summary-kihis`
+- `Avalikus summary-kihis`
+- `avalikus summary-kihis`
+- `avalikus kihis`
+- `TXT-allikas`
+- `TXT allikas`
+- `allikas nähtuv`
+- `source layer`
+- `summary layer`
+- `source`
+- `patch`
+- `QA`
+- `fail`
+- `pass`
+- `tuleb käsitleda` kui see viitab toimetusprotsessile, mitte sisule.
+
+Web/news template fail-list sisaldab vähemalt:
+- `Artikkel selgitab`
+- `Ettevõtjate jaoks on praktiline tähendus`
+- `Koja vaade aitab hinnata`
+- `Koda käsitles teemat`
+- `Kokkuvõttes rõhutab uudis`
+- `olulist muudatust või poliitikateemat`
+- `laiemas ettevõtluskeskkonnas` kui see on üldine filler
+- `mõjutab ettevõtjaid` ilma selgituseta, kuidas või miks.
+
+Opinions summary fail-list sisaldab vähemalt:
+- `Eelnõu puudutas`
+- `Algatus puudutas`
+- `andis seisukoha küsimuses`
+- `muuta või täpsustada küsimust`
+- `Õigusselged reeglid aitavad`
+- `Kaubanduskoda tänab`
+- `Eesti Kaubandus-Tööstuskoda tänab`
+- `Järgnevalt`
+- `Suur-Ameerika`
+- `Paldiski mnt`
+- `info@`
+- ``
+
+Kui import-eligible real on fail-list hit:
+- paranda summary kitsas cleanup patch'is;
+- kui parandust ei saa allikaga toetada, märgi `needs_review` või `archive_only`;
+- ära impordi seda avalikku app'i.
+
+--------------------------------------------------------------------------------
+26.7. MULTI-SECTOR JA TOPIC VS ACTIVITY ERISTUS
+--------------------------------------------------------------------------------
+
+Topic ja activity on eri mõõtmed.
+
+Topic kirjeldab poliitika/õigusloome/ettevõtluskeskkonna teemat.
+Activity kirjeldab, millise tegevusala ettevõtjaid sisu sisuliselt puudutab.
+
+Näide: suhkruga magustatud jookide maksustamine
+- topic: `Maksud ja tasud`
+- public activity tags: vähemalt `Kaubandus` ja `Majutus, toitlustus ja turism`, kui artikkel räägib müügist/toitlustusest/jookidest.
+- `Põllumajandus, metsandus ja kalandus` võib lisanduda, kui allikas sisuliselt puudutab tootjaid, importijaid või toidu/joogi sektorit.
+
+Reegel:
+Maksuteema ei tähenda, et tegevusala on ainult `Kaubandus` või ainult `Kõik tegevusalad`.
+Kui maks või regulatsioon puudutab konkreetsete kaupade müüjaid, tootjaid või teenusepakkujaid, tuleb lisada sisuliselt põhjendatud tegevusalad.
+
+Samas ei tohi multi-sector tag'e lisada igaks juhuks. Igal tegevusala tag'il peab olema reason ja evidence.
+
+--------------------------------------------------------------------------------
+26.8. QUARTERLY / ROUNDUP / DIGEST REEGEL
+--------------------------------------------------------------------------------
+
+Kvartaliülevaade, kuuaruanne, aastakokkuvõte või muu digest ei tohi automaatselt ilmuda iga mainitud sektori top-tulemuses.
+
+Reeglid:
+1. content_role: `roundup_or_digest`.
+2. Sektoritag lubatud ainult siis, kui digest sisaldab selgelt sektoripõhist sisulist lõiku.
+3. Kui seos on lai, kasuta cross-sector/internal tag'i või üldotsingut.
+4. Sektorilehel peab roundup olema tavaliselt `show_but_demote` või `show_on_sector_pages_demoted`.
+5. Roundup ei tohi järjestuda ette otsestest Koja arvamuse, töövõidu või sektoripõhise regulatsiooni uudistest.
+
+--------------------------------------------------------------------------------
+26.9. VISIBILITY JA RANKING FINAL FIELDS
+--------------------------------------------------------------------------------
+
+App-facing nähtavuse/ranking'u väljad:
+- `recommended_app_visibility_final`
+- `public_result_eligibility_final`
+- `sector_result_eligibility`
+- `general_search_eligibility`
+- `public_sector_rank_score`
+- `general_search_rank_score`
+- `visibility_reason`
+- `ranking_reason`
+
+`recommended_app_visibility_final` lubatud väärtused:
+- `show_normally`
+- `show_but_demote`
+- `show_only_in_general_search`
+- `hide_from_sector_pages`
+- `archive_only`
+- `needs_review`
+
+`sector_result_eligibility` lubatud väärtused:
+- `show_on_sector_pages`
+- `show_on_sector_pages_demoted`
+- `general_search_only`
+- `hide_from_sector_pages`
+- `archive_only`
+- `needs_review`
+
+Ranking'u põhimõte:
+1. Relevance first, recency second.
+2. Otsene sektoripõhine töövõit või Koja seisukoht peab järjestuma kõrgemale kui uus, aga nõrga sektoriseosega organisatsiooniuudis.
+3. Cross-sector fallback ei tohi varjutada otseseid sector-match tulemusi.
+4. Date-only ranking ei ole lubatud sektorilehtede põhiloogikana.
+5. Archive/listing/non-article read saavad rank score 0.
+
+Soovituslik `public_sector_rank_score` skaala:
+- 95-100: otsene töövõit või suur poliitikamuudatus selge sektorimõjuga.
+- 85-94: tugev sektoripõhine Koja arvamus/uudis/regulatsiooniteema.
+- 75-84: kasulik sektoripõhine poliitika- või ettevõtlusuudis.
+- 60-74: sektoripõhine taustaanalüüs või praktiline juhend.
+- 45-59: roundup/digest sisulise sektorilõiguga.
+- 25-44: nõrk või lai seos; ainult demote'ituna.
+- 0-24: organisatsiooniuudis, vana event, charity/support, arhiiv/listing või vale sektorivaste.
+
+--------------------------------------------------------------------------------
+26.10. FINAL WEB IMPORT CANDIDATE REEGEL
+--------------------------------------------------------------------------------
+
+Soovituslik väli:
+- `final_web_import_candidate`
+
+`final_web_import_candidate = TRUE` ainult siis, kui:
+- rida on päris artikkel või app'is kasulik üldotsingu sisu;
+- `app_public_summary_ee` on olemas ja summary QA läbitud;
+- activity otsus on tehtud või teadlikult tühjaks jäetud;
+- visibility/ranking otsus on tehtud;
+- rida ei ole arhiiv/listing/non-article;
+- rida ei ole source-missing;
+- rida ei vaja manual review'd;
+- kui rida läheb sektorilehele, on `public_activity_filter_tags` ja score põhjendatud.
+
+`final_web_import_candidate = FALSE`, kui:
+- archive/listing page;
+- non-article page;
+- source missing;
+- vana event ilma püsiva väärtuseta;
+- summary failed;
+- activity failed;
+- visibility failed;
+- manual review required.
+
+Soovituslik exclusion väli:
+- `final_web_import_exclusion_reason`
+
+Lubatud põhjused:
+- `archive_or_listing_page`
+- `non_article_page`
+- `old_event_no_lasting_value`
+- `source_missing`
+- `summary_quality_failed`
+- `activity_quality_failed`
+- `visibility_quality_failed`
+- `manual_review_required`
+- `duplicate_or_low_relevance`
+
+--------------------------------------------------------------------------------
+26.11. PATCH-WORKFLOW REEGEL
+--------------------------------------------------------------------------------
+
+Koda andmestike parandamisel ei tohi kasutada suurt korraga-kõik rerun'i, kui ülesanne on editorial quality,
+summary, tegevusala, visibility/ranking või related-link parandamine.
+
+Kohustuslik töövoog:
+1. Üks patch parandab ainult ühte välja või kitsalt seotud väljade gruppi.
+2. Patch on kumulatiivne: uus fail sisaldab kõiki varasemaid parandusi.
+3. Varem patchitud QA-passed ridu ei kirjutata uuesti üle ilma eraldi põhjenduseta.
+4. Iga patch lisab processed/status/log väljad.
+5. Iga patch toodab report'i ja remaining queue.
+6. Kui kvaliteedivärav ebaõnnestub, peatub patch ja annab partial faili, mitte ei jätka vaikides.
+
+Soovituslikud patch suurused:
+- Opinions high-risk editorial executive summary: 5-10 rida korraga.
+- Web/news summary ühe välja või 3 seotud tekstivälja jaoks: kuni 150 rida, sisemiselt 25 kaupa QA.
+- Activity tag patch: kuni 150 rida, sisemiselt 25 kaupa QA.
+- Visibility/ranking patch: kuni 150 rida, sisemiselt 25 kaupa QA.
+- Mehaaniline blocker repair võib olla suurem, kui reegel on deterministlik ja QA tugev.
+
+Stop-condition näited:
+- summary'd muutuvad templikeeleks;
+- source text ja title ei klapi;
+- üle 3 tõsise summary vea 25 rea chunk'is;
+- üle 5 tegevusala vea 25 rea chunk'is;
+- üle 20% sector top 30 tulemustest on wrong/hide/review;
+- import-candidate ridades esineb fail-list fraase.
+
+--------------------------------------------------------------------------------
+26.12. APP IMPORT SLIM FILE REEGEL
+--------------------------------------------------------------------------------
+
+Final/slim import fail peab sisaldama ainult app'i jaoks vajalikke ridu ja välju.
+
+Soovituslik web/news import sheet:
+- `content_id`
+- `title`
+- `url`
+- `published_date` / `document_date`
+- `content_role_final`
+- `topic_primary`
+- `topic_secondary`
+- `app_public_summary_ee`
+- `article_summary`
+- `evidence_short`
+- `public_activity_filter_tags`
+- `public_activity_display_tags`
+- `public_activity_reason`
+- `public_sector_page_allowed`
+- `recommended_app_visibility_final`
+- `sector_result_eligibility`
+- `general_search_eligibility`
+- `public_sector_rank_score`
+- `general_search_rank_score`
+- `final_web_import_candidate`
+- source/reference fields
+- QA/import eligibility fields
+
+Soovituslik opinions import sheet:
+- `content_id`
+- `title`
+- `document_date`
+- `recipient_raw`
+- `recipient_normalized`
+- `recipient_filter_group`
+- `topic_primary`
+- `topic_secondary`
+- `activity_primary`
+- `activity_secondary`
+- `executive_summary_ee_final`
+- `final_app_import_eligible`
+- source/reference fields
+- evidence fields if needed
+
+Slim failis võib säilitada eraldi `excluded_rows` / `not_import_eligible_rows` sheet'i kontrolliks, kuid app import peab kasutama ainult import-eligible sheet'i või ranget `*_import_candidate = TRUE` filtrit.
+
+--------------------------------------------------------------------------------
+26.13. V0.9.4 REGRESSION TESTID
+--------------------------------------------------------------------------------
+
+Iga järgmine web/news või app import repair peab kontrollima vähemalt järgmisi juhtumeid:
+
+1. Oliver Väärtnõu juhatuse esimehe uudis:
+- ei tohi ilmuda `Info, side ja IT` ega `Tööstus ja tootmine` sektorilehel;
+- content_role peab olema organisatsiooniuudis;
+- sector score 0.
+
+2. Riigikaitse Edendamise Sihtasutuse Ukraina varustusabi:
+- ei tohi ilmuda `Tööstus ja tootmine` all, kui puudub kaitsetööstuse/ettevõtluse sisuline mõju;
+- tavaliselt general search only või sector hidden.
+
+3. Suhkruga magustatud jookide maksustamine:
+- topic `Maksud ja tasud`;
+- activity peab sisaldama sisuliselt põhjendatud toidu/joogi müügi või teeninduse sektoreid, sh `Kaubandus` ja `Majutus, toitlustus ja turism`;
+- summary peab selgitama Koja vastuseisu põhjust ja ettevõtja mõju.
+
+4. `Uudiste arhiiv`:
+- archive/listing;
+- rank score 0;
+- import candidate false.
+
+5. Kvartaliülevaated:
+- content_role `roundup_or_digest`;
+- demoted ranking;
+- ei tohi saada iga mainitud sektori strong tulemust.
+
+6. Template-summary fail-list:
+- import-candidate ridades ei tohi olla `Artikkel selgitab`, `Koja vaade aitab hinnata`,
+  `Koda käsitles teemat`, `summary-kihis`, `TXT-allikas` ega muid fail-list fraase.
+
+7. Public display tags:
+- `Kõik tegevusalad / valdkondadeülene` ei tohi olla `public_activity_display_tags` väljas.
+
+8. Sector top results:
+- Kõigi 12 app-facing sektori top 30 tulemused peavad olema sisuliselt kontrollitud. Eriti kontrolli `Tööstus ja tootmine`, `Info, side ja IT`, `Kaubandus`, `Majutus, toitlustus ja turism`, `Põllumajandus, metsandus ja kalandus` ja `Haridus ja koolitus`.
+
+Kui regressioonitestid ei läbi, ei tohi faili pidada final app-import valmisolekuga andmestikuks.
+
+--------------------------------------------------------------------------------
+26.14. V0.9.4 KVALITEEDIPÕHIMÕTE
+--------------------------------------------------------------------------------
+
+v0.9.4 kinnitab praktilise töö käigus õpitud põhimõtte:
+
+Vähem, aga õige on parem kui palju, aga vale.
+
+Kui valik on:
+- kuvada vähem sektoritulemusi või kuvada nõrku tulemusi;
+- jätta row general search'i või suruda see valele sektorilehele;
+- jätta related block tühjaks või näidata broad-topic seoseid;
+- teha väike patch või suur rerun;
+- jätta rida review'sse või importida ebakindla summary/sector/ranking'uga;
+
+siis vali konservatiivne variant.
+
+Avalik app peab usaldust suurendama, mitte näitama maksimaalselt palju poolseotud kaarte.
+
+================================================================================
+27. V1.0 PRODUCTION APP-IMPORT CONTRACT ADDENDUM
+================================================================================
+
+See peatükk lukustab Koda value-discovery tööriista v1 importlepingu.
+Avalike teemade, topic ID-de, stance'i, value_type'i ja work_win_type'i ei muudeta. v1.1 täpsustab,
+et app-facing tegevusala nimekiri on Koda appi 12 sektori skeem. v1.1 on production app-import ja
+slim-file leping, mitte uus avalik teemataxonomy.
+
+Põhimõte:
+App'i ei impordita enam tööfaile, patch-faile ega auditilehti. App impordib ainult v1 slim failide
+selgelt määratud import sheet'e. Kõik excluded/review sheet'id jäävad kvaliteedikontrolliks ja
+järelauditiks, mitte avaliku sisu allikaks.
+
+--------------------------------------------------------------------------------
+27.1. V1 APP-IMPORT FAILID JA SOURCE OF TRUTH SHEET'ID
+--------------------------------------------------------------------------------
+
+v1 app-import source of truth kihid on:
+
+1. Opinions / Koja seisukohad ja arvamused
+   Fail: `koda_opinions_v0_10_10_APP_IMPORT_SLIM.xlsx`
+   Import sheet: `opinions_app_import`
+   Kontroll/excluded sheet: `excluded_rows`
+   Field mapping: `field_mapping`
+
+2. Web/news / Koja uudised ja veebisisu
+   Fail: `koda_web_content_v1.xlsx`
+   Import sheet: `web_app_import`
+   Kontroll/excluded sheet: `web_excluded_review`
+   Field mapping: `field_mapping`
+
+3. Töövõidud / Koja töövõidud
+   Fail: `koda_toovoidud_v1.xlsx`
+   Import sheet: `toovoidud_app_import`
+   Kontroll/excluded sheet: `toovoidud_excluded_review`
+   Field mapping: `field_mapping`
+
+Reegel:
+- App import peab lugema ainult import sheet'i.
+- Excluded/review sheet'e ei impordita avaliku sisuna.
+- README ja field_mapping on inimesele ja import-script'i kontrolliks, mitte avaliku sisureana.
+- Kui workbook'is on mitu sarnast sheet'i, on v1 puhul importimiseks lubatud ainult siin nimetatud import sheet.
+
+--------------------------------------------------------------------------------
+27.2. V1 SLIM FAILI STANDARDSTRUKTUUR
+--------------------------------------------------------------------------------
+
+Igas v1 slim import-failis peab olema vähemalt:
+
+1. `README`
+   - kirjeldab faili eesmärki, versiooni, import sheet'i nime, excluded/review sheet'i nime ja põhilisi count'e;
+   - peab ütlema, et fail on app-import slim, mitte tööfail ega täielik audit.
+
+2. Import sheet
+   - opinions: `opinions_app_import`
+   - web/news: `web_app_import`
+   - töövõidud: `toovoidud_app_import`
+
+3. Excluded/review sheet
+   - sisaldab read, mida ei impordita avaliku sisuna;
+   - peab sisaldama exclusion/review põhjust;
+   - on vajalik regressioonikontrolliks ja hilisemaks parandusringiks.
+
+4. `field_mapping`
+   - kirjeldab import sheet'is olevate väljade tähendust;
+   - peab eristama avaliku kuvamise, sisemise filtri, source/reference ja QA/status välju.
+
+Slim failis ei tohi olla:
+- patch-log sheet'e;
+- raw scrape/full text sheet'e;
+- before/after auditilehti;
+- ajutisi repair queue sheet'e;
+- vanu intermediate audit sheet'e;
+- suuri source body välju, kui neid ei ole app'is vaja;
+- mudeli sisemisi põhjendusi või töötlusmärkmeid.
+
+--------------------------------------------------------------------------------
+27.3. IMPORT-CANDIDATE REEGEL V1 FAILIDES
+--------------------------------------------------------------------------------
+
+Import sheet'i sattumine tähendab, et rida on v1 app-import kandidaadina heaks kiidetud.
+Siiski peab import-script eelistatult kontrollima ka layer'i spetsiifilist import flag'i.
+
+Opinions:
+- importida ainult `opinions_app_import` sheet;
+- kui väli `final_app_import_eligible` on olemas, peab see olema `TRUE`;
+- `executive_summary_ee_final` peab olema avaliku kuvamise summary allikas.
+
+Web/news:
+- importida ainult `web_app_import` sheet;
+- kui väli `final_web_import_candidate` on olemas, peab see olema `TRUE`;
+- `app_public_summary_ee` on avaliku kuvamise summary allikas;
+- sektorilehtede jaoks kasutada ainult app-safe activity ja visibility välju.
+
+Töövõidud:
+- importida ainult `toovoidud_app_import` sheet;
+- kui väli `work_win_import_candidate` või `final_work_win_import_candidate` on olemas, peab see olema `TRUE`;
+- avaliku kuvamise summary alus on `work_win_summary_ee`;
+- töövõidu väärtuse selgitamiseks säilitada `what_changed_ee`, `koda_role_ee` ja `business_value_ee`.
+
+Üldreegel:
+Kui import sheet'is on rida, kuid import flag puudub või on `FALSE`, peab import peatuma ja andma QA vea.
+Kui excluded/review sheet'is on rida, kuid import flag on `TRUE`, peab import peatuma ja andma QA vea.
+
+--------------------------------------------------------------------------------
+27.4. V1 TULBAVALIKU ÜLDREEGEL
+--------------------------------------------------------------------------------
+
+v1 slim import-faili eesmärk on anda app'ile ainult vajalikud väljad.
+
+Alles peavad jääma väljad järgmistest gruppidest:
+
+1. Identiteet ja allikas
+   - content/work-win ID;
+   - pealkiri;
+   - URL või source reference;
+   - source layer/type;
+   - source/publication/document date;
+   - source confidence või source basis, kui vajalik.
+
+2. Avalik kuvamine
+   - avalik summary;
+   - lühike evidence/source anchor, kui app seda kasutab;
+   - public title, kui see erineb source title'ist.
+
+3. Taxonomy ja filtrid
+   - topic_primary;
+   - topic_secondary;
+   - app-facing public activity/filter tags;
+   - recipient/ministry metadata opinions kihis;
+   - law tags, kui need on app'i detail/advanced vaates kasutusel.
+
+4. Kuupäevad ja sorteerimine
+   - document/source/published date;
+   - sort/display date;
+   - töövõitudes eraldi source_date, achievement_year, effective_date, deadline_date,
+     display_date, display_date_precision, date_confidence ja date_basis.
+
+5. Visibility, ranking ja import gate
+   - recommended visibility;
+   - sector/general search eligibility;
+   - rank scores;
+   - import candidate / final eligibility;
+   - exclusion/review reason kontrollilehel.
+
+6. Related/linking väljad
+   - policy_thread_id / canonical_policy_thread_id;
+   - related IDs / related confidence, kui app neid kasutab;
+   - related fields peavad olema high või curated medium confidence; low/rejected seoseid avalikult ei kuvata.
+
+Eemaldada tuleb:
+- raw full body text;
+- scrape technical fields;
+- patch number ja patch processed ajalugu, kui see ei ole app'i jaoks vajalik;
+- before/after snapshotid;
+- old/generated summary väljad, kui final summary on olemas;
+- ajutised QA audit veerud;
+- model/process notes;
+- duplicate legacy fields, millel on v1 app-safe vaste olemas.
+
+--------------------------------------------------------------------------------
+27.5. WEB V1 IMPORTLEPING
+--------------------------------------------------------------------------------
+
+Web/news v1 importallikas:
+- fail: `koda_web_content_v1.xlsx`
+- import sheet: `web_app_import`
+- excluded/review sheet: `web_excluded_review`
+
+Web/news import sheet peab sisaldama ainult ridu, mis on läbinud:
+- summary raw-fragment cleanup;
+- false summary-quality exclusion repair;
+- final import gate;
+- known examples audit;
+- sector top audit.
+
+Web/news v1 kohustuslikud põhimõtted:
+1. `app_public_summary_ee` ei tohi sisaldada comma-date/raw scrape fragmente kuskil summary sees.
+2. `app_public_summary_ee` ei tohi sisaldada template/meta-language fail-list fraase.
+3. `final_web_import_candidate` peab olema `TRUE`, kui väli on failis olemas.
+4. `Uudiste arhiiv` ja muud archive/listing/non-article read peavad olema excluded/review sheet'is, mitte import sheet'is.
+5. Organisatsiooniuudised ei tohi ilmuda sektorilehtedel, kui sektoriseos tuleb ainult isiku või ettevõtte taustast.
+6. `Kõik tegevusalad / valdkondadeülene` ei tohi olla public display tag.
+7. Sektorilehtede jaoks tuleb kasutada `public_activity_filter_tags`, `public_activity_display_tags`,
+   `public_sector_page_allowed`, `sector_result_eligibility` ja `public_sector_rank_score`, mitte legacy `activity_primary` välja üksi.
+
+Web v1 regression check peab alati kontrollima:
+- `WEB-00002` suhkruga magustatud jookide maks ei ole excluded summary quality põhjusel;
+- `Uudiste arhiiv` on excluded/archive;
+- Oliver Väärtnõu organisatsiooniuudis ei ole sektorilehe tulemus;
+- Ukraine/charity/support lood ei ole sektorilehel ilma ärilise/sektoripõhise tõendita;
+- import-candidate summarydes ei ole `20,12,2016` tüüpi raw date fragmenti mitte üheski summary osas.
+
+--------------------------------------------------------------------------------
+27.6. TÖÖVÕIDUD V1 IMPORTLEPING
+--------------------------------------------------------------------------------
+
+Töövõidud v1 importallikas:
+- fail: `koda_toovoidud_v1.xlsx`
+- import sheet: `toovoidud_app_import`
+- excluded/review sheet: `toovoidud_excluded_review`
+
+Töövõidud v1 kohustuslikud põhimõtted:
+1. Import sheet sisaldab ainult töövõite, mille import-candidate otsus on positiivne.
+2. Excluded/review sheet sisaldab töövõite, mis vajavad source/date/outcome review'd või mida ei impordita.
+3. Kuupäevamudel säilib ka slim-failis: source_date, achievement_year, effective_date, deadline_date,
+   display_date, display_date_precision, date_confidence ja date_basis.
+4. Avalikus UI-s ei tohi kuvada töövõidu täpset kuupäeva, kui `display_date_precision` ja `date_confidence` seda ei luba.
+5. `deadline_date` ja `effective_date` ei ole automaatselt töövõidu achievement/display kuupäev.
+6. Avaliku väärtuse selgitamiseks peavad import sheet'is olema `work_win_summary_ee`, `what_changed_ee`,
+   `koda_role_ee` ja `business_value_ee`, kui need väljad on v1 failis kasutusel.
+7. Koda töövõitude lehe tekst võib olla primary validation source, kui row match on high-confidence.
+8. Source/page match ei tohi tugineda ainult broad-topic kattuvusele.
+
+Töövõidud v1 regression check peab alati kontrollima:
+- panditulumaksu töövõit ei kasuta `2026-06-24` avaliku display/achievement kuupäevana;
+- börsiettevõtete soolise tasakaalu aruandluse töövõit ei kasuta `2026-12-31` achievement/display kuupäevana;
+- kui `30.06.2026` on kohustuse tähtaeg, peab see olema `deadline_date`, mitte töövõidu display date;
+- review/excluded read ei satu `toovoidud_app_import` sheet'i;
+- töövõidu summary ei ole üldfraas ilma konkreetse muutuse, Koja rolli ja ettevõtja väärtuseta.
+
+--------------------------------------------------------------------------------
+27.7. OPINIONS V1 / SLIM IMPORTLEPING
+--------------------------------------------------------------------------------
+
+Opinions slim importallikas:
+- fail: `koda_opinions_v0_10_10_APP_IMPORT_SLIM.xlsx`
+- import sheet: `opinions_app_import`
+- excluded/review sheet: `excluded_rows`
+- field mapping: `field_mapping`
+
+Opinions slim kohustuslikud põhimõtted:
+1. Import sheet sisaldab ainult `final_app_import_eligible = TRUE` ridu, kui väli on olemas.
+2. Avaliku summary alus on `executive_summary_ee_final`.
+3. Supporting-document-not-opinion read ei tohi olla import sheet'is.
+4. Recipient/ministry väljad on metadata/advanced filter, mitte topic või tegevusala määraja.
+5. Public summary ei tohi sisaldada source/meta-language fail-list fraase ega dokumendi boilerplate'i.
+6. Approved baseline'i klassifikatsiooni ei muudeta ilma eraldi regressioonipõhjuseta.
+
+Opinions regression check peab alati kontrollima:
+- supporting document rows on excluded/review sheet'is;
+- `final_app_import_eligible` pole TRUE ridadel, mis vajavad manual review'd;
+- recipient normalization ei muuda topicut;
+- executive summary ei sisalda `summary-kihis`, `TXT-allikas`, aadresse, kontaktandmeid ega boilerplate'i.
+
+--------------------------------------------------------------------------------
+27.8. V1 RELEASE GATE ENNE APP IMPORTI
+--------------------------------------------------------------------------------
+
+Enne app'i importimist peab iga v1 slim fail läbima release gate'i:
+
+1. Sheet gate
+   - workbook sisaldab ainult oodatud slim sheet'e;
+   - import sheet'i nimi vastab v1 lepingule;
+   - excluded/review sheet on olemas;
+   - field_mapping on olemas.
+
+2. Row gate
+   - import sheet'is ei ole ridu, mille import flag on `FALSE` või `needs_review`;
+   - excluded/review sheet'is ei ole ridu, mille import flag on avalikuks importimiseks `TRUE` ilma põhjenduseta;
+   - import sheet'i row count ja README count klapivad.
+
+3. Summary gate
+   - public summary väli pole tühi;
+   - public summary ei sisalda template/meta-language fail-list fraase;
+   - web summarydes ei ole raw date/title/body fragmente;
+   - opinions summarydes ei ole boilerplate'i ega aadresse;
+   - töövõidu summary selgitab konkreetset muutust, Koja rolli ja ettevõtja väärtust.
+
+4. Activity/sector gate
+   - app-facing activity label'id on kanoonilised;
+   - public display tags ei sisalda `Kõik tegevusalad / valdkondadeülene`;
+   - sector-visible ridadel on sector evidence/reason;
+   - organization/news/person taust ei loo sektoriseost.
+
+5. Date gate
+   - töövõidu suspicious-date kontroll on läbitud;
+   - date_confidence ja display_date_precision sobivad avaliku kuvamisega;
+   - deadline/effective kuupäevad ei ole valesti achievement/display kuupäevad.
+
+6. Visibility/ranking gate
+   - archive/listing/non-article read ei ole import sheet'is;
+   - sector top audit ei sisalda märkimisväärset wrong/hide/review osakaalu;
+   - relevance-first ranking on säilinud.
+
+7. Related/source gate
+   - related links on high või curated medium confidence;
+   - broad topic/activity overlap ei toida avalikku related block'i;
+   - source binding on piisav avalikuks kuvamiseks.
+
+Kui üks release gate ebaõnnestub, ei tohi faili app'i importida enne targeted repair patch'i.
+
+--------------------------------------------------------------------------------
+27.9. VERSIOONIMISE REEGEL PÄRAST V1
+--------------------------------------------------------------------------------
+
+Tööfailid ja patchid võivad jätkata `v0.10.x` seerias, kui need on sisemised parandusringid.
+Production app-import slim failid kasutavad v1 seeriat:
+
+- esimene lukustatud import: `v1`;
+- esimene parandatud import pärast app'i testimist: `v1.1`;
+- järgmised kontrollitud parandused: `v1.2`, `v1.3` jne.
+
+Reeglid:
+1. `v1` faili ei muudeta tagantjärele sama nimega, kui see on app'i antud.
+2. Iga production import parandusring peab saama uue versiooni.
+3. Iga uus versioon peab säilitama `README`, import sheet'i, excluded/review sheet'i ja `field_mapping` struktuuri.
+4. Kui parandatakse ainult ühte kihti, versioonitakse ainult seda kihti, kuid cross-layer smoke test tuleb uuesti teha.
+5. Uus taxonomy/rulebook versioon luuakse ainult siis, kui parandusring lisab korduva uue reegli, mitte üksiku andmeparanduse.
+
+--------------------------------------------------------------------------------
+27.10. V1 CROSS-LAYER SMOKE TEST
+--------------------------------------------------------------------------------
+
+Pärast opinions, web/news ja töövõitude v1 failide valmimist tuleb enne app-importi teha cross-layer smoke test.
+
+Kontrollida vähemalt:
+1. Sama policy thread'i sisu ei dubleeri eksitavalt sama kaarti mitmes kihis.
+2. Töövõit on ranking'us kõrgem kui sama teema üldine web/news taust, kui töövõit on verified ja relevantne.
+3. Uuem web/news ei varjuta otseselt seotud töövõitu ega Koja seisukohta ainult recency tõttu.
+4. Opinions, web/news ja töövõidud kasutavad sama canonical activity label'it.
+5. Sama teema related link'id põhinevad konkreetse policy thread'i või source evidence'i alusel, mitte ainult broad topic kattuvusel.
+6. Kui sama sisu esineb opinion + web + töövõit kihis, peab app suutma kuvada neid eri rollides:
+   - arvamus: mida Koda ütles;
+   - web/news: mis avalikult toimus või kuidas seda selgitati;
+   - töövõit: mis muutus ettevõtja jaoks.
+7. Excluded/review read ühest kihist ei tohi ilmuda teise kihi kaudu avalikuks, kui sama source problem või summary/source-binding blocker kehtib.
+
+--------------------------------------------------------------------------------
+27.11. V1 KVALITEEDIPÕHIMÕTE
+--------------------------------------------------------------------------------
+
+v1.0 kinnitab production-põhimõtte:
+
+App-import on leping, mitte lihtsalt viimane tööfail.
+
+Kui on valida:
+- importida rohkem ridu või importida ainult kontrollitud read;
+- jätta patch-logid alles või anda app'ile puhas slim leping;
+- lasta app'il ise otsustada või anda talle selge import sheet;
+- hoida vale rida import sheet'is koos exclusion reason'iga või tõsta see excluded/review sheet'i;
+- parandada üks targeted blocker või teha uus suur rerun;
+
+siis vali kontrollitud, auditeeritav ja kitsas lahendus.
+
+Production app peab kasutama puhast, kitsast ja usaldusväärset importkihti.
+Audit, patch history ja raw source jäävad eraldi tööfailidesse.
+
+
+================================================================================
+28. V1.2 TÖÖVÕITUDE BACKFILL, NESTING JA APP-DISPLAY ADDENDUM
+================================================================================
+
+See peatükk lisab v1.2 reeglid töövõitude backfill'i, uute töövõitude, seeria-/ajajooneridade,
+parent/thread seoste ja appi kuvamisloogika jaoks.
+
+Avalike teemade nimekirja ei muudeta.
+App-facing 12 sektori skeemi ei muudeta.
+`Kõik tegevusalad / valdkondadeülene` jääb sisemiseks cross-sector/fallback väärtuseks ning seda ei kuvata public display tag'ina.
+
+v1.2 eesmärk on hoida töövõitude andmekiht usaldusväärne olukorras, kus originaal-90 kureeritud töövõidule lisanduvad:
+- uued standalone töövõidud;
+- sama policy thread'i eri aasta või eri etapi töövõidud;
+- originaal-90 külge seotud timeline/source/update read;
+- news-only read, mis on app'is olulised, kuid ei ole töövõidud;
+- content-links seosed uute backfill ID-dega.
+
+--------------------------------------------------------------------------------
+28.1 ORIGINAL-90 LOCKED BASELINE RULE
+--------------------------------------------------------------------------------
+
+Originaal-90 kureeritud töövõitu on locked baseline.
+
+Reeglid:
+1. Originaal-90 ridu ei kustutata backfill'i käigus.
+2. Originaal-90 ridu ei nõrgendata ega tõsteta automaatselt excluded/review staatusesse, kui uut infot ei ole sisuliselt kontrollitud.
+3. Originaal-90 ridu ei kirjutata vaikimisi ümber uue news/source rea põhjal.
+4. Originaal-90 ridadele võib lisada paremaid source URL-e, seotud uudiseid, timeline item'eid või policy-thread seoseid.
+5. Kui originaal-90 reas avastatakse tegelik sisuline viga, tehakse targeted repair koos logiga. Vaikne ülekirjutamine ei ole lubatud.
+6. Originaal-90 võib jääda public-ready töövõiduks ka siis, kui konkreetset eraldi uudise URL-i ei ole leitud ning allikaks on ainult Koja töövõitude overview leht.
+7. Overview fallback ei ole ideaalne source, kuid see ei tühista originaal-90 töövõidu väärtust, kui töövõit on juba kureeritud baseline'is.
+
+Soovituslik väli:
+- `row_origin`
+
+Lubatud väärtus originaalrea puhul:
+- `original_90_locked`
+
+Originaal-90 muudatuste logimiseks kasutada eraldi auditit või paranduse logi, näiteks:
+- `targeted_repair_log`
+- `existing_90_attachments`
+- `source_url_audit`
+
+--------------------------------------------------------------------------------
+28.2 BACKFILL ROW TYPES
+--------------------------------------------------------------------------------
+
+Töövõitude backfill'is tuleb eristada rea päritolu ja kuvamisloogikat.
+
+Soovituslik väli:
+- `row_origin`
+
+Lubatud `row_origin` väärtused:
+- `original_90_locked`
+- `phase2_new_standalone`
+- `phase2_series_nested`
+
+Tähendus:
+- `original_90_locked`: esialgne kureeritud töövõit, mida backfill ei kustuta ega asenda.
+- `phase2_new_standalone`: uus töövõit, mis on kontrollitud ja võib avalikus UI-s seista eraldi kaardina.
+- `phase2_series_nested`: kontrollitud töövõit või töövõidu etapp, mis kuulub olemasoleva töövõidu või policy-thread'i alla.
+
+Soovituslik väli:
+- `display_type`
+
+Lubatud `display_type` väärtused:
+- `standalone_card`
+- `nested_under_existing_card`
+- `nested_under_new_series_card`
+- `timeline_item_in_policy_thread`
+
+Tähendus:
+- `standalone_card`: rida kuvatakse iseseisva töövõidu kaardina.
+- `nested_under_existing_card`: rida kuvatakse originaal-90 töövõidu all seotuna, mitte uue flat duplikaadina.
+- `nested_under_new_series_card`: rida kuvatakse uue Phase 2 parent/backfill töövõidu all.
+- `timeline_item_in_policy_thread`: rida kuvatakse policy-thread'i ajajoonel etapi/aasta kaupa.
+
+Reeglid:
+1. Standalone read võivad olla tavalised töövõidu kaardid.
+2. Nested read peavad säilitama parent ID või policy-thread seose.
+3. Timeline read peavad säilitama aasta ja etapi info.
+4. Series/nested ridu ei tohi vaikimisi flatten'ida tavaliseks kaardiks, kui see jätaks kasutajale duplikaadi mulje.
+5. Kui app ei toeta nested/timeline kuvamist, tuleb series/nested read hoida review/context kihis või importida ainult eraldi käsitsi kinnitatud juhtudel.
+
+--------------------------------------------------------------------------------
+28.3 DUPLICATE VERSUS SERIES RULE
+--------------------------------------------------------------------------------
+
+Sarnasus ei tähenda automaatselt duplikaati.
+
+Exact duplicate on ainult siis, kui kõik järgmised tingimused on täidetud:
+1. sama konkreetne policy issue;
+2. sama aasta või sama otsustusetapp;
+3. sama konkreetne outcome;
+4. sama policy event või sama source;
+5. mõlema kuvamisel puudub eraldi avalik väärtus.
+
+Rida EI OLE exact duplicate, kui vähemalt üks järgmistest kehtib:
+- tegu on erineva aastaga;
+- tegu on erineva õigusloome või poliitika etapiga;
+- üks rida on ettepanek/proposal ja teine lõplik vastuvõtmine/adoption;
+- üks rida on tähtaja pikendamine või delay, teine hilisem tühistamine/cancellation või lihtsustamine/simplification;
+- üks rida on osaline võit, teine lõplik või laiem tulemus;
+- tegu on erineva õigusaktiga;
+- tegu on erineva mõjutatud ettevõtete rühma või sektori mõjuga;
+- hilisem allikas lisab timeline väärtust;
+- rida on source/update seos suurema policy-thread'i sees.
+
+Sellistel juhtudel kasutada series/timeline käsitlust, mitte kustutamist.
+
+Soovituslikud relation/duplicate väärtused:
+- `same_policy_thread_different_year`
+- `same_policy_thread_different_stage`
+- `same_policy_thread_final_outcome`
+- `source_update_for_existing`
+- `related_but_distinct`
+- `exact_duplicate`
+- `unclear_needs_review`
+
+Kvaliteedireegel:
+Kui mudel ei suuda kindlalt otsustada, kas rida on exact duplicate või eri etapp/aasta, tuleb kasutada review'd või series/timeline varianti. Parem on säilitada eraldi timeline info kui kustutada tegelik eri aasta või eri etapi töövõit.
+
+--------------------------------------------------------------------------------
+28.4 POLICY THREAD AND PARENT FIELDS
+--------------------------------------------------------------------------------
+
+Backfill'i ja nesting'u jaoks tuleb kasutada stabiilseid parent/thread välju.
+
+Soovituslikud või nõutavad väljad uute töövõitude ja series/nested ridade puhul:
+- `policy_thread_key`
+- `policy_thread_title`
+- `parent_toovoit_id`
+- `parent_candidate_id`
+- `timeline_year`
+- `timeline_stage`
+- `display_type`
+- `row_origin`
+
+Väljade tähendus:
+
+`policy_thread_key`
+- Stabiilne, inimloetav või masinloetav võti sama poliitikateema jada ühendamiseks.
+- Näited: `valistoojoud_palgakriteerium`, `alaealiste_tootamine`, `energiamajanduse_arengukava`, `alkoholiregister`.
+
+`policy_thread_title`
+- Avalikum ja loetavam policy-thread'i nimetus.
+- Näide: `Välismaalaste palkamise ja palgakriteeriumi leevendamine`.
+
+`parent_toovoit_id`
+- Kasutatakse siis, kui series/nested rida kuulub originaal-90 töövõidu alla.
+- Peab viitama olemasolevale original-90 `toovoit_id` väärtusele.
+
+`parent_candidate_id`
+- Kasutatakse siis, kui nested rida kuulub uue Phase 2 backfill parent-töövõidu alla.
+
+`timeline_year`
+- Aasta, mida timeline item sisuliselt esindab.
+- Kui täpne aasta on ebakindel, kasutada source_year või display_year ning märkida review.
+
+`timeline_stage`
+- Etapp policy-thread'i ajaloos.
+
+Lubatud `timeline_stage` näited:
+- `proposal`
+- `partial_acceptance`
+- `delay`
+- `government_approval`
+- `riigikogu_adoption`
+- `final_entry_into_force`
+- `cancellation`
+- `simplification`
+- `follow_up_update`
+- `source_update`
+- `unclear`
+
+Reeglid:
+1. `policy_thread_key` peab olema sama kõigil sama policy-thread'i ridadel.
+2. Parent ID ei ole kohustuslik, kui rida kuulub laiemasse policy-thread'i, kuid ei pesastu ühe kindla töövõidu alla.
+3. Nested ridadel peab olema kas parent ID või selge policy-thread key.
+4. Timeline aasta ja etapp peavad säilima ka siis, kui app neid esimeses versioonis veel ei kuva.
+
+--------------------------------------------------------------------------------
+28.5 IMPORT RULE FOR SERIES/NESTED ROWS
+--------------------------------------------------------------------------------
+
+Series/nested read võivad olla final reviewed workbook'is, kuid production import sõltub app'i toest.
+
+Kui app toetab `display_type`, parent ID-sid ja policy-thread timeline kuvamist:
+- importi standalone read tavaliste töövõidu kaartidena;
+- importi series/nested read koos `display_type`, parent/thread ja timeline väljadega;
+- kuva `nested_under_existing_card` read originaal-90 töövõidu all;
+- kuva `nested_under_new_series_card` read uue parent-backfill töövõidu all;
+- kuva `timeline_item_in_policy_thread` read policy-thread'i ajajoonel.
+
+Kui app EI toeta nested/timeline kuvamist:
+- importi originaal-90 + kinnitatud standalone new töövõidud;
+- hoia series/nested read eraldi review/context kihis;
+- ära impordi series/nested ridu flat kaartidena, kui see looks duplikaadi mulje;
+- flat-card import on lubatud ainult siis, kui inimene on otsustanud, et see rida kannab iseseisvat avalikku väärtust ja ei vaja nesting'u konteksti.
+
+Hoiatus:
+Kõigi series/nested ridade importimine tavaliste flat kaartidena võib muuta töövõitude vaate dubleerivaks ja vähendada kasutaja usaldust.
+
+--------------------------------------------------------------------------------
+28.6 NEWS-ONLY BUT HIGH-RELEVANCE RULE
+--------------------------------------------------------------------------------
+
+Mõni rida on app'is väga oluline uudis, kuid ei ole töövõit.
+
+News-only või related-context rida võib olla:
+- valitsuse heakskiit;
+- Riigikogu vastuvõtmine;
+- ministeeriumi kooskõlastus või eelnõu etapp;
+- seaduse jõustumise teavitus;
+- Koja selgitus muudatuse kohta;
+- progress update sama policy-thread'i sees;
+- üldine taustauudis, mis aitab töövõitu mõista.
+
+Rida muutub töövõiduks ainult siis, kui kõik neli elementi on kinnitatud:
+1. Koja roll: Koda tegi ettepaneku, seisis vastu, survestas, osales, saatis arvamuse või esindas ettevõtjaid.
+2. Konkreetne tulemus: midagi muudeti, eemaldati, lükati edasi, lihtsustati, vähendati, tühistati, võeti vastu või jäeti kehtestamata.
+3. Ettevõtja väärtus: tulemusega kaasneb madalam kulu, väiksem halduskoormus, suurem paindlikkus, välditud kohustus, selgem reegel või parem konkurentsivõime.
+4. Eristuvus: tegu ei ole originaal-90 või teise Phase 2 töövõidu exact duplicate'iga.
+
+Kui üks neist puudub, ei tohi rida töövõiduks edutada. Sellisel juhul kasuta news-only, related-context, progress või review staatust.
+
+Soovituslikud väljad web/news või töövõitude backfill'i kõrvalkihis:
+- `work_win_backfill_status`
+- `related_backfill_toovoit_id`
+- `news_relevance_override`
+- `news_relevance_reason`
+- `suggested_news_priority`
+- `suggested_news_visibility`
+
+Lubatud `work_win_backfill_status` väärtused:
+- `validated_new_work_win`
+- `validated_series_or_nested_work_win`
+- `source_context_not_toovoit`
+- `news_only_not_toovoit`
+- `duplicate_or_source_for_existing`
+- `excluded_not_work_win`
+
+Lubatud `suggested_news_priority` väärtused:
+- `high`
+- `medium`
+- `low`
+- `none`
+
+Lubatud `suggested_news_visibility` väärtused:
+- `main_news_result`
+- `topic_history`
+- `related_context`
+- `none`
+
+--------------------------------------------------------------------------------
+28.7 CONTENT-LINKS UPDATE RULE AFTER BACKFILL
+--------------------------------------------------------------------------------
+
+Kui lisatakse uued `TOOVOIT-BACKFILL-*` või `TOOVOIT-BACKFILL-SERIES-*` read, tuleb uuendada content-links faili.
+
+Soovituslik väljund:
+- `koda_content_links_v1_4_BACKFILL_UPDATED.xlsx`
+
+Required link tüübid:
+1. uus töövõit -> source web/news artikkel;
+2. uus töövõit -> seotud Koja arvamus, kui allikatõend toetab seost;
+3. series/nested item -> parent original-90 või new Phase 2 töövõit;
+4. series/nested item -> sama policy-thread'i teised read;
+5. news-only rida -> seotud policy-thread või töövõit, kui seos on sisuline;
+6. original-90 rida -> newly discovered parem source/update, kui see on kinnitatud.
+
+Seose kinnitamise tugevad alused:
+- sama konkreetne eelnõu, seadus, määrus või EL õigusakt;
+- sama policy thread;
+- sama konkreetne Koja ettepanek;
+- sama konkreetne probleem või tulemus;
+- sama töövõit ja selle allikas;
+- allika otsene viide teisele allikale;
+- käsitsi curated/approved seos.
+
+Nõrgad alused, millest ei piisa:
+- ainult sama broad topic;
+- ainult sama tegevusala;
+- ainult sama aasta;
+- mõlemad on cross-sector;
+- mõlemad mainivad maksusid, tööjõudu, ettevõtluskeskkonda vms üldiselt;
+- ainult sarnane pealkirjatoon.
+
+Related link'i confidence:
+- avalikus `Veel samal teemal` või timeline seoses kasutada ainult `high` või `curated_medium` confidence seoseid;
+- `low`, `weak`, `rejected` või broad-overlap seosed jätta excluded/review lehele.
+
+--------------------------------------------------------------------------------
+28.8 FINAL TÖÖVÕIDUD IMPORT CONTRACT v1.2
+--------------------------------------------------------------------------------
+
+Production import peab kasutama slim import-lepingut, mitte patch/audit tööfaili.
+
+Soovituslik final import workbook:
+- `koda_toovoidud_v1_5_APP_IMPORT_SLIM.xlsx`
+
+Soovituslikud sheet'id:
+1. `README`
+2. `toovoidud_app_import`
+3. `toovoidud_excluded_review`
+4. `news_only_recommendations`
+5. `field_mapping`
+
+`toovoidud_app_import` sisaldab ainult import-ready töövõitude ridu:
+- originaal-90 locked read;
+- approved standalone new töövõidud;
+- approved series/nested read ainult juhul, kui app toetab nested/timeline kuvamist või inimene on flat import'i eraldi kinnitanud.
+
+`toovoidud_excluded_review` sisaldab:
+- held series/nested read, kui app support puudub;
+- excluded/not-enough read;
+- manual blockers;
+- töövõiduks mitte sobivad source/progress/opinion read.
+
+`news_only_recommendations` sisaldab:
+- olulised web/news read, mis ei ole töövõidud, kuid peaksid jääma üldotsingusse, topic history'sse või related context'i.
+
+Nõutavad või soovituslikud import-väljad töövõitude puhul:
+- `toovoit_id`
+- `row_origin`
+- `display_type`
+- `parent_toovoit_id`
+- `parent_candidate_id`
+- `policy_thread_key`
+- `policy_thread_title`
+- `timeline_year`
+- `timeline_stage`
+- `work_win_title_ee`
+- `work_win_summary_ee`
+- `what_changed_ee`
+- `koda_role_ee`
+- `business_value_ee`
+- `topic_primary`
+- `topic_secondary`
+- `activity_primary`
+- `activity_secondary`
+- `sector_scope`
+- `public_activity_filter_tags`
+- `public_activity_display_tags`
+- `public_sector_page_allowed`
+- `public_detail_url`
+- `public_detail_url_type`
+- `evidence_source_url`
+- `source_title`
+- `source_date`
+- `source_confidence`
+- `import_ready`
+- `review_required`
+- `review_reason`
+
+Reeglid:
+1. `toovoidud_app_import` ei tohi sisaldada news-only ridu.
+2. `toovoidud_app_import` ei tohi sisaldada manual blocker ridu import_ready=true staatuses.
+3. Existing-90 source attachment ei tohi luua uut töövõidu rida, v.a juhul, kui see on kontrollitud eri aasta/eri etapi timeline item.
+4. Kui import sheet'is on rida, kuid `import_ready` puudub või on `FALSE`, peab import gate peatuma.
+5. Kui excluded/review sheet'is on rida, kuid `import_ready = TRUE` ilma selgituseta, peab import gate peatuma.
+6. Field mapping peab dokumenteerima uued nesting/thread väljad.
+
+--------------------------------------------------------------------------------
+28.9 APP SUPPORT REQUIREMENT FOR NESTING
+--------------------------------------------------------------------------------
+
+Enne series/nested ridade importi tuleb kontrollida, et app toetab vähemalt järgmisi välju:
+- `display_type`
+- `parent_toovoit_id`
+- `parent_candidate_id`
+- `policy_thread_key`
+- `policy_thread_title`
+- `timeline_year`
+- `timeline_stage`
+
+Miinimumkäitumine app'is:
+1. `standalone_card` ilmub tavalise töövõidu kaardina.
+2. `nested_under_existing_card` ilmub originaal-90 parent töövõidu all.
+3. `nested_under_new_series_card` ilmub uue Phase 2 parent/backfill töövõidu all.
+4. `timeline_item_in_policy_thread` ilmub policy-thread ajajoonel või grupeeritud vaates.
+5. News-only read jäävad web/news tulemusteks või related context'iks, mitte töövõidu kaartideks.
+6. Parent puudumisel ei tohi nested rida kaduda vaikides; see peab minema review'sse või policy-thread'i üldgruppi.
+7. Kui app ei oska nested/timeline ridu kuvada, tuleb need importida alles pärast arendust või hoida `toovoidud_excluded_review` / context kihis.
+
+Arenduslik soovitus:
+App peaks töövõitude vaates suutma kuvada vähemalt:
+- standalone töövõidud;
+- parent-kaardi all väike timeline või seotud arengud;
+- policy-thread grupp, kus eri aastad/etapid on loogilises järjekorras;
+- allikauudis ja Koja arvamus seotud sisu plokis.
+
+--------------------------------------------------------------------------------
+28.10 v1.2 REGRESSION TESTS
+--------------------------------------------------------------------------------
+
+Iga töövõitude backfill'i, nesting'u või import-slim faili järel tuleb kontrollida vähemalt:
+
+1. Avalike teemade nimekiri ei muutunud.
+2. 12 app-facing sektori nimekiri ei muutunud.
+3. `Kõik tegevusalad / valdkondadeülene` ei esine `public_activity_display_tags` väljas.
+4. Originaal-90 read on säilinud.
+5. Originaal-90 ridu ei ole vaikimisi ümber kirjutatud.
+6. Uutel standalone töövõitudel on unikaalsed ID-d, nt `TOOVOIT-BACKFILL-*`.
+7. Series/nested töövõitudel on unikaalsed ID-d, nt `TOOVOIT-BACKFILL-SERIES-*`.
+8. Series/nested ridadel on `display_type`, parent/thread ja timeline väljad täidetud.
+9. Eri aasta või eri etapi read ei ole ekslikult exact duplicate'ina välja jäetud.
+10. Exact duplicate on välja jäetud ainult siis, kui sama issue + sama aasta + sama outcome + sama policy event/source.
+11. News-only read ei ole töövõitude import sheet'is.
+12. Manual blocker read ei ole import_ready=true.
+13. Uued backfill ID-d on kajastatud content-links uuenduses või content-links update queue's.
+14. Related/content-links seosed ei põhine ainult broad topic/activity kattuvusel.
+15. Töövõidu summary selgitab endiselt: mis muutus, mida Koda tegi, miks see on ettevõtjale oluline.
+16. Production töövõitude slim fail kasutab importlepingut: `toovoidud_app_import`, `toovoidud_excluded_review`, `field_mapping`.
+17. Kui app nesting/timeline tugi puudub, ei impordita series/nested ridu flat duplikaatidena.
+18. Source URL audit kinnitab, et uutel ridadel on konkreetne allikas või dokumenteeritud fallback.
+19. Kui row_origin on `phase2_series_nested`, peab display_type olema nested või timeline väärtus, mitte vaikimisi standalone, v.a käsitsi kinnitatud erand.
+20. Kui `policy_thread_key` on sama mitmel real, peab nende vaheline suhe olema content-links või thread metadata kaudu taastatav.
+
+================================================================================
+28.11 V1.2 KVALITEEDIPÕHIMÕTE
+================================================================================
+
+v1.2 kinnitab töövõitude backfill'i põhimõtte:
+
+Originaal-90 on usaldusväärne baas. Uued töövõidud lisavad väärtust ainult siis, kui nad on allikaga tõendatud, eristuvad ja app oskab neid õigesti kuvada.
+
+Kui valik on:
+- lisada palju sarnaseid flat kaarte või hoida eri aastad/etapid nested/timeline kujul;
+- kutsuda tähtsat uudist töövõiduks või hoida see news-only kontekstina;
+- kustutada sarnane rida duplikaadina või säilitada see policy-thread'i ajajoones;
+- importida series/nested read enne app support'i või hoida need review/context kihis;
+
+siis vali konservatiivne ja kasutajale selgem variant:
+- nested/timeline;
+- news-only/context;
+- policy-thread seos;
+- import alles pärast app support'i.
+
+Avalik tööriist peab näitama vähem, aga õigemaid töövõidu kaarte, ning säilitama keerulisemate teemade puhul ajajoone ja allikaseose.
+
+================================================================================
