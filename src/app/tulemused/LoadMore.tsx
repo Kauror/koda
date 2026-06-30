@@ -16,7 +16,7 @@ import { Children, useState, type ReactNode } from "react";
  */
 export default function LoadMore({
   children,
-  batchSize = 3,
+  batchSize = 10,
   initialVisibleCount,
   label = "Näita rohkem",
 }: {

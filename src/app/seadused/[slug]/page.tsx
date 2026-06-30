@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import PublicResultCard from "@/app/PublicResultCard";
 import { getLawBySlug } from "@/lib/law-dictionary";
-import { isGenericWorkWinUrl } from "@/lib/content-display";
 import { search, type ResultCard } from "@/lib/search";
 
 export const dynamic = "force-dynamic";
@@ -9,47 +9,6 @@ export const dynamic = "force-dynamic";
 function formatDate(iso: string | null): string | null {
   if (!iso) return null;
   return new Date(iso).toLocaleDateString("et-EE", { day: "numeric", month: "long", year: "numeric" });
-}
-
-function LawCard({ card }: { card: ResultCard }) {
-  return (
-    <article className={`other-item${card.isAchievement ? " win" : ""}`}>
-      <p className="item-meta">
-        {card.badges.map((badge) => (
-          <span key={badge} className={`badge${badge === "Töövõit" ? " win-badge" : ""}`}>
-            {badge === "Töövõit" ? `✓ ${badge}` : badge}
-          </span>
-        ))}
-        {formatDate(card.date) && <span className="badge-date">{formatDate(card.date)}</span>}
-      </p>
-      <h3>
-        <Link href={`/sisu/${encodeURIComponent(card.detailId)}`}>{card.title}</Link>
-      </h3>
-      {card.summary && <p className="item-excerpt small">{card.summary}</p>}
-      {card.recipient && (
-        <div className="card-tags">
-          <Link
-            href={`/tulemused?recipient=${encodeURIComponent(card.recipient.slug)}`}
-            className="tag tag-recipient"
-          >
-            {card.recipient.name}
-          </Link>
-        </div>
-      )}
-      <p className="card-links">
-        <Link href={`/sisu/${encodeURIComponent(card.detailId)}`} className="btn btn-secondary btn-small">
-          Loe lähemalt
-        </Link>
-        {/* Töövõit/news keep a single internal CTA; never link the generic
-            koda.ee work-wins listing as an external source. */}
-        {card.url && !card.isAchievement && card.kind !== "uudis" && !isGenericWorkWinUrl(card.url) && (
-          <a href={card.url} target="_blank" rel="noopener noreferrer" className="item-source-link">
-            {card.sourceCtaLabel} →
-          </a>
-        )}
-      </p>
-    </article>
-  );
 }
 
 function LawSection({ title, sub, cards }: { title: string; sub?: string; cards: ResultCard[] }) {
@@ -61,7 +20,7 @@ function LawSection({ title, sub, cards }: { title: string; sub?: string; cards:
       </h2>
       {sub && <p className="section-sub">{sub}</p>}
       {cards.map((card) => (
-        <LawCard key={card.id} card={card} />
+        <PublicResultCard key={card.id} card={card} sessionId={null} fromQuery="" admin={false} />
       ))}
     </section>
   );
@@ -83,7 +42,7 @@ export default async function LawPage({ params }: { params: Promise<{ slug: stri
     type: [],
   });
 
-  const newest = [...results.achievements, ...results.positions, ...results.news, ...results.context]
+  const newest = [...results.achievements, ...results.opinionNews, ...results.context]
     .filter((card) => card.date)
     .sort((a, b) => (b.date ? Date.parse(b.date) : 0) - (a.date ? Date.parse(a.date) : 0))[0];
   const hasResults = results.totalDisplayed > 0;
@@ -96,7 +55,7 @@ export default async function LawPage({ params }: { params: Promise<{ slug: stri
           <h1>{law.canonicalName}</h1>
           <p className="sub">
             Vaata, kuidas Eesti Kaubandus-Tööstuskoda on selle õigusaktiga seotud teemadega aja jooksul
-            tegelenud – töövõidud, seisukohad, uudised ja taust, uuemad eespool.
+            tegelenud - töövõidud, seisukohad, uudised ja taust, uuemad eespool.
           </p>
           {law.abbreviation && <p className="section-sub">Lühend: {law.abbreviation}</p>}
           {law.aliases && law.aliases.length > 0 && (
@@ -149,8 +108,7 @@ export default async function LawPage({ params }: { params: Promise<{ slug: stri
           sub="Konkreetsed tulemused, mille koda on selle teemaga seoses saavutanud."
           cards={results.achievements}
         />
-        <LawSection title="Koja seisukohad ja arvamused" cards={results.positions} />
-        <LawSection title="Uudised" cards={results.news} />
+        <LawSection title="Koja seisukohad ja uudised" cards={results.opinionNews} />
         <LawSection title="Teema ajalugu / taust" cards={results.context} />
       </div>
     </main>

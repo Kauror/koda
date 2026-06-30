@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { isGenericWorkWinUrl } from "@/lib/content-display";
-import type { NestedWorkWinCard, ResultCard } from "@/lib/search";
+import type { NestedRelatedCard, NestedWorkWinCard, ResultCard } from "@/lib/search";
 import TrackedLink from "./tulemused/TrackedLink";
 
 function nestedToggleLabel(count: number, isThread: boolean): string {
@@ -52,6 +52,48 @@ function NestedWorkWins({
         })}
       </ol>
     </details>
+  );
+}
+
+function NestedRelatedItems({
+  items,
+  fromQuery,
+  sessionId,
+}: {
+  items: NestedRelatedCard[];
+  fromQuery: string;
+  sessionId: string | null;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <div className="nested-section related-source-section">
+      <p className="nested-related-heading">Seotud allikad</p>
+      <ol className="nested-timeline">
+        {items.map((item) => {
+          const href = `/sisu/${encodeURIComponent(item.detailId)}${
+            fromQuery ? `?from=${encodeURIComponent(fromQuery)}` : ""
+          }`;
+          return (
+            <li key={item.id} className="nested-item">
+              <p className="nested-meta">
+                <span className="badge">{item.relationLabel}</span>
+                <span className="badge">{item.badge}</span>
+                {item.displayDate && <span className="badge-date">{item.displayDate}</span>}
+              </p>
+              <h4>
+                <Link href={href}>{item.title}</Link>
+              </h4>
+              {item.summary && <p className="item-excerpt small">{item.summary}</p>}
+              {item.url && !isGenericWorkWinUrl(item.url) && (
+                <TrackedLink href={item.url} sessionId={sessionId} contentItemId={item.id} className="item-source-link">
+                  {item.sourceCtaLabel} →
+                </TrackedLink>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </div>
   );
 }
 
@@ -141,6 +183,9 @@ export default function PublicResultCard({
       )}
       {card.nested && card.nested.length > 0 && (
         <NestedWorkWins items={card.nested} isThread={isThread} fromQuery={fromQuery} />
+      )}
+      {card.relatedItems && card.relatedItems.length > 0 && (
+        <NestedRelatedItems items={card.relatedItems} fromQuery={fromQuery} sessionId={sessionId} />
       )}
     </article>
   );

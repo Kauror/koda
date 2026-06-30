@@ -49,6 +49,7 @@ export async function GET(req: NextRequest) {
     sessionId,
     ...results,
     achievements: results.achievements.map(publicCard),
+    opinionNews: results.opinionNews.map(publicCard),
     positions: results.positions.map(publicCard),
     news: results.news.map(publicCard),
     context: results.context.map(publicCard),

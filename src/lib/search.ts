@@ -4,7 +4,7 @@
  * attaches lightweight evidence hints from ContentEvidenceLink + supporting
  * opinions. See docs/search-ranking-v1.md.
  */
-import { Prisma, TagType } from "@prisma/client";
+import { EvidenceLinkType, Prisma, TagType } from "@prisma/client";
 import { unstable_cache } from "next/cache";
 import { prisma } from "./db";
 import { isPublicSearchEligible } from "./eligibility";
@@ -37,6 +37,8 @@ import {
   isAchievement,
   isConservativeLawQuery,
   isEmptyQuery,
+  isFormalOpinion,
+  isKodaNews,
   parseSearchParams,
   passesActiveFilters,
   primaryType,
@@ -52,6 +54,7 @@ export type { SearchQuery };
 // pagination (batches of ~10) has real content to reveal — the user pages
 // through matches in batches instead of seeing everything (or only ~10) at once.
 const GROUP_CAPS: Record<ResultKind, number> = { toovoit: 24, arvamus: 40, uudis: 24, kontekst: 20 };
+const COMBINED_OPINION_NEWS_CAP = 64;
 
 /** Small bump so confirmed law content beats incidental text hits on tie dates. */
 const LAW_MATCH_BOOST = 30;
@@ -100,8 +103,10 @@ export function toCandidate(row: ContentWithTags): Candidate {
     sourceLayer: row.sourceLayer,
     sourceTypeDetail: row.sourceTypeDetail,
     publicDisplayStatus: row.publicDisplayStatus,
+    publicDisplayRole: row.publicDisplayRole,
     outcomeStatus: row.outcomeStatus,
     publicPriority: row.publicPriority,
+    contentRoleFinal: row.contentRoleFinal,
     manualWeight: row.manualWeight,
     isEvergreen: row.isEvergreen,
     date: row.date,
@@ -296,6 +301,18 @@ export type NestedWorkWinCard = {
   matched: boolean;
 };
 
+export type NestedRelatedCard = {
+  id: string;
+  detailId: string;
+  title: string;
+  summary: string | null;
+  displayDate: string | null;
+  url: string | null;
+  sourceCtaLabel: string;
+  badge: string;
+  relationLabel: string;
+};
+
 export type ResultCard = {
   id: string;
   /** Stable identifier for the public detail route /sisu/[detailId]. */
@@ -338,6 +355,8 @@ export type ResultCard = {
   nested?: NestedWorkWinCard[];
   /** Estonian heading for the nested section ("Seotud arengud" / "Sama teema ajajoon"). */
   nestedHeading?: string | null;
+  /** Compact linked opinion/news rows folded under the public main card (v1.3). */
+  relatedItems?: NestedRelatedCard[];
   /**
    * Internal ranking total. Used by internal audit tooling (audit-freshness) and
    * server-side ordering only — it must NOT be exposed to public users. The
@@ -350,6 +369,7 @@ export type SearchResults = {
   query: SearchQuery;
   achievements: ResultCard[];
   achievementsInitialVisible: number;
+  opinionNews: ResultCard[];
   positions: ResultCard[];
   news: ResultCard[];
   context: ResultCard[];
@@ -460,6 +480,229 @@ function toNestedWorkWinCard(c: Candidate, matched: boolean): NestedWorkWinCard 
     sourceCtaLabel: sourceCtaLabel(c),
     matched,
   };
+}
+
+/** A top-level public opinion/news display unit, with linked rows folded underneath. */
+type OpinionNewsLink = {
+  fromContentId: string;
+  toContentId: string;
+  linkType: EvidenceLinkType;
+  relationRole: string | null;
+  relationLabelEt: string | null;
+  linkConfidence: string | null;
+  canonicalPolicyThreadId: string | null;
+  sortPriority: number | null;
+};
+
+type OpinionNewsUnit = {
+  main: RankedCandidate;
+  related: { c: Candidate; label: string; sortPriority: number }[];
+};
+
+const OPINION_NEWS_LINK_TYPES = new Set<EvidenceLinkType>([
+  EvidenceLinkType.supporting_opinion,
+  EvidenceLinkType.same_policy_thread,
+  EvidenceLinkType.public_explanation,
+  EvidenceLinkType.source_evidence,
+  EvidenceLinkType.related_opinion,
+  EvidenceLinkType.related_news,
+]);
+
+function isOpinionNewsKind(c: Candidate): boolean {
+  return isFormalOpinion(c) || isKodaNews(c) || c.sourceDataset === "opinions";
+}
+
+function isAllowedCombinedLink(link: OpinionNewsLink): boolean {
+  if (!OPINION_NEWS_LINK_TYPES.has(link.linkType)) return false;
+  if (!link.linkConfidence) return true;
+  return ["high", "curated_medium"].includes(link.linkConfidence);
+}
+
+function policyThreadKey(c: Candidate): string | null {
+  return c.topicGroupCandidate?.trim() || c.policyThreadKey?.trim() || null;
+}
+
+function verifiedDateText(c: Candidate): string | null {
+  return computePublicDate({
+    date: c.date,
+    year: c.year ?? null,
+    reportYear: c.reportYear ?? null,
+    classificationConfidence: c.classificationConfidence ?? null,
+    displayDatePrecision: c.displayDatePrecision ?? null,
+    dateConfidence: c.dateConfidence ?? null,
+  }).text;
+}
+
+function toNestedRelatedCard(c: Candidate, relationLabel: string): NestedRelatedCard {
+  return {
+    id: c.id,
+    detailId: c.externalId ?? c.id,
+    title: publicTitle(c),
+    summary: compactText(getCleanPublicExcerpt(c), 180),
+    displayDate: verifiedDateText(c),
+    url: publicSourceUrl(c),
+    sourceCtaLabel: sourceCtaLabel(c),
+    badge: buildBadges(c)[0] ?? (isKodaNews(c) ? "Uudis" : "Arvamus"),
+    relationLabel,
+  };
+}
+
+function inferredNestedLabel(c: Candidate, main: Candidate, explicitLabel?: string | null): string {
+  const label = explicitLabel?.trim();
+  if (label) return label;
+  if (isFormalOpinion(c) || c.sourceDataset === "opinions") {
+    return isKodaNews(main) ? "Aluseks olev arvamus" : "Ametlik seisukoht";
+  }
+  const badge = buildBadges(c)[0];
+  if (badge === "Selgitus") return "Seotud selgitus";
+  if (badge === "Jätku-uudis") return "Sama teema jätk";
+  return "Seotud uudis";
+}
+
+function linkLooksLikeNewsExplainer(link: OpinionNewsLink): boolean {
+  const text = [link.linkType, link.relationRole, link.relationLabelEt].filter(Boolean).join(" ").toLowerCase();
+  return (
+    link.linkType === EvidenceLinkType.public_explanation ||
+    link.linkType === EvidenceLinkType.related_news ||
+    text.includes("explanation") ||
+    text.includes("explainer") ||
+    text.includes("selgit")
+  );
+}
+
+function sortNestedRelated(a: { c: Candidate; sortPriority: number }, b: { c: Candidate; sortPriority: number }): number {
+  if (b.sortPriority !== a.sortPriority) return b.sortPriority - a.sortPriority;
+  const byDate = verifiedDateMs(b.c) - verifiedDateMs(a.c);
+  if (byDate !== 0) return byDate;
+  return (a.c.externalId ?? a.c.id).localeCompare(b.c.externalId ?? b.c.id);
+}
+
+async function buildCombinedOpinionNewsUnits(ranked: RankedCandidate[], query: SearchQuery): Promise<OpinionNewsUnit[]> {
+  const rows = ranked.filter((s) => isOpinionNewsKind(s.c));
+  if (rows.length === 0) return [];
+
+  const byId = new Map(rows.map((s) => [s.c.id, s]));
+  const ids = [...byId.keys()];
+  const links = (await prisma.contentEvidenceLink.findMany({
+    where: { OR: [{ fromContentId: { in: ids } }, { toContentId: { in: ids } }] },
+    select: {
+      fromContentId: true,
+      toContentId: true,
+      linkType: true,
+      relationRole: true,
+      relationLabelEt: true,
+      linkConfidence: true,
+      canonicalPolicyThreadId: true,
+      sortPriority: true,
+    },
+  })) as OpinionNewsLink[];
+
+  const parent = new Map<string, string>();
+  const find = (id: string): string => {
+    const p = parent.get(id) ?? id;
+    if (p === id) return id;
+    const root = find(p);
+    parent.set(id, root);
+    return root;
+  };
+  const union = (a: string, b: string) => {
+    const ar = find(a);
+    const br = find(b);
+    if (ar !== br) parent.set(br, ar);
+  };
+  ids.forEach((id) => parent.set(id, id));
+
+  const linkByPair = new Map<string, OpinionNewsLink>();
+  const pairKey = (a: string, b: string) => [a, b].sort().join("::");
+  for (const link of links) {
+    if (!isAllowedCombinedLink(link)) continue;
+    const a = byId.get(link.fromContentId)?.c;
+    const b = byId.get(link.toContentId)?.c;
+    if (!a || !b) continue;
+    if (assignKind(a) === assignKind(b)) continue;
+    union(a.id, b.id);
+    const key = pairKey(a.id, b.id);
+    const current = linkByPair.get(key);
+    if (!current || (link.sortPriority ?? 0) > (current.sortPriority ?? 0)) linkByPair.set(key, link);
+  }
+
+  const byThread = new Map<string, string[]>();
+  for (const { c } of rows) {
+    const key = policyThreadKey(c);
+    if (!key) continue;
+    const list = byThread.get(key) ?? [];
+    list.push(c.id);
+    byThread.set(key, list);
+  }
+  for (const threadIds of byThread.values()) {
+    const kinds = new Set(threadIds.map((id) => assignKind(byId.get(id)!.c)));
+    if (!kinds.has("arvamus") || !kinds.has("uudis")) continue;
+    for (let i = 1; i < threadIds.length; i++) union(threadIds[0], threadIds[i]);
+  }
+
+  const components = new Map<string, RankedCandidate[]>();
+  for (const row of rows) {
+    const root = find(row.c.id);
+    const list = components.get(root) ?? [];
+    list.push(row);
+    components.set(root, list);
+  }
+
+  const hasExplainerOpinionLink = (candidate: Candidate, group: RankedCandidate[]): boolean => {
+    if (!isKodaNews(candidate)) return false;
+    return group.some(({ c }) => {
+      if (!(isFormalOpinion(c) || c.sourceDataset === "opinions")) return false;
+      const link = linkByPair.get(pairKey(candidate.id, c.id));
+      if (link) return linkLooksLikeNewsExplainer(link) || link.linkType === EvidenceLinkType.same_policy_thread;
+      const sharedThread = policyThreadKey(candidate) && policyThreadKey(candidate) === policyThreadKey(c);
+      return !!sharedThread;
+    });
+  };
+
+  const chooseMain = (group: RankedCandidate[]): RankedCandidate => {
+    const maxTier = Math.max(...group.map((s) => resultCategoryRelevanceTier(s.c, query)));
+    return [...group].sort((a, b) => {
+      const aTier = resultCategoryRelevanceTier(a.c, query);
+      const bTier = resultCategoryRelevanceTier(b.c, query);
+      if (bTier !== aTier) return bTier - aTier;
+      const aExplainer = hasExplainerOpinionLink(a.c, group) ? 28 : 0;
+      const bExplainer = hasExplainerOpinionLink(b.c, group) ? 28 : 0;
+      const aAuthority = isFormalOpinion(a.c) || a.c.sourceDataset === "opinions" ? 14 : 0;
+      const bAuthority = isFormalOpinion(b.c) || b.c.sourceDataset === "opinions" ? 14 : 0;
+      const aDirectPenalty = aTier < maxTier ? -60 : 0;
+      const bDirectPenalty = bTier < maxTier ? -60 : 0;
+      const adjustedA = a.total + aExplainer + aAuthority + aDirectPenalty;
+      const adjustedB = b.total + bExplainer + bAuthority + bDirectPenalty;
+      if (adjustedB !== adjustedA) return adjustedB - adjustedA;
+      const byDate = verifiedDateMs(b.c) - verifiedDateMs(a.c);
+      if (byDate !== 0) return byDate;
+      return (a.c.externalId ?? a.c.id).localeCompare(b.c.externalId ?? b.c.id);
+    })[0];
+  };
+
+  const units: OpinionNewsUnit[] = [];
+  for (const group of components.values()) {
+    const kinds = new Set(group.map((s) => assignKind(s.c)));
+    if (group.length < 2 || !kinds.has("arvamus") || !kinds.has("uudis")) {
+      for (const single of group) units.push({ main: single, related: [] });
+      continue;
+    }
+    const main = chooseMain(group);
+    const related = group
+      .filter((s) => s.c.id !== main.c.id)
+      .map((s) => {
+        const link = linkByPair.get(pairKey(main.c.id, s.c.id));
+        return {
+          c: s.c,
+          label: inferredNestedLabel(s.c, main.c, link?.relationLabelEt),
+          sortPriority: link?.sortPriority ?? 0,
+        };
+      })
+      .sort(sortNestedRelated);
+    units.push({ main, related });
+  }
+
+  return units.sort((a, b) => compareRankedCandidatesForQuery(query)(a.main, b.main));
 }
 
 /** A top-level töövõit display unit aggregated from matched rows. */
@@ -742,6 +985,8 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
   const rankedOther = ranked.filter((s) => !isAchievement(s.c));
   const grouped = groupRankedCandidates(rankedOther, GROUP_CAPS);
   const groups = grouped.displayedGroups;
+  const opinionNewsUnits = await buildCombinedOpinionNewsUnits(rankedOther, query);
+  const displayedOpinionNewsUnits = opinionNewsUnits.slice(0, COMBINED_OPINION_NEWS_CAP);
 
   const toovoitUnits = aggregateWorkWinUnits(
     ranked.filter((s) => isAchievement(s.c)),
@@ -762,7 +1007,11 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
     .filter((u): u is Extract<WorkWinUnit, { kind: "card" }> => u.kind === "card")
     .map((u) => candById.get(u.parentId))
     .filter((c): c is Candidate => !!c);
-  const displayedCandidates = [...grouped.displayed.map((s) => s.c), ...toovoitParentCandidates];
+  const displayedCandidates = [
+    ...displayedOpinionNewsUnits.map((u) => u.main.c),
+    ...groups.kontekst.map((s) => s.c),
+    ...toovoitParentCandidates,
+  ];
 
   const evidence = await buildEvidence(displayedCandidates);
   const includesRelatedSectorMatches =
@@ -837,6 +1086,14 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
 
   // Merge counts: töövõit unit counts replace the (empty) toovoit group from the
   // other-grouping; the other three groups keep their pure counts.
+  const opinionNews = displayedOpinionNewsUnits.map((unit) => {
+    const card = toCard(unit.main);
+    if (unit.related.length > 0) {
+      card.relatedItems = unit.related.map((item) => toNestedRelatedCard(item.c, item.label));
+    }
+    return card;
+  });
+
   const groupCounts: typeof grouped.groupCounts = {
     ...grouped.groupCounts,
     toovoit: {
@@ -845,13 +1102,17 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
       cap: GROUP_CAPS.toovoit,
     },
   };
-  const totalDisplayed = grouped.totalDisplayed + achievements.length;
-  const totalMatchedBeforeCaps = grouped.totalMatchedBeforeCaps + toovoitUnits.length;
+  const totalDisplayed = achievements.length + opinionNews.length + groups.kontekst.length;
+  const totalMatchedBeforeCaps =
+    toovoitUnits.length +
+    opinionNewsUnits.length +
+    grouped.allGroups.kontekst.length;
 
   return {
     query,
     achievements,
     achievementsInitialVisible,
+    opinionNews,
     positions: groups.arvamus.map(toCard),
     news: groups.uudis.map(toCard),
     context: groups.kontekst.map(toCard),

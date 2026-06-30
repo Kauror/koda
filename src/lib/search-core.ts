@@ -130,8 +130,10 @@ export type Candidate = {
   sourceLayer: string | null;
   sourceTypeDetail: string | null;
   publicDisplayStatus: string | null;
+  publicDisplayRole?: string | null;
   outcomeStatus: string | null;
   publicPriority: string | null;
+  contentRoleFinal?: string | null;
   manualWeight: number;
   isEvergreen: boolean;
   date: Date | null;
@@ -595,6 +597,23 @@ const TYPE_BADGE: Record<ResultType, string> = {
   kontekst: "Taust",
 };
 
+export function getContentTypeBadge(c: Candidate): string {
+  if (isAchievement(c)) return TYPE_BADGE.toovoit;
+  if (isFormalOpinion(c) || c.sourceDataset === "opinions") return "Arvamus";
+  if (isKodaNews(c)) {
+    const role = normalizeTitle([c.contentRoleFinal, c.publicDisplayRole, c.publicDisplayStatus].filter(Boolean).join(" "));
+    if (/(toovoit|too voit|work win|achievement|source evidence|source_evidence|allikas)/u.test(role)) {
+      return "Töövõidu allikas";
+    }
+    if (/(follow|jatk|jätk|update|timeline|sequence)/u.test(role)) return "Jätku-uudis";
+    if (/(explainer|explanation|selgit|policy context|public explanation|public_explanation)/u.test(role)) {
+      return "Selgitus";
+    }
+    return "Uudis";
+  }
+  return TYPE_BADGE[primaryType(c)];
+}
+
 /**
  * Rank supporting opinion rows for a public parent by shared topic + light text
  * overlap, then cap. Pure; the caller supplies already-eligible opinion rows.
@@ -623,6 +642,5 @@ export function rankRelatedOpinions(parent: Candidate, opinions: Candidate[], ca
 }
 
 export function buildBadges(c: Candidate): string[] {
-  const t = primaryType(c);
-  return [TYPE_BADGE[t]];
+  return [getContentTypeBadge(c)];
 }

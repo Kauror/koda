@@ -162,16 +162,16 @@ check("teema ajalugu uses contextual CTA labels, not generic allikas wording", (
   assert.ok(!source.includes("Vaata allikat"));
 });
 
-check("results page uses incremental batch-of-3 load-more pagination", () => {
+check("results page uses incremental batch-of-10 load-more pagination", () => {
   const source = readFileSync("src/app/tulemused/page.tsx", "utf8");
-  // Sections render through the LoadMore client component (batches of 3),
+  // Sections render through the LoadMore client component (batches of 10),
   // keyed by the active query so the visible count resets on filter/search change.
   assert.ok(source.includes("import LoadMore"));
   assert.ok(source.includes("<LoadMore"));
   assert.ok(source.includes("batchSize={LOAD_MORE_BATCH}"));
   assert.ok(source.includes("initialVisibleCount={initialVisibleCount}"));
   assert.ok(source.includes("initialVisibleCount={results.achievementsInitialVisible}"));
-  assert.ok(source.includes("const LOAD_MORE_BATCH = 3"));
+  assert.ok(source.includes("const LOAD_MORE_BATCH = 10"));
   assert.ok(source.includes("resetKey={editQuery}"));
   // The old "show 2, dump the rest in a <details>" pattern is gone.
   assert.ok(!source.includes("hiddenCards.map"));
@@ -179,7 +179,7 @@ check("results page uses incremental batch-of-3 load-more pagination", () => {
   const loadMore = readFileSync("src/app/tulemused/LoadMore.tsx", "utf8");
   assert.ok(loadMore.includes("Näita rohkem"));
   assert.ok(loadMore.includes("\"use client\""));
-  assert.ok(loadMore.includes("batchSize = 3"));
+  assert.ok(loadMore.includes("batchSize = 10"));
   assert.ok(loadMore.includes("initialVisibleCount"));
   assert.ok(!loadMore.includes("kokku"));
   assert.ok(!loadMore.includes("veel {"));
@@ -196,14 +196,24 @@ check("nested töövõidud sections are collapsed by default (no open attribute)
   assert.ok(source.includes("Näita ajajoont"));
 });
 
-check("results page separates news/progress from opinions", () => {
+check("opinion/news cards can show nested related source items with badges", () => {
+  const source = readFileSync("src/app/PublicResultCard.tsx", "utf8");
+  assert.ok(source.includes("NestedRelatedItems"));
+  assert.ok(source.includes("card.relatedItems"));
+  assert.ok(source.includes("Seotud allikad"));
+  assert.ok(source.includes("item.relationLabel"));
+  assert.ok(source.includes("item.badge"));
+});
+
+check("results page combines news/progress and opinions publicly", () => {
   const source = readFileSync("src/app/tulemused/page.tsx", "utf8");
-  assert.ok(source.includes("Koja seisukohad"));
-  assert.ok(source.includes("Koja uudised"));
+  assert.ok(source.includes("Koja seisukohad ja uudised"));
   assert.ok(source.includes("Veel samal teemal"));
   assert.ok(source.includes('title="Töövõidud"'));
   assert.ok(!source.includes("Konkreetsed tulemused ja võidud, mille koda on ettevõtjate jaoks saavutanud."));
-  assert.ok(source.includes("results.news"));
+  assert.ok(source.includes("results.opinionNews"));
+  assert.ok(!source.includes('title="Koja seisukohad"'));
+  assert.ok(!source.includes('title="Koja uudised"'));
   assert.ok(source.includes("valdkondadeüleseid tulemusi"));
   assert.ok(!source.includes("Vaata allikat"));
   assert.ok(!source.includes("Koja avalikud seisukohad, ettepanekud ja hoiatused."));
@@ -361,13 +371,17 @@ check("result cards use one internal 'Loe lähemalt' CTA and recipient chips", (
   assert.ok(source.includes('card.kind !== "uudis"'));
 });
 
-check("law page renames news section, renames CTA and drops generic work-win links", () => {
+check("law page uses combined opinion/news section, renames CTA and drops generic work-win links", () => {
   const source = readFileSync("src/app/seadused/[slug]/page.tsx", "utf8");
-  assert.ok(source.includes('title="Uudised"'));
+  assert.ok(source.includes('title="Koja seisukohad ja uudised"'));
+  assert.ok(source.includes("results.opinionNews"));
+  assert.ok(!source.includes('title="Uudised"'));
+  assert.ok(!source.includes("results.news"));
   assert.ok(!source.includes("Uudised ja arengud"));
-  assert.ok(source.includes("Loe lähemalt"));
+  assert.ok(source.includes("PublicResultCard"));
   assert.ok(!source.includes("Vaata kokkuvõtet"));
-  assert.ok(source.includes("isGenericWorkWinUrl"));
+  const publicCard = readFileSync("src/app/PublicResultCard.tsx", "utf8");
+  assert.ok(publicCard.includes("isGenericWorkWinUrl"));
 });
 
 check("work-win / news detail page hides the generic external source button", () => {

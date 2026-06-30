@@ -1400,6 +1400,19 @@ table.admin-table th {
   text-decoration: underline;
 }
 
+.related-source-section {
+  background: #f8fafc;
+  border-radius: var(--radius-sm);
+  padding: 10px 10px 8px;
+}
+
+.nested-related-heading {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--color-primary-dark);
+}
+
 /* The timeline itself: a thin left rail with stacked steps. */
 .nested-timeline {
   list-style: none;

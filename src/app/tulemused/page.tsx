@@ -16,7 +16,7 @@ import PublicResultCard from "../PublicResultCard";
 export const dynamic = "force-dynamic";
 
 /** Initial batch size + step for the "Näita rohkem" incremental pagination. */
-const LOAD_MORE_BATCH = 3;
+const LOAD_MORE_BATCH = 10;
 
 /**
  * A result group with incremental "Näita rohkem" pagination:
@@ -141,8 +141,7 @@ export default async function ResultsPage({
   const onlyContext =
     hasResults &&
     results.achievements.length === 0 &&
-    results.positions.length === 0 &&
-    results.news.length === 0;
+    results.opinionNews.length === 0;
   const topicSuggestions = options.valdkonnad.slice(0, 6);
 
   return (
@@ -245,16 +244,8 @@ export default async function ResultsPage({
           initialVisibleCount={results.achievementsInitialVisible}
         />
         <Section
-          title="Koja seisukohad"
-          cards={results.positions}
-          sessionId={sessionId}
-          fromQuery={fromQuery}
-          admin={admin}
-          resetKey={editQuery}
-        />
-        <Section
-          title="Koja uudised"
-          cards={results.news}
+          title="Koja seisukohad ja uudised"
+          cards={results.opinionNews}
           sessionId={sessionId}
           fromQuery={fromQuery}
           admin={admin}
