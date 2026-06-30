@@ -490,7 +490,6 @@ type OpinionNewsLink = {
   relationRole: string | null;
   relationLabelEt: string | null;
   linkConfidence: string | null;
-  canonicalPolicyThreadId: string | null;
   sortPriority: number | null;
 };
 
@@ -592,7 +591,6 @@ async function buildCombinedOpinionNewsUnits(ranked: RankedCandidate[], query: S
       relationRole: true,
       relationLabelEt: true,
       linkConfidence: true,
-      canonicalPolicyThreadId: true,
       sortPriority: true,
     },
   })) as OpinionNewsLink[];
