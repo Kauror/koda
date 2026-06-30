@@ -600,17 +600,7 @@ const TYPE_BADGE: Record<ResultType, string> = {
 export function getContentTypeBadge(c: Candidate): string {
   if (isAchievement(c)) return TYPE_BADGE.toovoit;
   if (isFormalOpinion(c) || c.sourceDataset === "opinions") return "Arvamus";
-  if (isKodaNews(c)) {
-    const role = normalizeTitle([c.contentRoleFinal, c.publicDisplayRole, c.publicDisplayStatus].filter(Boolean).join(" "));
-    if (/(toovoit|too voit|work win|achievement|source evidence|source_evidence|allikas)/u.test(role)) {
-      return "Töövõidu allikas";
-    }
-    if (/(follow|jatk|jätk|update|timeline|sequence)/u.test(role)) return "Jätku-uudis";
-    if (/(explainer|explanation|selgit|policy context|public explanation|public_explanation)/u.test(role)) {
-      return "Selgitus";
-    }
-    return "Uudis";
-  }
+  if (isKodaNews(c)) return "Uudis";
   return TYPE_BADGE[primaryType(c)];
 }
 

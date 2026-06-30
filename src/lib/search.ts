@@ -310,7 +310,6 @@ export type NestedRelatedCard = {
   url: string | null;
   sourceCtaLabel: string;
   badge: string;
-  relationLabel: string;
 };
 
 export type ResultCard = {
@@ -495,7 +494,7 @@ type OpinionNewsLink = {
 
 type OpinionNewsUnit = {
   main: RankedCandidate;
-  related: { c: Candidate; label: string; sortPriority: number }[];
+  related: { c: Candidate; sortPriority: number }[];
 };
 
 const OPINION_NEWS_LINK_TYPES = new Set<EvidenceLinkType>([
@@ -532,7 +531,7 @@ function verifiedDateText(c: Candidate): string | null {
   }).text;
 }
 
-function toNestedRelatedCard(c: Candidate, relationLabel: string): NestedRelatedCard {
+function toNestedRelatedCard(c: Candidate): NestedRelatedCard {
   return {
     id: c.id,
     detailId: c.externalId ?? c.id,
@@ -542,20 +541,7 @@ function toNestedRelatedCard(c: Candidate, relationLabel: string): NestedRelated
     url: publicSourceUrl(c),
     sourceCtaLabel: sourceCtaLabel(c),
     badge: buildBadges(c)[0] ?? (isKodaNews(c) ? "Uudis" : "Arvamus"),
-    relationLabel,
   };
-}
-
-function inferredNestedLabel(c: Candidate, main: Candidate, explicitLabel?: string | null): string {
-  const label = explicitLabel?.trim();
-  if (label) return label;
-  if (isFormalOpinion(c) || c.sourceDataset === "opinions") {
-    return isKodaNews(main) ? "Aluseks olev arvamus" : "Ametlik seisukoht";
-  }
-  const badge = buildBadges(c)[0];
-  if (badge === "Selgitus") return "Seotud selgitus";
-  if (badge === "Jätku-uudis") return "Sama teema jätk";
-  return "Seotud uudis";
 }
 
 function linkLooksLikeNewsExplainer(link: OpinionNewsLink): boolean {
@@ -692,7 +678,6 @@ async function buildCombinedOpinionNewsUnits(ranked: RankedCandidate[], query: S
         const link = linkByPair.get(pairKey(main.c.id, s.c.id));
         return {
           c: s.c,
-          label: inferredNestedLabel(s.c, main.c, link?.relationLabelEt),
           sortPriority: link?.sortPriority ?? 0,
         };
       })
@@ -1087,7 +1072,7 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
   const opinionNews = displayedOpinionNewsUnits.map((unit) => {
     const card = toCard(unit.main);
     if (unit.related.length > 0) {
-      card.relatedItems = unit.related.map((item) => toNestedRelatedCard(item.c, item.label));
+      card.relatedItems = unit.related.map((item) => toNestedRelatedCard(item.c));
     }
     return card;
   });

@@ -306,7 +306,7 @@ check("Koda opinion/article classified as arvamus group", () => {
   assert.equal(primaryType(c), "arvamus");
   assert.equal(assignKind(c), "arvamus");
 });
-check("combined public badges preserve opinion/news type and roles", () => {
+check("combined public badges preserve opinion/news type without exposing internal roles", () => {
   assert.equal(
     getContentTypeBadge(cand({ sourceTypeDetail: "meie_arvamus_article", sourceLayer: "koda_public_opinion" })),
     "Arvamus"
@@ -316,11 +316,15 @@ check("combined public badges preserve opinion/news type and roles", () => {
     getContentTypeBadge(
       cand({ sourceTypeDetail: "meie_uudis", sourceLayer: "koda_news", contentRoleFinal: "policy_explainer" })
     ),
-    "Selgitus"
+    "Uudis"
   );
   assert.equal(
     getContentTypeBadge(cand({ sourceTypeDetail: "meie_uudis", sourceLayer: "koda_news", contentRoleFinal: "follow_up_update" })),
-    "Jätku-uudis"
+    "Uudis"
+  );
+  assert.equal(
+    getContentTypeBadge(cand({ sourceTypeDetail: "meie_uudis", sourceLayer: "koda_news", contentRoleFinal: "source_evidence" })),
+    "Uudis"
   );
 });
 

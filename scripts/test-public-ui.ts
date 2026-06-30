@@ -162,6 +162,15 @@ check("teema ajalugu uses contextual CTA labels, not generic allikas wording", (
   assert.ok(!source.includes("Vaata allikat"));
 });
 
+check("detail-to-detail links preserve the original search filters", () => {
+  const source = readFileSync("src/app/sisu/[id]/page.tsx", "utf8");
+  assert.ok(source.includes("function detailHref"));
+  assert.ok(source.includes("TopicHistory({ rows, from }"));
+  assert.ok(source.includes("href={detailHref(row.detailId, from)}"));
+  assert.ok(source.includes("<StandardDetail item={item} from={from} />"));
+  assert.ok(source.includes("<AchievementDetail item={item} from={from} />"));
+});
+
 check("results page uses incremental batch-of-10 load-more pagination", () => {
   const source = readFileSync("src/app/tulemused/page.tsx", "utf8");
   // Sections render through the LoadMore client component (batches of 10),
@@ -201,7 +210,7 @@ check("opinion/news cards can show nested related source items with badges", () 
   assert.ok(source.includes("NestedRelatedItems"));
   assert.ok(source.includes("card.relatedItems"));
   assert.ok(source.includes("Seotud allikad"));
-  assert.ok(source.includes("item.relationLabel"));
+  assert.ok(!source.includes("{item.relationLabel}"));
   assert.ok(source.includes("item.badge"));
 });
 

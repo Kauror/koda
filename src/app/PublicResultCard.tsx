@@ -76,7 +76,6 @@ function NestedRelatedItems({
           return (
             <li key={item.id} className="nested-item">
               <p className="nested-meta">
-                <span className="badge">{item.relationLabel}</span>
                 <span className="badge">{item.badge}</span>
                 {item.displayDate && <span className="badge-date">{item.displayDate}</span>}
               </p>

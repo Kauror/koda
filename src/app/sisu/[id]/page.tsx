@@ -11,14 +11,16 @@ import { compactText, isGenericWorkWinUrl, isUnsafePublicDetailText } from "@/li
 
 export const dynamic = "force-dynamic";
 
+function detailHref(detailId: string, from?: string): string {
+  return `/sisu/${encodeURIComponent(detailId)}${from ? `?from=${encodeURIComponent(from)}` : ""}`;
+}
+
 /**
  * v1.2 nesting/timeline context on a töövõit detail page: a "part of" link to a
  * parent card, the folded series/timeline children, or the full policy-thread
  * timeline (current step highlighted). Each step links to its own detail page.
  */
 function WorkWinNestingSection({ nesting, from }: { nesting: WorkWinNestingDetail; from?: string }) {
-  const href = (detailId: string) =>
-    `/sisu/${encodeURIComponent(detailId)}${from ? `?from=${encodeURIComponent(from)}` : ""}`;
   const items = nesting.thread ? nesting.thread.items : nesting.children;
   if (!nesting.parent && items.length === 0) return null;
   const heading = nesting.thread
@@ -29,7 +31,7 @@ function WorkWinNestingSection({ nesting, from }: { nesting: WorkWinNestingDetai
       {nesting.parent && (
         <p className="thread-parent">
           Kuulub töövõidu juurde:{" "}
-          <Link href={href(nesting.parent.detailId)}>{nesting.parent.title}</Link>
+          <Link href={detailHref(nesting.parent.detailId, from)}>{nesting.parent.title}</Link>
         </p>
       )}
       {items.length > 0 && (
@@ -45,7 +47,7 @@ function WorkWinNestingSection({ nesting, from }: { nesting: WorkWinNestingDetai
                   {it.timelineStageLabel && <span className="badge nested-stage">{it.timelineStageLabel}</span>}
                   {it.isCurrent && <span className="badge">Praegu vaatad</span>}
                 </p>
-                <h3>{it.isCurrent ? it.title : <Link href={href(it.detailId)}>{it.title}</Link>}</h3>
+                <h3>{it.isCurrent ? it.title : <Link href={detailHref(it.detailId, from)}>{it.title}</Link>}</h3>
                 {it.summary && <p className="item-excerpt small">{compactText(it.summary, 220)}</p>}
                 {it.sourceUrl && !isGenericWorkWinUrl(it.sourceUrl) && (
                   <a href={it.sourceUrl} target="_blank" rel="noopener noreferrer" className="item-source-link">
@@ -72,7 +74,7 @@ function SourceButton({ item }: { item: Pick<ContentDetail, "sourceUrl" | "sourc
   );
 }
 
-function TopicHistory({ rows }: { rows: EvidenceRow[] }) {
+function TopicHistory({ rows, from }: { rows: EvidenceRow[]; from?: string }) {
   if (rows.length === 0) return null;
   return (
     <section className="card">
@@ -82,7 +84,7 @@ function TopicHistory({ rows }: { rows: EvidenceRow[] }) {
           <li key={row.id}>
             <span className="badge">{row.sourceLabel}</span>{" "}
             {row.isPublic ? (
-              <Link href={`/sisu/${encodeURIComponent(row.detailId)}`}>{row.title}</Link>
+              <Link href={detailHref(row.detailId, from)}>{row.title}</Link>
             ) : (
               <span className="evidence-title">{row.title}</span>
             )}
@@ -100,7 +102,7 @@ function TopicHistory({ rows }: { rows: EvidenceRow[] }) {
   );
 }
 
-function AchievementDetail({ item }: { item: ContentDetail }) {
+function AchievementDetail({ item, from }: { item: ContentDetail; from?: string }) {
   // v1 töövõidu value fields (what_changed_ee / koda_role_ee / business_value_ee)
   // are the primary structured content; fall back to the summary when absent.
   const summary = item.summary && !isUnsafePublicDetailText(item.summary) ? item.summary : null;
@@ -145,12 +147,12 @@ function AchievementDetail({ item }: { item: ContentDetail }) {
         </dl>
         <SourceButton item={item} />
       </section>
-      <TopicHistory rows={item.evidence.topicHistory} />
+      <TopicHistory rows={item.evidence.topicHistory} from={from} />
     </>
   );
 }
 
-function StandardDetail({ item }: { item: ContentDetail }) {
+function StandardDetail({ item, from }: { item: ContentDetail; from?: string }) {
   const summary = item.summary;
   return (
     <>
@@ -170,7 +172,7 @@ function StandardDetail({ item }: { item: ContentDetail }) {
         </section>
       )}
 
-      <TopicHistory rows={item.evidence.topicHistory} />
+      <TopicHistory rows={item.evidence.topicHistory} from={from} />
     </>
   );
 }
@@ -258,7 +260,7 @@ export default async function ContentDetailPage({
       </div>
 
       <div className="container results-body detail-body">
-        {item.isAchievement ? <AchievementDetail item={item} /> : <StandardDetail item={item} />}
+        {item.isAchievement ? <AchievementDetail item={item} from={from} /> : <StandardDetail item={item} from={from} />}
 
         {item.workWinNesting && <WorkWinNestingSection nesting={item.workWinNesting} from={from} />}
 
