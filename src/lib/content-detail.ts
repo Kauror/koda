@@ -20,6 +20,7 @@ import {
   assignKind,
   buildBadges,
   isAchievement,
+  isFormalOpinion,
   isKodaNews,
   shouldShowRecipientChip,
 } from "./search-core";
@@ -37,6 +38,7 @@ import {
   roleLabel,
   toThreadItemMeta,
 } from "./content-threads";
+import { pickPrimaryDoc } from "./source-documents";
 
 const TOPIC_HISTORY_CAP = 4;
 const DUPLICATE_CAP = 4;
@@ -161,6 +163,8 @@ export type ContentDetail = {
   workWinNesting: WorkWinNestingDetail | null;
   /** Public admin-managed topic thread timeline this item belongs to, or null. */
   thread: ThreadTimelineDetail | null;
+  /** Primary source PDF ("Vaata pöördumist") for opinions, or null. */
+  sourcePdf: { url: string; filename: string } | null;
   evidence: {
     annualContext: EvidenceRow[];
     duplicates: EvidenceRow[];
@@ -213,6 +217,7 @@ export async function getContentDetail(id: string): Promise<ContentDetail | null
   const evidence = await getEvidenceForContent(c);
   const workWinNesting = await getWorkWinNesting(c);
   const thread = await getPublicThreadTimeline(item);
+  const sourcePdf = await getOpinionSourcePdf(c);
 
   return {
     id: c.id,
@@ -274,8 +279,25 @@ export async function getContentDetail(id: string): Promise<ContentDetail | null
       : null,
     workWinNesting,
     thread,
+    sourcePdf,
     evidence,
   };
+}
+
+/**
+ * The primary source PDF ("Vaata pöördumist") for an opinion. Only VERIFIED files
+ * (confirmed on disk at import) are returned, so the link is never broken. Non-
+ * opinion rows and unmatched opinions return null.
+ */
+async function getOpinionSourcePdf(
+  c: Candidate
+): Promise<{ url: string; filename: string } | null> {
+  if (!c.externalId || !(isFormalOpinion(c) || c.sourceDataset === "opinions")) return null;
+  const docs = await prisma.sourceDocument.findMany({
+    where: { contentExternalId: c.externalId, kind: "opinion_pdf", fileVerified: true },
+  });
+  const primary = pickPrimaryDoc(docs);
+  return primary ? { url: primary.pdfUrl, filename: primary.pdfFilename } : null;
 }
 
 /**

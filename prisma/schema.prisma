@@ -673,3 +673,39 @@ model IngestionStagingItem {
   @@index([runId])
   @@index([canonicalUrl])
 }
+
+/// Public source-document (opinion pöördumine PDF) linked to an opinion ContentItem.
+/// Like ContentThreadItem/DataReviewDecision, it references the opinion by the
+/// STABLE externalId (not a cuid FK) so it survives the destructive content
+/// re-import — a cascade FK would delete these on every import. Resolved at read
+/// time by contentExternalId. Populated by scripts/import-source-documents.ts
+/// from the extraction manifest; the public UI shows the primary verified PDF as
+/// "Vaata pöördumist". Never wiped by content imports.
+model SourceDocument {
+  id                String   @id // source_document_id, e.g. OPINIONDOC-000001
+  contentExternalId String? // matched opinion externalId (null = unmatched, reported not linked)
+  kind              String   @default("opinion_pdf")
+  originalFilename  String
+  pdfFilename       String // OPINIONDOC-000001.pdf
+  txtFilename       String?
+  pdfUrl            String // /source-documents/opinions/pdf/OPINIONDOC-000001.pdf
+  pdfRelativePath   String
+  txtRelativePath   String?
+  pdfSha256         String?
+  pdfSizeBytes      Int?
+  pageCount         Int?
+  textLength        Int?
+  extractionStatus  String?
+  textQuality       String?
+  language          String?
+  matchMethod       String? // exact_filename | parsed_date_recipient_title | fuzzy | none
+  matchConfidence   String? // high | medium | low | none
+  isPrimary         Boolean  @default(true) // pöördumine vs Lisa/Seletuskiri/Kooskõlastustabel
+  fileVerified      Boolean  @default(false) // PDF confirmed on disk at import → never a broken link
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([contentExternalId])
+  @@index([kind])
+  @@index([pdfSha256])
+}

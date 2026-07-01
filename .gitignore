@@ -31,6 +31,11 @@ data/archive/
 .pglite/
 .pglite-*/
 
+# Opinion source-document PDFs/TXT (104 MB, deployed via bind mount, never
+# committed) + local manifest and generated import reports.
+/public/source-documents/
+/data/source-documents/
+
 # Loose local data-pipeline artifacts / handoff packages dropped in the repo
 # root (Excel workbooks, audit reports, delivery ZIPs, old package versions).
 # These are data, not source, and must never be committed. The real import
