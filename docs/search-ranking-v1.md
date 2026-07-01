@@ -82,6 +82,14 @@ per-token in title = +12; in summary/kodaPosition/companyRelevance = +8; in
 source evidence/excerpt = +5; in body = +2. Title/summary/url use the admin
 overrides first.
 
+**Search aliases v0.2:** when `q` matches a row in `SearchAlias`, deterministic
+alias expansion adds soft topic, sector, law and text boost signals before
+ranking. Alias boosts can help retrieve a source-based result when the user's
+wording is vague or indirect, but they do not become public filters and do not
+override explicit `valdkond` / `tegevusala` filters. Review-only aliases
+(`targetKind = unknown_review`) are stored but inert for public ranking. See
+`docs/search-aliases-v0_2.md`.
+
 **Filter:** valdkond match +40 each (cap 2); exact tegevusala +44 each (cap
 2); related tegevusala topic fallback +14 each (cap 2), controlled sector
 fallback +6, related keyword fallback +3 each (cap 2); tapsustus +8 each (cap

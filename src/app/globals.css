@@ -509,6 +509,20 @@ textarea {
   margin: 0 0 16px;
 }
 
+.keyword-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+
+.keyword-suggestions span {
+  color: var(--color-muted);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
 .tag {
   display: inline-block;
   background: var(--color-bg-soft);
@@ -696,7 +710,7 @@ a.tag:hover {
   padding: 12px 14px;
   font-size: 1rem;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius);
   background: #fff;
   color: inherit;
 }
@@ -1266,6 +1280,11 @@ table.admin-table th {
 .search-form {
   display: flex;
   flex-direction: column;
+}
+
+.keyword-search {
+  order: 0;
+  margin-bottom: 18px;
 }
 
 .search-sector {

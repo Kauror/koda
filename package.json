@@ -11,6 +11,7 @@
     "crawl": "tsx scripts/crawl.ts",
     "seed": "tsx scripts/seed.ts",
     "site-texts:seed": "tsx scripts/seed-site-texts.ts",
+    "search-aliases:seed": "tsx scripts/seed-search-aliases.ts",
     "freshness:audit": "tsx scripts/audit-freshness.ts",
     "data:freshness-audit": "tsx scripts/audit-freshness.ts",
     "data:sector-audit": "tsx scripts/audit-freshness.ts",

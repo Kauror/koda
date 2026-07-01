@@ -359,6 +359,31 @@ model SiteText {
   @@index([group])
 }
 
+model SearchAlias {
+  id              String   @id
+  alias           String
+  normalizedAlias String   @unique
+  canonicalLabel  String
+  type            String
+  targetSlug      String?
+  targetKind      String
+  weight          Int
+  language        String   @default("et")
+  sourceBasis     Json?
+  notes           String?
+  isPublic        Boolean  @default(true)
+  intent          String?
+  expandedTerms   Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([targetKind])
+  @@index([targetSlug])
+  @@index([type])
+  @@index([weight])
+  @@index([isPublic])
+}
+
 /// Online admin review decisions for local data-bundle taxonomy suggestions.
 /// These rows are review notes/proposals only: saving a decision must never
 /// update ContentItem taxonomy, generated bundle JSONL, or source Excel files.

@@ -49,6 +49,7 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
     listParam("tegevusala").filter((slug) => tegevusalaSlugs.has(slug))
   );
   const [valdkond, setValdkond] = useState<string[]>(listParam("valdkond"));
+  const [q, setQ] = useState(params.get("q") || "");
   const [showSectorError, setShowSectorError] = useState(false);
 
   const toggle = (list: string[], set: (v: string[]) => void) => (slug: string) =>
@@ -75,12 +76,14 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
     // Tegevusala is no longer mandatory: a search needs at least one filter, but
     // the user may search by Teema alone. Only block a completely
     // empty search.
-    const hasAnyFilter = tegevusala.length > 0 || valdkond.length > 0;
+    const cleanQ = q.trim();
+    const hasAnyFilter = cleanQ || tegevusala.length > 0 || valdkond.length > 0;
     if (!hasAnyFilter) {
       setShowSectorError(true);
       return;
     }
     const p = new URLSearchParams();
+    if (cleanQ) p.set("q", cleanQ);
     if (tegevusala.length) p.set("tegevusala", tegevusala.join(","));
     if (valdkond.length) p.set("valdkond", valdkond.join(","));
     router.push(`/tulemused?${p.toString()}`);
@@ -88,6 +91,24 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
 
   return (
     <form onSubmit={submit} className="card search-form">
+      <div className="keyword-search">
+        <label className="field-label" htmlFor="search-q">
+          Otsi märksõna või küsimust
+        </label>
+        <input
+          id="search-q"
+          name="q"
+          type="search"
+          className="search-input"
+          value={q}
+          onChange={(event) => {
+            setShowSectorError(false);
+            setQ(event.target.value);
+          }}
+          placeholder="Näiteks kasumimaks, tööjõud või eksport"
+          autoComplete="off"
+        />
+      </div>
       {tegevusalaOptions.length > 0 && (
         <fieldset className="search-sector" aria-describedby="tegevusala-hint tegevusala-error">
           <legend>Tegevusala</legend>
@@ -104,7 +125,7 @@ export default function SearchForm({ options }: { options: FilterOptions }) {
           />
           {showSectorError && (
             <p className="field-error" id="tegevusala-error" role="alert">
-              Palun vali vähemalt üks tegevusala või teema.
+              Palun sisesta märksõna või vali vähemalt üks tegevusala või teema.
             </p>
           )}
         </fieldset>

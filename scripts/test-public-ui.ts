@@ -230,6 +230,9 @@ check("results page combines news/progress and opinions publicly", () => {
   const source = readFileSync("src/app/tulemused/page.tsx", "utf8");
   assert.ok(source.includes("Koja seisukohad ja uudised"));
   assert.ok(source.includes("Veel samal teemal"));
+  assert.ok(source.includes("keyword-suggestions"));
+  assert.ok(source.includes("results.relatedSearches"));
+  assert.ok(source.includes("Proovi ka:"));
   assert.ok(source.includes('title="Töövõidud"'));
   assert.ok(!source.includes("Konkreetsed tulemused ja võidud, mille koda on ettevõtjate jaoks saavutanud."));
   assert.ok(source.includes("results.opinionNews"));
@@ -258,11 +261,14 @@ check("results page does not show capped total copy", () => {
   assert.ok(!source.includes("({cards.length})"));
 });
 
-check("search form allows topic-only search (sector not mandatory) and hides removed type filters", () => {
+check("search form allows keyword/topic-only search and hides removed type filters", () => {
   const source = readFileSync("src/app/SearchForm.tsx", "utf8");
   // Sector is no longer mandatory: a search needs at least one filter, but the
-  // user may search by Teema alone.
+  // user may search by märksõna or Teema alone.
   assert.ok(source.includes("hasAnyFilter"));
+  assert.ok(source.includes('name="q"'));
+  assert.ok(source.includes('type="search"'));
+  assert.ok(source.includes("Otsi märksõna või küsimust"));
   assert.ok(!source.includes("tegevusalaOptions.length > 0 && tegevusala.length === 0"));
   // The cross-sector fallback option is hidden via the shared helper.
   assert.ok(source.includes("isInternalFallbackActivity"));
@@ -275,9 +281,6 @@ check("search form allows topic-only search (sector not mandatory) and hides rem
   assert.ok(!source.includes("Teema / valdkond"));
   assert.ok(!source.includes("valikuline"));
   assert.ok(!source.includes("Täpsemad valikud"));
-  assert.ok(!source.includes('type="search"'));
-  assert.ok(!source.includes('name="q"'));
-  assert.ok(!source.includes("Otsi teemat või märksõna"));
   assert.ok(!source.includes("Ettevõtte olukord / täpsustus"));
   assert.ok(!source.includes("Tulemuse tüüp"));
   assert.ok(!source.includes("RESULT_TYPES"));

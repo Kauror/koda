@@ -15,6 +15,14 @@ import { PUBLIC_TOPIC_FILTERS, canonicalTopicId } from "./topics";
 import { PUBLIC_ACTIVITY_FILTERS, canonicalPublicActivitySlug } from "./activities";
 import { computePublicDate } from "./public-date";
 import { normalizeTitle } from "./hash";
+import {
+  EMPTY_ALIAS_EXPANSION,
+  expandSearchAliases,
+  suggestRelatedSearches,
+  type AliasExpansion,
+  type RelatedSearchSuggestion,
+  type SearchAliasRecord,
+} from "./search-aliases";
 import { compactText, getCleanPublicExcerpt, publicSourceUrl, publicTitle, sourceCtaLabel } from "./content-display";
 import {
   resolveWorkWinNesting,
@@ -79,6 +87,7 @@ type ContentWithTags = Prisma.ContentItemGetPayload<{ include: typeof candidateI
 
 const CANDIDATE_CACHE_TTL_MS = 5 * 60 * 1000;
 let candidateCache: { expiresAt: number; candidates: Candidate[] } | null = null;
+let aliasCache: { expiresAt: number; aliases: SearchAliasRecord[] } | null = null;
 
 export function toCandidate(row: ContentWithTags): Candidate {
   const byType = (t: TagType) =>
@@ -159,6 +168,23 @@ export async function fetchEligibleCandidates(): Promise<Candidate[]> {
   const candidates = rows.filter((r) => isPublicSearchEligible(r)).map(toCandidate);
   candidateCache = { expiresAt: now + CANDIDATE_CACHE_TTL_MS, candidates };
   return candidates;
+}
+
+async function fetchSearchAliases(): Promise<SearchAliasRecord[]> {
+  const now = Date.now();
+  if (aliasCache && aliasCache.expiresAt > now) return aliasCache.aliases;
+
+  try {
+    const aliases = await prisma.searchAlias.findMany({
+      orderBy: [{ weight: "desc" }, { id: "asc" }],
+    });
+    aliasCache = { expiresAt: now + CANDIDATE_CACHE_TTL_MS, aliases };
+    return aliases;
+  } catch (error) {
+    console.error("Failed to load search aliases", error);
+    aliasCache = { expiresAt: now + 30_000, aliases: [] };
+    return [];
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -380,6 +406,8 @@ export type SearchResults = {
   includesRelatedSectorMatches: boolean;
   /** Set when the query was recognized as a legal act (law-aware, newest-first). */
   recognizedLaw: RecognizedLaw | null;
+  /** Public keyword chips related to the searched phrase, derived from SearchAlias. */
+  relatedSearches: RelatedSearchSuggestion[];
 };
 
 /** Drop duplicate/canonical rows so the same content is not shown twice. */
@@ -562,7 +590,7 @@ function sortNestedRelated(a: { c: Candidate; sortPriority: number }, b: { c: Ca
   return (a.c.externalId ?? a.c.id).localeCompare(b.c.externalId ?? b.c.id);
 }
 
-async function buildCombinedOpinionNewsUnits(ranked: RankedCandidate[], query: SearchQuery): Promise<OpinionNewsUnit[]> {
+async function buildCombinedOpinionNewsUnits(ranked: RankedCandidate[], query: SearchQuery, aliases?: AliasExpansion): Promise<OpinionNewsUnit[]> {
   const rows = ranked.filter((s) => isOpinionNewsKind(s.c));
   if (rows.length === 0) return [];
 
@@ -685,7 +713,7 @@ async function buildCombinedOpinionNewsUnits(ranked: RankedCandidate[], query: S
     units.push({ main, related });
   }
 
-  return units.sort((a, b) => compareRankedCandidatesForQuery(query)(a.main, b.main));
+  return units.sort((a, b) => compareRankedCandidatesForQuery(query, aliases)(a.main, b.main));
 }
 
 /** A top-level töövõit display unit aggregated from matched rows. */
@@ -906,7 +934,12 @@ export async function getAllWorkWinCards(): Promise<ResultCard[]> {
 }
 
 export async function search(query: SearchQuery): Promise<SearchResults> {
-  const candidates = await fetchEligibleCandidates();
+  const [candidates, aliases] = await Promise.all([
+    fetchEligibleCandidates(),
+    query.q ? fetchSearchAliases() : Promise.resolve([]),
+  ]);
+  const aliasExpansion = query.q ? expandSearchAliases(query.q, aliases) : EMPTY_ALIAS_EXPANSION;
+  const relatedSearches = query.q ? suggestRelatedSearches(query.q, aliases, aliasExpansion) : [];
   const empty = isEmptyQuery(query);
   const recognized = detectLaw(query.q);
 
@@ -916,7 +949,7 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
   const runFilter = (relaxLawGate: boolean): { c: Candidate; total: number }[] => {
     const out: { c: Candidate; total: number }[] = [];
     for (const c of candidates) {
-      const s = scoreCandidate(c, query);
+      const s = scoreCandidate(c, query, aliasExpansion);
       const lawMatch = recognized ? lawMentionForSlug(c, recognized.law.slug, "medium") !== null : false;
       if (!empty && !passesActiveFilters(query, s, c, { lawMatch, relaxLawGate })) continue;
       out.push({ c, total: s.total + (lawMatch ? LAW_MATCH_BOOST : 0) });
@@ -933,7 +966,7 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
   }
 
   // Law-aware searches surface the newest related content first.
-  const deduped = dedupe(scored).sort(recognized ? compareByDateThenScore : compareRankedCandidatesForQuery(query));
+  const deduped = dedupe(scored).sort(recognized ? compareByDateThenScore : compareRankedCandidatesForQuery(query, aliasExpansion));
 
   // News relevance threshold for activity-specific pages (trust/safety):
   // a "Koja uudised" row may appear under a selected Tegevusala only if it has a
@@ -945,12 +978,12 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
   // seisukohad keep their cross-sector fallback (handled by ranking).
   const sectorActive = query.tegevusala.length > 0;
   const newsRelevant = (c: Candidate): boolean => {
-    const b = scoreCandidate(c, query);
+    const b = scoreCandidate(c, query, aliasExpansion);
     return (
       b.tegevusalaMatches > 0 ||
       b.sectorFallbackMatches > 0 ||
       b.valdkondMatches > 0 ||
-      (query.q.length > 0 && b.text > 0)
+      (query.q.length > 0 && (b.text > 0 || b.alias > 0))
     );
   };
   const ranked = sectorActive
@@ -968,7 +1001,7 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
   const rankedOther = ranked.filter((s) => !isAchievement(s.c));
   const grouped = groupRankedCandidates(rankedOther, GROUP_CAPS);
   const groups = grouped.displayedGroups;
-  const opinionNewsUnits = await buildCombinedOpinionNewsUnits(rankedOther, query);
+  const opinionNewsUnits = await buildCombinedOpinionNewsUnits(rankedOther, query, aliasExpansion);
   const displayedOpinionNewsUnits = opinionNewsUnits.slice(0, COMBINED_OPINION_NEWS_CAP);
 
   const toovoitUnits = aggregateWorkWinUnits(
@@ -1104,6 +1137,7 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
     totalDisplayed,
     groupCounts,
     includesRelatedSectorMatches,
+    relatedSearches,
     recognizedLaw: recognized
       ? {
           slug: recognized.law.slug,

@@ -11,6 +11,7 @@ import { normalizeTitle } from "./hash";
 import { publicSummary, publicTitle } from "./content-display";
 import { canonicalTopicId } from "./topics";
 import { rankingDateFor } from "./public-date";
+import { normalizeAliasText, type AliasExpansion, type WeightedSignal } from "./search-aliases";
 import {
   genericSectorFallbackRequiresSignal,
   getSectorRelevance as getSectorRelevanceForScore,
@@ -244,6 +245,7 @@ export function primaryType(c: Candidate): ResultType {
 
 export type ScoreBreakdown = {
   text: number;
+  alias: number;
   filter: number;
   boost: number;
   total: number;
@@ -258,6 +260,12 @@ export type ScoreBreakdown = {
 };
 
 function countTokens(haystack: string, tokens: string[]): number {
+  let n = 0;
+  for (const t of tokens) if (t && haystack.includes(t)) n++;
+  return n;
+}
+
+function countAliasTokens(haystack: string, tokens: string[]): number {
   let n = 0;
   for (const t of tokens) if (t && haystack.includes(t)) n++;
   return n;
@@ -287,29 +295,55 @@ function recencyBoost(date: Date | null): number {
   return 0;
 }
 
-export function scoreCandidate(c: Candidate, q: SearchQuery): ScoreBreakdown {
+function scoreAliasTerms(signals: WeightedSignal[], haystacks: { title: string; strong: string; med: string; body: string; law: string }): number {
+  let score = 0;
+  for (const signal of signals) {
+    const term = normalizeAliasText(signal.value);
+    if (!term) continue;
+    const tokens = term.split(" ").filter(Boolean);
+    const w = Math.max(1, signal.weight);
+    if (haystacks.title.includes(term)) score += w * 8;
+    else score += Math.min(2, countAliasTokens(haystacks.title, tokens)) * w * 3;
+    if (haystacks.strong.includes(term)) score += w * 6;
+    else score += Math.min(2, countAliasTokens(haystacks.strong, tokens)) * w * 2;
+    if (haystacks.law.includes(term)) score += w * 8;
+    else score += Math.min(2, countAliasTokens(haystacks.law, tokens)) * w * 3;
+    if (haystacks.med.includes(term)) score += w * 3;
+    if (haystacks.body.includes(term)) score += w;
+  }
+  return score;
+}
+
+export function scoreCandidate(c: Candidate, q: SearchQuery, aliases?: AliasExpansion): ScoreBreakdown {
   let text = 0;
   const qn = normalizeTitle(q.q || "");
   const tokens = qn ? qn.split(" ").filter(Boolean) : [];
+  const titleHay = normalizeTitle(publicTitle(c));
+  const strongHay = normalizeTitle(
+    [publicSummary(c), c.kodaPosition, c.companyRelevance].filter(Boolean).join(" ")
+  );
+  const medHay = normalizeTitle([c.sourceEvidence, c.excerpt].filter(Boolean).join(" "));
+  const lawHay = lawHaystack(c);
+  const bodyHay = normalizeTitle(c.bodyText || "");
+  const aliasHaystacks = {
+    title: normalizeAliasText(publicTitle(c)),
+    strong: normalizeAliasText([publicSummary(c), c.kodaPosition, c.companyRelevance].filter(Boolean).join(" ")),
+    med: normalizeAliasText([c.sourceEvidence, c.excerpt].filter(Boolean).join(" ")),
+    law: normalizeAliasText(c.lawSearchAllowed ? c.oigusaktid.map((t) => t.name).join(" ") : ""),
+    body: normalizeAliasText(c.bodyText || ""),
+  };
   if (qn) {
-    const titleHay = normalizeTitle(publicTitle(c));
     if (titleHay === qn) text += 120;
     else if (titleHay.includes(qn)) text += 60;
     text += 12 * countTokens(titleHay, tokens);
 
-    const strongHay = normalizeTitle(
-      [publicSummary(c), c.kodaPosition, c.companyRelevance].filter(Boolean).join(" ")
-    );
     text += 8 * countTokens(strongHay, tokens);
 
-    const medHay = normalizeTitle([c.sourceEvidence, c.excerpt].filter(Boolean).join(" "));
     text += 5 * countTokens(medHay, tokens);
 
-    const lawHay = lawHaystack(c);
     if (lawHay.includes(qn)) text += 70;
     text += 16 * countTokens(lawHay, tokens);
 
-    const bodyHay = normalizeTitle(c.bodyText || "");
     text += 2 * countTokens(bodyHay, tokens);
 
     text = Math.min(text, 220); // cap so body spam cannot dominate
@@ -354,6 +388,20 @@ export function scoreCandidate(c: Candidate, q: SearchQuery): ScoreBreakdown {
   filter += Math.min(sectorRelevance.matches, 1) * 6; // controlled sector fallback
   filter += Math.min(sectorRelevance.keywordMatches, 2) * 3; // keyword-only fallback: light
   filter += Math.min(tapsustusMatches, 2) * 8; // provisional: light, capped
+
+  let alias = 0;
+  if (aliases) {
+    for (const signal of aliases.topicBoosts) {
+      if (candidateTopicIds.has(signal.value)) alias += Math.min(70, signal.weight * 7);
+    }
+    for (const signal of aliases.sectorBoosts) {
+      if (c.tegevusalad.some((t) => sectorMatchesSlug(t.slug, [signal.value]))) alias += Math.min(52, signal.weight * 6);
+      else if (c.activityPrimarySlug && sectorMatchesSlug(c.activityPrimarySlug, [signal.value])) alias += Math.min(56, signal.weight * 7);
+    }
+    alias += scoreAliasTerms(aliases.lawBoostTerms, aliasHaystacks);
+    alias += scoreAliasTerms(aliases.textBoostTerms, aliasHaystacks);
+    alias = Math.min(alias, 180);
+  }
 
   let boost = 0;
   // Toovoit rows are the product's headline result type and must rank strongly
@@ -407,9 +455,10 @@ export function scoreCandidate(c: Candidate, q: SearchQuery): ScoreBreakdown {
 
   return {
     text,
+    alias,
     filter,
     boost,
-    total: text + filter + boost,
+    total: text + alias + filter + boost,
     valdkondMatches,
     tegevusalaMatches,
     sectorFallbackMatches: sectorRelevance.matches,
@@ -440,7 +489,7 @@ export function passesActiveFilters(
   if (q.q && isConservativeLawQuery(qn) && !opts?.lawMatch && !opts?.relaxLawGate && !matchesConfirmedLawQuery(c, qn)) {
     return false;
   }
-  if (q.q && s.text === 0 && !opts?.lawMatch) return false;
+  if (q.q && s.text === 0 && s.alias === 0 && !opts?.lawMatch) return false;
   if (q.valdkond.length && s.valdkondMatches === 0) return false;
   if (q.tegevusala.length && s.tegevusalaMatches === 0 && s.sectorFallbackMatches === 0 && !s.crossSectorMatch) {
     return false;
@@ -561,13 +610,13 @@ export function resultCategoryRelevanceTier(c: Candidate, q: SearchQuery): numbe
   return categoryRelevanceTier(q, scoreCandidate(c, q));
 }
 
-export function compareRankedCandidatesForQuery(q: SearchQuery) {
+export function compareRankedCandidatesForQuery(q: SearchQuery, aliases?: AliasExpansion) {
   const categoryActive = q.valdkond.length > 0 || q.tegevusala.length > 0 || q.tapsustus.length > 0;
   if (!categoryActive) return compareRankedCandidates;
 
   return (a: RankedCandidate, b: RankedCandidate): number => {
-    const aScore = scoreCandidate(a.c, q);
-    const bScore = scoreCandidate(b.c, q);
+    const aScore = scoreCandidate(a.c, q, aliases);
+    const bScore = scoreCandidate(b.c, q, aliases);
     const byTier = categoryRelevanceTier(q, bScore) - categoryRelevanceTier(q, aScore);
     if (byTier !== 0) return byTier;
 

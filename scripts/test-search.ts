@@ -41,6 +41,15 @@ import {
   rankLawContent,
 } from "../src/lib/law-match";
 import { firstTopic, splitTopics } from "../src/lib/taxonomy-split";
+import aliasSeed from "../data/search/koda_search_alias_seed_v0_2.json";
+import {
+  aliasMatchesQuery,
+  expandSearchAliases,
+  normalizeAliasText,
+  suggestRelatedSearches,
+  type AliasExpansion,
+  type SearchAliasRecord,
+} from "../src/lib/search-aliases";
 
 let passed = 0;
 let failed = 0;
@@ -113,8 +122,145 @@ function cand(over: Partial<Candidate> = {}): Candidate {
 
 const EMPTY: SearchQuery = { q: "", valdkond: [], tegevusala: [], tapsustus: [], recipient: [], type: [] };
 const total = (c: Candidate, q: SearchQuery = EMPTY) => scoreCandidate(c, q).total;
+const SEARCH_ALIASES = aliasSeed as SearchAliasRecord[];
+const aliasExpansion = (q: string): AliasExpansion => expandSearchAliases(q, SEARCH_ALIASES);
 
 console.log("[test] search-core checks:");
+
+// ---- Search aliases (v0.2) ----
+check("alias normalization is case- and accent-insensitive", () => {
+  assert.equal(normalizeAliasText("K\u00c4IBEMAKS"), "kaibemaks");
+  assert.equal(normalizeAliasText("k\u00e4ibemaks"), "kaibemaks");
+  assert.equal(normalizeAliasText("kaibemaks"), "kaibemaks");
+});
+
+check("alias phrase matching uses full-token windows only", () => {
+  assert.equal(aliasMatchesQuery("EEN", "EEN partnerotsing"), true);
+  assert.equal(aliasMatchesQuery("EEN", "roheenergia"), false);
+  assert.equal(aliasMatchesQuery("paindliku t\u00f6\u00f6aja kokkulepe", "paindliku t\u00f6\u00f6aja"), true);
+  assert.equal(aliasMatchesQuery("it", "audit"), false);
+});
+
+check("alias expansion covers exact policy, law and topic searches", () => {
+  const rows = [
+    ["kasumimaks", "topic"],
+    ["2% kasumimaks", "topic"],
+    ["CSRD", "topic"],
+    ["paindlik t\u00f6\u00f6aeg", "any"],
+    ["puhkeaeg", "topic"],
+    ["lihthanke piirm\u00e4\u00e4r", "any"],
+    ["krediiditeaberegister", "topic"],
+    ["varjend", "topic"],
+    ["nakkushaiguste seadus", "law"],
+    ["taganemisnupp", "topic"],
+  ] as const;
+  for (const [query, expected] of rows) {
+    const e = aliasExpansion(query);
+    const ok =
+      expected === "topic" ? e.topicBoosts.length > 0 :
+      expected === "law" ? e.lawBoostTerms.length > 0 :
+      e.matchedAliases.length > 0;
+    assert.equal(ok, true, query);
+  }
+});
+
+check("alias expansion covers vague business-problem searches", () => {
+  const rows = [
+    ["t\u00f6\u00f6j\u00f5udu ei leia", "any"],
+    ["liiga palju b\u00fcrokraatiat", "any"],
+    ["elektriarve suur", "topic"],
+    ["mul on e-pood", "topic"],
+    ["tahan eksportida", "topic"],
+    ["ei saa luba k\u00e4tte", "review"],
+    ["pakendiaruandlus", "topic"],
+  ] as const;
+  for (const [query, expected] of rows) {
+    const e = aliasExpansion(query);
+    const ok =
+      expected === "topic" ? e.topicBoosts.length > 0 :
+      expected === "review" ? e.reviewAliases.length > 0 :
+      e.matchedAliases.length > 0;
+    assert.equal(ok, true, query);
+  }
+});
+
+check("alias expansion covers service searches without creating routes", () => {
+  for (const query of [
+    "jurist",
+    "juriidiline n\u00f5ustamine",
+    "arbitraa\u017e",
+    "vahekohus",
+    "p\u00e4ritolusertifikaat",
+    "ATA m\u00e4rkmik",
+    "EEN",
+    "partnerotsing",
+    "koolitus",
+  ]) {
+    assert.ok(aliasExpansion(query).matchedAliases.length > 0, query);
+  }
+});
+
+check("alias expansion covers sector searches", () => {
+  for (const query of [
+    "tootmisettev\u00f5te",
+    "e-pood",
+    "ehitaja",
+    "logistikaettev\u00f5te",
+    "hotell",
+    "IT ettev\u00f5te",
+    "iduettev\u00f5te",
+    "raamatupidaja",
+    "advokaat",
+  ]) {
+    assert.ok(aliasExpansion(query).sectorBoosts.length > 0, query);
+  }
+});
+
+check("review-only aliases do not create hard boost signals", () => {
+  for (const query of ["km", "keskkond", "digi", "luba"]) {
+    const e = aliasExpansion(query);
+    assert.ok(e.reviewAliases.length > 0, query);
+    assert.equal(e.topicBoosts.length, 0, query);
+    assert.equal(e.sectorBoosts.length, 0, query);
+    assert.equal(e.lawBoostTerms.length, 0, query);
+    assert.equal(e.textBoostTerms.length, 0, query);
+  }
+});
+
+check("internal legislative-quality aliases remain background text boosts only", () => {
+  const e = aliasExpansion("\u00f5igusloome");
+  assert.equal(e.topicBoosts.some((s) => s.value === "oigusloome_kvaliteet_kaasamine"), false);
+  assert.ok(e.textBoostTerms.length > 0);
+});
+
+check("alias-derived topic score can retrieve a non-literal candidate", () => {
+  const q: SearchQuery = { ...EMPTY, q: "kasumimaks" };
+  const expansion = aliasExpansion(q.q);
+  const hit = cand({
+    id: "topic-hit",
+    title: "Julgeolekumaksu ettepanek",
+    valdkonnad: [{ slug: "maksud_tasud", name: "Maksud ja tasud" }],
+  });
+  const miss = cand({ id: "miss", title: "Energia hind" });
+  const hs = scoreCandidate(hit, q, expansion);
+  const ms = scoreCandidate(miss, q, expansion);
+  assert.ok(hs.alias > 0);
+  assert.equal(passesActiveFilters(q, hs, hit), true);
+  assert.equal(passesActiveFilters(q, ms, miss), false);
+  assert.ok(hs.total > ms.total);
+});
+
+check("related search suggestions come from public non-review aliases", () => {
+  const e = aliasExpansion("kasumimaks");
+  const suggestions = suggestRelatedSearches("kasumimaks", SEARCH_ALIASES, e, 6);
+  assert.ok(suggestions.length > 0);
+  assert.ok(suggestions.every((s) => s.q !== "kasumimaks"));
+  assert.ok(suggestions.every((s) => s.targetKind !== "unknown_review"));
+
+  const broad = suggestRelatedSearches("luba", SEARCH_ALIASES, aliasExpansion("luba"), 6);
+  assert.ok(broad.some((s) => s.q.includes("luba")));
+  assert.ok(broad.every((s) => s.targetKind !== "unknown_review"));
+});
 
 // ---- Eligibility (Task 2) ----
 check("eligible public web row passes", () => assert.equal(isPublicSearchEligible(elig()), true));

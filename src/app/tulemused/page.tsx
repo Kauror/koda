@@ -138,6 +138,11 @@ export default async function ResultsPage({
   if (query.type.length) editParams.set("type", query.type.join(","));
   const editQuery = editParams.toString();
   const fromQuery = editQuery;
+  const relatedSearchHref = (term: string) => {
+    const p = new URLSearchParams(editParams);
+    p.set("q", term);
+    return `/tulemused?${p.toString()}`;
+  };
   const onlyContext =
     hasResults &&
     results.achievements.length === 0 &&
@@ -161,6 +166,16 @@ export default async function ResultsPage({
                 <span key={name} className="tag">
                   {name}
                 </span>
+              ))}
+            </div>
+          )}
+          {query.q && results.relatedSearches.length > 0 && (
+            <div className="keyword-suggestions" aria-label="Sarnased otsingud">
+              <span>Proovi ka:</span>
+              {results.relatedSearches.map((suggestion) => (
+                <Link key={`${suggestion.targetKind}:${suggestion.targetSlug}:${suggestion.q}`} href={relatedSearchHref(suggestion.q)} className="theme-link">
+                  {suggestion.label}
+                </Link>
               ))}
             </div>
           )}
