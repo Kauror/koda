@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { EvidenceLinkType } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getPublicDetailSummary, publicTitle } from "@/lib/content-display";
 import { PUBLIC_TOPIC_FILTERS } from "@/lib/topics";
@@ -35,17 +36,29 @@ const FILTER_TAG_OPTIONS = [
   ...PUBLIC_ACTIVITY_FILTERS,
 ];
 
+const RELATED_LINK_TYPE_OPTIONS = [
+  { value: EvidenceLinkType.related_news, label: "Selgitav uudis" },
+  { value: EvidenceLinkType.related_opinion, label: "Koja seisukoht" },
+  { value: EvidenceLinkType.public_explanation, label: "Avalik selgitus" },
+  { value: EvidenceLinkType.same_policy_thread, label: "Sama teema" },
+  { value: EvidenceLinkType.source_evidence, label: "Seotud allikas" },
+] as const;
+
+function evidenceLinkLabel(type: EvidenceLinkType): string {
+  return RELATED_LINK_TYPE_OPTIONS.find((option) => option.value === type)?.label ?? type;
+}
+
 export default async function AdminContentEdit({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ saved?: string; published?: string; cleared?: string }>;
+  searchParams: Promise<{ saved?: string; published?: string; cleared?: string; linked?: string; unlinked?: string; linkError?: string }>;
 }) {
   const { id } = await params;
   const status = await searchParams;
 
-  const [item, allGroups, similarItems] = await Promise.all([
+  const [item, allGroups, similarItems, relatedLinks] = await Promise.all([
     prisma.contentItem.findUnique({
       where: { id },
       include: {
@@ -60,6 +73,14 @@ export default async function AdminContentEdit({
       orderBy: [{ date: { sort: "desc", nulls: "last" } }],
       select: { id: true, title: true, displayTitle: true },
       take: 500,
+    }),
+    prisma.contentEvidenceLink.findMany({
+      where: { OR: [{ fromContentId: id }, { toContentId: id }] },
+      include: {
+        from: { select: { id: true, externalId: true, title: true, displayTitle: true, sourceDataset: true, sourceTypeDetail: true } },
+        to: { select: { id: true, externalId: true, title: true, displayTitle: true, sourceDataset: true, sourceTypeDetail: true } },
+      },
+      orderBy: [{ sortPriority: "desc" }, { createdAt: "desc" }],
     }),
   ]);
 
@@ -126,6 +147,14 @@ export default async function AdminContentEdit({
           {status.saved && <p style={{ margin: 0 }}>Mustand salvestatud. Avalik vaade muutub pärast avaldamist.</p>}
           {status.published && <p style={{ margin: 0 }}>Muudatused avaldatud.</p>}
           {status.cleared && <p style={{ margin: 0 }}>Avaldatud override'id eemaldatud.</p>}
+        </div>
+      )}
+
+      {(status.linked || status.unlinked || status.linkError) && (
+        <div className="card notice">
+          {status.linked && <p style={{ margin: 0 }}>Seotud allikas lisatud.</p>}
+          {status.unlinked && <p style={{ margin: 0 }}>Seotud allikas eemaldatud.</p>}
+          {status.linkError && <p style={{ margin: 0 }}>Seost ei saanud lisada: {status.linkError}</p>}
         </div>
       )}
 
@@ -475,6 +504,89 @@ export default async function AdminContentEdit({
             </button>
           </form>
         )}
+      </div>
+
+      <div className="card">
+        <h2 style={{ marginTop: 0, fontSize: "1.1rem" }}>Seotud allikad</h2>
+        <p className="muted small">
+          Seo uudis, arvamus või muu sisu sama teemaga. Avalikus otsingus saab seotud uudis/arvamus ilmuda ühe kaardina,
+          kus uuem kirje on peal ja teine on pesastatud all.
+        </p>
+        {relatedLinks.length === 0 && <p className="muted small">Seotud allikaid ei ole veel lisatud.</p>}
+        {relatedLinks.length > 0 && (
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Seotud sisu</th>
+                <th>Tüüp</th>
+                <th>Suund</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {relatedLinks.map((link) => {
+                const other = link.fromContentId === item.id ? link.to : link.from;
+                const direction = link.fromContentId === item.id ? "sellest sisust" : "sellele sisule";
+                return (
+                  <tr key={link.id}>
+                    <td>
+                      <Link href={`/admin/content/${other.id}`}>
+                        {other.externalId ? `${other.externalId} · ` : ""}
+                        {other.displayTitle || other.title}
+                      </Link>
+                      <div className="muted small">{other.sourceDataset || other.sourceTypeDetail || "sisu"}</div>
+                    </td>
+                    <td>{evidenceLinkLabel(link.linkType)}</td>
+                    <td>{direction}</td>
+                    <td>
+                      <form method="post" action={`/api/admin/content/${item.id}`} className="inline-form">
+                        <input type="hidden" name="_action" value="remove-related-link" />
+                        <input type="hidden" name="relatedLinkId" value={link.id} />
+                        <button type="submit" className="btn btn-secondary btn-small">
+                          Eemalda
+                        </button>
+                      </form>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+        <form
+          method="post"
+          action={`/api/admin/content/${item.id}`}
+          style={{ display: "grid", gap: 10, gridTemplateColumns: "minmax(220px, 1fr) 190px 90px auto", alignItems: "end" }}
+        >
+          <input type="hidden" name="_action" value="add-related-link" />
+          <div>
+            <label className="field-label" htmlFor="targetContent">
+              Seotava sisu ID või URL
+            </label>
+            <input id="targetContent" name="targetContent" placeholder="WEB-01205 või /sisu/WEB-01205" required />
+          </div>
+          <div>
+            <label className="field-label" htmlFor="linkType">
+              Seose tüüp
+            </label>
+            <select id="linkType" name="linkType" defaultValue={EvidenceLinkType.related_news}>
+              {RELATED_LINK_TYPE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="field-label" htmlFor="sortPriority">
+              Järjekord
+            </label>
+            <input id="sortPriority" name="sortPriority" type="number" defaultValue="50" />
+          </div>
+          <button type="submit" className="btn btn-secondary btn-small">
+            Lisa seos
+          </button>
+        </form>
       </div>
 
       <div className="card">

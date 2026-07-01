@@ -636,7 +636,7 @@ async function buildCombinedOpinionNewsUnits(ranked: RankedCandidate[], query: S
     const a = byId.get(link.fromContentId)?.c;
     const b = byId.get(link.toContentId)?.c;
     if (!a || !b) continue;
-    if (assignKind(a) === assignKind(b)) continue;
+    if (assignKind(a) === assignKind(b) && link.relationRole !== "manual_admin") continue;
     union(a.id, b.id);
     const key = pairKey(a.id, b.id);
     const current = linkByPair.get(key);
@@ -678,10 +678,21 @@ async function buildCombinedOpinionNewsUnits(ranked: RankedCandidate[], query: S
 
   const chooseMain = (group: RankedCandidate[]): RankedCandidate => {
     const maxTier = Math.max(...group.map((s) => resultCategoryRelevanceTier(s.c, query)));
+    const hasManualAdminLink = group.some((a, index) =>
+      group
+        .slice(index + 1)
+        .some((b) => linkByPair.get(pairKey(a.c.id, b.c.id))?.relationRole === "manual_admin")
+    );
     return [...group].sort((a, b) => {
       const aTier = resultCategoryRelevanceTier(a.c, query);
       const bTier = resultCategoryRelevanceTier(b.c, query);
       if (bTier !== aTier) return bTier - aTier;
+      if (hasManualAdminLink) {
+        const byDate = verifiedDateMs(b.c) - verifiedDateMs(a.c);
+        if (byDate !== 0) return byDate;
+        if (b.total !== a.total) return b.total - a.total;
+        return (a.c.externalId ?? a.c.id).localeCompare(b.c.externalId ?? b.c.id);
+      }
       const aExplainer = hasExplainerOpinionLink(a.c, group) ? 28 : 0;
       const bExplainer = hasExplainerOpinionLink(b.c, group) ? 28 : 0;
       const aAuthority = isFormalOpinion(a.c) || a.c.sourceDataset === "opinions" ? 14 : 0;
@@ -700,7 +711,12 @@ async function buildCombinedOpinionNewsUnits(ranked: RankedCandidate[], query: S
   const units: OpinionNewsUnit[] = [];
   for (const group of components.values()) {
     const kinds = new Set(group.map((s) => assignKind(s.c)));
-    if (group.length < 2 || !kinds.has("arvamus") || !kinds.has("uudis")) {
+    const hasManualAdminLink = group.some((a, index) =>
+      group
+        .slice(index + 1)
+        .some((b) => linkByPair.get(pairKey(a.c.id, b.c.id))?.relationRole === "manual_admin")
+    );
+    if (group.length < 2 || (!hasManualAdminLink && (!kinds.has("arvamus") || !kinds.has("uudis")))) {
       for (const single of group) units.push({ main: single, related: [] });
       continue;
     }

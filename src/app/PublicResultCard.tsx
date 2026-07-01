@@ -135,7 +135,7 @@ export default function PublicResultCard({
       }`}
     >
       <Badges card={card} />
-      {admin && (
+      {admin && !card.isThread && (
         <Link href={`/admin/content/${card.id}`} className="admin-edit-link" title="Muuda halduses">
           Muuda
         </Link>

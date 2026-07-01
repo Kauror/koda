@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { EvidenceLinkType } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { redirectBack, redirectTo, requireAdmin, str } from "@/lib/adminRoute";
 import {
@@ -10,6 +11,68 @@ import {
 import { isValidRole } from "@/lib/content-threads";
 
 export const dynamic = "force-dynamic";
+
+const MANUAL_RELATED_LINK_TYPES = new Set<EvidenceLinkType>([
+  EvidenceLinkType.related_news,
+  EvidenceLinkType.related_opinion,
+  EvidenceLinkType.public_explanation,
+  EvidenceLinkType.same_policy_thread,
+  EvidenceLinkType.source_evidence,
+]);
+
+function linkLabelEt(type: EvidenceLinkType): string {
+  switch (type) {
+    case EvidenceLinkType.related_opinion:
+      return "Koja seisukoht";
+    case EvidenceLinkType.related_news:
+    case EvidenceLinkType.public_explanation:
+      return "Selgitav uudis";
+    case EvidenceLinkType.same_policy_thread:
+      return "Sama teema";
+    case EvidenceLinkType.source_evidence:
+      return "Seotud allikas";
+    default:
+      return "Seotud allikas";
+  }
+}
+
+function parseSortPriority(value: string | null): number {
+  if (!value) return 50;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : 50;
+}
+
+function contentReferenceCandidates(raw: string): string[] {
+  const values = new Set<string>([raw.trim()]);
+  try {
+    const url = new URL(raw);
+    const parts = url.pathname.split("/").filter(Boolean);
+    const last = parts[parts.length - 1];
+    if (last) values.add(decodeURIComponent(last));
+    values.add(url.href);
+  } catch {
+    if (raw.startsWith("/")) {
+      const parts = raw.split("?")[0].split("/").filter(Boolean);
+      const last = parts[parts.length - 1];
+      if (last) values.add(decodeURIComponent(last));
+    }
+  }
+  return [...values].filter(Boolean);
+}
+
+async function resolveContentReference(raw: string) {
+  const candidates = contentReferenceCandidates(raw);
+  return prisma.contentItem.findFirst({
+    where: {
+      OR: [
+        { id: { in: candidates } },
+        { externalId: { in: candidates } },
+        { canonicalUrl: { in: candidates } },
+        { sourceUrl: { in: candidates } },
+      ],
+    },
+  });
+}
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const denied = await requireAdmin(req);
@@ -123,6 +186,84 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         where: { threadId, contentExternalId: item.externalId },
       });
     }
+  } else if (action === "add-related-link") {
+    const targetContent = str(form, "targetContent");
+    const rawLinkType = str(form, "linkType") as EvidenceLinkType | null;
+    const linkType = rawLinkType && MANUAL_RELATED_LINK_TYPES.has(rawLinkType) ? rawLinkType : EvidenceLinkType.related_news;
+    if (!targetContent) {
+      return redirectTo(req, `/admin/content/${id}?linkError=${encodeURIComponent("target missing")}`);
+    }
+    const target = await resolveContentReference(targetContent);
+    if (!target) {
+      return redirectTo(req, `/admin/content/${id}?linkError=${encodeURIComponent("content not found")}`);
+    }
+    if (target.id === id) {
+      return redirectTo(req, `/admin/content/${id}?linkError=${encodeURIComponent("cannot link item to itself")}`);
+    }
+    const sortPriority = parseSortPriority(str(form, "sortPriority"));
+    const linkData = {
+      relationRole: "manual_admin",
+      relationLabelEt: linkLabelEt(linkType),
+      linkConfidence: "high",
+      linkBasis: `Manual admin relation: ${item.externalId ?? item.id} -> ${target.externalId ?? target.id}`,
+      canonicalPolicyThreadId: item.topicGroupCandidate || target.topicGroupCandidate || item.policyThreadKey || target.policyThreadKey || null,
+      sortPriority,
+    };
+    const existingLink = await prisma.contentEvidenceLink.findFirst({
+      where: {
+        linkType,
+        OR: [
+          { fromContentId: id, toContentId: target.id },
+          { fromContentId: target.id, toContentId: id },
+        ],
+      },
+    });
+    await prisma.$transaction([
+      existingLink
+        ? prisma.contentEvidenceLink.update({ where: { id: existingLink.id }, data: linkData })
+        : prisma.contentEvidenceLink.create({
+            data: {
+              fromContentId: id,
+              toContentId: target.id,
+              linkType,
+              ...linkData,
+            },
+          }),
+      prisma.adminAuditLog.create({
+        data: {
+          action: "content_related_link_add",
+          contentExternalId: item.externalId ?? item.id,
+          contentItemId: id,
+          actor: adminActor(),
+          newValues: { targetContentId: target.id, targetExternalId: target.externalId, linkType, sortPriority },
+        },
+      }),
+    ]);
+    return redirectTo(req, `/admin/content/${id}?linked=1`);
+  } else if (action === "remove-related-link") {
+    const relatedLinkId = str(form, "relatedLinkId");
+    if (relatedLinkId) {
+      const link = await prisma.contentEvidenceLink.findUnique({ where: { id: relatedLinkId } });
+      if (link && (link.fromContentId === id || link.toContentId === id)) {
+        await prisma.$transaction([
+          prisma.contentEvidenceLink.delete({ where: { id: relatedLinkId } }),
+          prisma.adminAuditLog.create({
+            data: {
+              action: "content_related_link_remove",
+              contentExternalId: item.externalId ?? item.id,
+              contentItemId: id,
+              actor: adminActor(),
+              oldValues: {
+                fromContentId: link.fromContentId,
+                toContentId: link.toContentId,
+                linkType: link.linkType,
+              },
+            },
+          }),
+        ]);
+      }
+    }
+    return redirectTo(req, `/admin/content/${id}?unlinked=1`);
   } else if (action === "merge") {
     const duplicateId = str(form, "duplicateId");
     if (duplicateId && duplicateId !== id) {
