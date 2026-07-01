@@ -81,6 +81,7 @@ async function main() {
   const { rows, skippedDuplicates } = loadSeed();
   const { prisma, close } = await makePrismaClient();
   const counts = new Map<string, number>();
+  let pruned = 0;
 
   try {
     for (const row of rows) {
@@ -120,12 +121,19 @@ async function main() {
         },
       });
     }
+
+    // Prune: the seed file is authoritative, so remove any SearchAlias rows that
+    // are no longer present in it (upsert alone would leave deleted aliases —
+    // e.g. retired artificial prompt phrases — lingering in the DB).
+    const seedIds = rows.map((r) => r.id);
+    const result = await prisma.searchAlias.deleteMany({ where: { id: { notIn: seedIds } } });
+    pruned = result.count;
   } finally {
     await close();
   }
 
   const summary = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([kind, count]) => `${kind}=${count}`).join(", ");
-  console.log(`[search-aliases] upserted=${rows.length} skippedNormalizedDuplicates=${skippedDuplicates} ${summary}`);
+  console.log(`[search-aliases] upserted=${rows.length} pruned=${pruned} skippedNormalizedDuplicates=${skippedDuplicates} ${summary}`);
 }
 
 main().catch((error) => {

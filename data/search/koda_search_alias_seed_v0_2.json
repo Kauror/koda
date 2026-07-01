@@ -14415,42 +14415,6 @@
     "expandedTerms": []
   },
   {
-    "id": "SA-0695",
-    "alias": "tööjõudu ei leia",
-    "canonicalLabel": "Tööjõud ja tööõigus",
-    "type": "intent",
-    "targetSlug": "toojoud_toooigus",
-    "targetKind": "valdkond",
-    "weight": 4,
-    "language": "et",
-    "sourceBasis": [
-      "manual_v0_2",
-      "koda_news_txt_2026"
-    ],
-    "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
-    "isPublic": true,
-    "intent": "",
-    "expandedTerms": []
-  },
-  {
-    "id": "SA-0696",
-    "alias": "ei leia töötajaid",
-    "canonicalLabel": "Tööjõud ja tööõigus",
-    "type": "intent",
-    "targetSlug": "toojoud_toooigus",
-    "targetKind": "valdkond",
-    "weight": 4,
-    "language": "et",
-    "sourceBasis": [
-      "manual_v0_2",
-      "koda_news_txt_2026"
-    ],
-    "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
-    "isPublic": true,
-    "intent": "",
-    "expandedTerms": []
-  },
-  {
     "id": "SA-0697",
     "alias": "inimesi pole",
     "canonicalLabel": "Tööjõud ja tööõigus",
@@ -14505,44 +14469,8 @@
     "expandedTerms": []
   },
   {
-    "id": "SA-0700",
-    "alias": "oskustöölisi ei leia",
-    "canonicalLabel": "Tööjõud ja tööõigus",
-    "type": "intent",
-    "targetSlug": "toojoud_toooigus",
-    "targetKind": "valdkond",
-    "weight": 4,
-    "language": "et",
-    "sourceBasis": [
-      "manual_v0_2",
-      "koda_news_txt_2026"
-    ],
-    "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
-    "isPublic": true,
-    "intent": "",
-    "expandedTerms": []
-  },
-  {
     "id": "SA-0701",
     "alias": "puuduvad oskustöötajad",
-    "canonicalLabel": "Tööjõud ja tööõigus",
-    "type": "intent",
-    "targetSlug": "toojoud_toooigus",
-    "targetKind": "valdkond",
-    "weight": 4,
-    "language": "et",
-    "sourceBasis": [
-      "manual_v0_2",
-      "koda_news_txt_2026"
-    ],
-    "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
-    "isPublic": true,
-    "intent": "",
-    "expandedTerms": []
-  },
-  {
-    "id": "SA-0702",
-    "alias": "mul on tööjõupuudus",
     "canonicalLabel": "Tööjõud ja tööõigus",
     "type": "intent",
     "targetSlug": "toojoud_toooigus",
@@ -14588,60 +14516,6 @@
     "sourceBasis": [
       "manual_v0_2",
       "koda_news_txt_2026"
-    ],
-    "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
-    "isPublic": true,
-    "intent": "",
-    "expandedTerms": []
-  },
-  {
-    "id": "SA-0705",
-    "alias": "tahan välistöötajat palgata",
-    "canonicalLabel": "Välistööjõud ja ränne",
-    "type": "intent",
-    "targetSlug": "valistoojoud_ranne",
-    "targetKind": "valdkond",
-    "weight": 4,
-    "language": "et",
-    "sourceBasis": [
-      "koda_news_txt_2026",
-      "opinions_2026"
-    ],
-    "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
-    "isPublic": true,
-    "intent": "",
-    "expandedTerms": []
-  },
-  {
-    "id": "SA-0706",
-    "alias": "kuidas palgata välismaalast",
-    "canonicalLabel": "Välistööjõud ja ränne",
-    "type": "intent",
-    "targetSlug": "valistoojoud_ranne",
-    "targetKind": "valdkond",
-    "weight": 4,
-    "language": "et",
-    "sourceBasis": [
-      "koda_news_txt_2026",
-      "opinions_2026"
-    ],
-    "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
-    "isPublic": true,
-    "intent": "",
-    "expandedTerms": []
-  },
-  {
-    "id": "SA-0707",
-    "alias": "vajan välisspetsialisti",
-    "canonicalLabel": "Välistööjõud ja ränne",
-    "type": "intent",
-    "targetSlug": "valistoojoud_ranne",
-    "targetKind": "valdkond",
-    "weight": 4,
-    "language": "et",
-    "sourceBasis": [
-      "koda_news_txt_2026",
-      "opinions_2026"
     ],
     "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
     "isPublic": true,
@@ -14777,42 +14651,6 @@
     "expandedTerms": []
   },
   {
-    "id": "SA-0715",
-    "alias": "liiga palju bürokraatiat",
-    "canonicalLabel": "Bürokraatia ja halduskoormus",
-    "type": "intent",
-    "targetSlug": "burokraatia_halduskoormus",
-    "targetKind": "valdkond",
-    "weight": 4,
-    "language": "et",
-    "sourceBasis": [
-      "annual_2025",
-      "koda_ee_2026_burokraatia"
-    ],
-    "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
-    "isPublic": true,
-    "intent": "",
-    "expandedTerms": []
-  },
-  {
-    "id": "SA-0716",
-    "alias": "liiga palju aruandlust",
-    "canonicalLabel": "Bürokraatia ja halduskoormus",
-    "type": "intent",
-    "targetSlug": "burokraatia_halduskoormus",
-    "targetKind": "valdkond",
-    "weight": 4,
-    "language": "et",
-    "sourceBasis": [
-      "annual_2025",
-      "koda_ee_2026_burokraatia"
-    ],
-    "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
-    "isPublic": true,
-    "intent": "",
-    "expandedTerms": []
-  },
-  {
     "id": "SA-0717",
     "alias": "riik koormab ettevõtjat",
     "canonicalLabel": "Bürokraatia ja halduskoormus",
@@ -14885,62 +14723,8 @@
     "expandedTerms": []
   },
   {
-    "id": "SA-0721",
-    "alias": "nõudeid on liiga palju",
-    "canonicalLabel": "Bürokraatia ja halduskoormus",
-    "type": "intent",
-    "targetSlug": "burokraatia_halduskoormus",
-    "targetKind": "valdkond",
-    "weight": 4,
-    "language": "et",
-    "sourceBasis": [
-      "annual_2025",
-      "koda_ee_2026_burokraatia"
-    ],
-    "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
-    "isPublic": true,
-    "intent": "",
-    "expandedTerms": []
-  },
-  {
     "id": "SA-0722",
     "alias": "üle reguleeritud",
-    "canonicalLabel": "Bürokraatia ja halduskoormus",
-    "type": "intent",
-    "targetSlug": "burokraatia_halduskoormus",
-    "targetKind": "valdkond",
-    "weight": 4,
-    "language": "et",
-    "sourceBasis": [
-      "annual_2025",
-      "koda_ee_2026_burokraatia"
-    ],
-    "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
-    "isPublic": true,
-    "intent": "",
-    "expandedTerms": []
-  },
-  {
-    "id": "SA-0723",
-    "alias": "tahan vähem aruandlust",
-    "canonicalLabel": "Bürokraatia ja halduskoormus",
-    "type": "intent",
-    "targetSlug": "burokraatia_halduskoormus",
-    "targetKind": "valdkond",
-    "weight": 4,
-    "language": "et",
-    "sourceBasis": [
-      "annual_2025",
-      "koda_ee_2026_burokraatia"
-    ],
-    "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
-    "isPublic": true,
-    "intent": "",
-    "expandedTerms": []
-  },
-  {
-    "id": "SA-0724",
-    "alias": "ametnikud nõuavad liiga palju",
     "canonicalLabel": "Bürokraatia ja halduskoormus",
     "type": "intent",
     "targetSlug": "burokraatia_halduskoormus",
@@ -15013,24 +14797,6 @@
   {
     "id": "SA-0728",
     "alias": "maksukeskkond on ebastabiilne",
-    "canonicalLabel": "Maksud ja tasud",
-    "type": "intent",
-    "targetSlug": "maksud_tasud",
-    "targetKind": "valdkond",
-    "weight": 4,
-    "language": "et",
-    "sourceBasis": [
-      "annual_2025",
-      "koda_ee_2026_maksud"
-    ],
-    "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
-    "isPublic": true,
-    "intent": "",
-    "expandedTerms": []
-  },
-  {
-    "id": "SA-0729",
-    "alias": "maksan liiga palju makse",
     "canonicalLabel": "Maksud ja tasud",
     "type": "intent",
     "targetSlug": "maksud_tasud",
@@ -15155,24 +14921,6 @@
     "expandedTerms": []
   },
   {
-    "id": "SA-0736",
-    "alias": "elektriarve suur",
-    "canonicalLabel": "Energia, elektrihind ja varustuskindlus",
-    "type": "intent",
-    "targetSlug": "energia_elektrihind_varustuskindlus",
-    "targetKind": "valdkond",
-    "weight": 4,
-    "language": "et",
-    "sourceBasis": [
-      "annual_2025",
-      "koda_ee_2026_taastuvenergia"
-    ],
-    "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
-    "isPublic": true,
-    "intent": "",
-    "expandedTerms": []
-  },
-  {
     "id": "SA-0737",
     "alias": "energia on kallis",
     "canonicalLabel": "Energia, elektrihind ja varustuskindlus",
@@ -15193,24 +14941,6 @@
   {
     "id": "SA-0738",
     "alias": "elektrikulu kasvab",
-    "canonicalLabel": "Energia, elektrihind ja varustuskindlus",
-    "type": "intent",
-    "targetSlug": "energia_elektrihind_varustuskindlus",
-    "targetKind": "valdkond",
-    "weight": 4,
-    "language": "et",
-    "sourceBasis": [
-      "annual_2025",
-      "koda_ee_2026_taastuvenergia"
-    ],
-    "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
-    "isPublic": true,
-    "intent": "",
-    "expandedTerms": []
-  },
-  {
-    "id": "SA-0739",
-    "alias": "maksan liiga palju taastuvenergia tasu",
     "canonicalLabel": "Energia, elektrihind ja varustuskindlus",
     "type": "intent",
     "targetSlug": "energia_elektrihind_varustuskindlus",
@@ -15265,42 +14995,6 @@
   {
     "id": "SA-0742",
     "alias": "tasakaalustamisvõimsuse tasu",
-    "canonicalLabel": "Energia, elektrihind ja varustuskindlus",
-    "type": "intent",
-    "targetSlug": "energia_elektrihind_varustuskindlus",
-    "targetKind": "valdkond",
-    "weight": 4,
-    "language": "et",
-    "sourceBasis": [
-      "annual_2025",
-      "koda_ee_2026_taastuvenergia"
-    ],
-    "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
-    "isPublic": true,
-    "intent": "",
-    "expandedTerms": []
-  },
-  {
-    "id": "SA-0743",
-    "alias": "elektri lõpphind on liiga kõrge",
-    "canonicalLabel": "Energia, elektrihind ja varustuskindlus",
-    "type": "intent",
-    "targetSlug": "energia_elektrihind_varustuskindlus",
-    "targetKind": "valdkond",
-    "weight": 4,
-    "language": "et",
-    "sourceBasis": [
-      "annual_2025",
-      "koda_ee_2026_taastuvenergia"
-    ],
-    "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
-    "isPublic": true,
-    "intent": "",
-    "expandedTerms": []
-  },
-  {
-    "id": "SA-0744",
-    "alias": "vajan soodsamat elektrit",
     "canonicalLabel": "Energia, elektrihind ja varustuskindlus",
     "type": "intent",
     "targetSlug": "energia_elektrihind_varustuskindlus",
@@ -15407,24 +15101,6 @@
     "expandedTerms": []
   },
   {
-    "id": "SA-0750",
-    "alias": "tahan kiiremini ehitada",
-    "canonicalLabel": "Planeeringud, load, ehitus ja kinnisvara",
-    "type": "intent",
-    "targetSlug": "planeeringud_load_ehitus_kinnisvara",
-    "targetKind": "valdkond",
-    "weight": 4,
-    "language": "et",
-    "sourceBasis": [
-      "annual_2025",
-      "koda_ee_2026_planeeringud"
-    ],
-    "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
-    "isPublic": true,
-    "intent": "",
-    "expandedTerms": []
-  },
-  {
     "id": "SA-0751",
     "alias": "kasutusluba venib",
     "canonicalLabel": "Planeeringud, load, ehitus ja kinnisvara",
@@ -15490,24 +15166,6 @@
     "sourceBasis": [
       "annual_2025",
       "koda_ee_2026_planeeringud"
-    ],
-    "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
-    "isPublic": true,
-    "intent": "",
-    "expandedTerms": []
-  },
-  {
-    "id": "SA-0755",
-    "alias": "mul on e-pood",
-    "canonicalLabel": "E-kaubandus ja tarbijakaitse",
-    "type": "intent",
-    "targetSlug": "ekaubandus_tarbijakaitse",
-    "targetKind": "valdkond",
-    "weight": 4,
-    "language": "et",
-    "sourceBasis": [
-      "prompt_v0_2",
-      "koda_ee_2026_taganemisnupp"
     ],
     "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
     "isPublic": true,
@@ -15641,24 +15299,6 @@
     "expandedTerms": []
   },
   {
-    "id": "SA-0763",
-    "alias": "tahan müüa internetis",
-    "canonicalLabel": "E-kaubandus ja tarbijakaitse",
-    "type": "intent",
-    "targetSlug": "ekaubandus_tarbijakaitse",
-    "targetKind": "valdkond",
-    "weight": 4,
-    "language": "et",
-    "sourceBasis": [
-      "prompt_v0_2",
-      "koda_ee_2026_taganemisnupp"
-    ],
-    "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
-    "isPublic": true,
-    "intent": "",
-    "expandedTerms": []
-  },
-  {
     "id": "SA-0764",
     "alias": "pakendiaruandlus",
     "canonicalLabel": "Pakend, jäätmed ja ringmajandus",
@@ -15715,24 +15355,6 @@
   {
     "id": "SA-0767",
     "alias": "pakendiaudit on kallis",
-    "canonicalLabel": "Pakend, jäätmed ja ringmajandus",
-    "type": "intent",
-    "targetSlug": "pakend_jaatmed_ringmajandus",
-    "targetKind": "valdkond",
-    "weight": 4,
-    "language": "et",
-    "sourceBasis": [
-      "annual_2025",
-      "koda_ee_2026_ppwr"
-    ],
-    "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
-    "isPublic": true,
-    "intent": "",
-    "expandedTerms": []
-  },
-  {
-    "id": "SA-0768",
-    "alias": "mul on pakendiprobleem",
     "canonicalLabel": "Pakend, jäätmed ja ringmajandus",
     "type": "intent",
     "targetSlug": "pakend_jaatmed_ringmajandus",
@@ -15823,24 +15445,6 @@
   {
     "id": "SA-0773",
     "alias": "audit on kallis",
-    "canonicalLabel": "Raamatupidamine, audit ja aruandlus",
-    "type": "intent",
-    "targetSlug": "raamatupidamine_audit_aruandlus",
-    "targetKind": "valdkond",
-    "weight": 4,
-    "language": "et",
-    "sourceBasis": [
-      "annual_2025",
-      "koda_ee_2026_audit"
-    ],
-    "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
-    "isPublic": true,
-    "intent": "",
-    "expandedTerms": []
-  },
-  {
-    "id": "SA-0774",
-    "alias": "audiitorit ei leia",
     "canonicalLabel": "Raamatupidamine, audit ja aruandlus",
     "type": "intent",
     "targetSlug": "raamatupidamine_audit_aruandlus",
@@ -15965,158 +15569,6 @@
     "expandedTerms": []
   },
   {
-    "id": "SA-0781",
-    "alias": "tahan eksportida",
-    "canonicalLabel": "Eksport, rahvusvahelistumine ja toll",
-    "type": "intent",
-    "targetSlug": "eksport_rahvusvahelistumine_toll",
-    "targetKind": "valdkond",
-    "weight": 4,
-    "language": "et",
-    "sourceBasis": [
-      "prompt_v0_2",
-      "services_2025",
-      "koda_news_txt_2026"
-    ],
-    "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
-    "isPublic": true,
-    "intent": "",
-    "expandedTerms": []
-  },
-  {
-    "id": "SA-0782",
-    "alias": "otsin välisturgu",
-    "canonicalLabel": "Eksport, rahvusvahelistumine ja toll",
-    "type": "intent",
-    "targetSlug": "eksport_rahvusvahelistumine_toll",
-    "targetKind": "valdkond",
-    "weight": 4,
-    "language": "et",
-    "sourceBasis": [
-      "prompt_v0_2",
-      "services_2025",
-      "koda_news_txt_2026"
-    ],
-    "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
-    "isPublic": true,
-    "intent": "",
-    "expandedTerms": []
-  },
-  {
-    "id": "SA-0783",
-    "alias": "vajan ekspordipartnerit",
-    "canonicalLabel": "Eksport, rahvusvahelistumine ja toll",
-    "type": "intent",
-    "targetSlug": "eksport_rahvusvahelistumine_toll",
-    "targetKind": "valdkond",
-    "weight": 4,
-    "language": "et",
-    "sourceBasis": [
-      "prompt_v0_2",
-      "services_2025",
-      "koda_news_txt_2026"
-    ],
-    "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
-    "isPublic": true,
-    "intent": "",
-    "expandedTerms": []
-  },
-  {
-    "id": "SA-0784",
-    "alias": "vajan päritolusertifikaati",
-    "canonicalLabel": "Eksport, rahvusvahelistumine ja toll",
-    "type": "intent",
-    "targetSlug": "eksport_rahvusvahelistumine_toll",
-    "targetKind": "valdkond",
-    "weight": 4,
-    "language": "et",
-    "sourceBasis": [
-      "prompt_v0_2",
-      "services_2025",
-      "koda_news_txt_2026"
-    ],
-    "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
-    "isPublic": true,
-    "intent": "",
-    "expandedTerms": []
-  },
-  {
-    "id": "SA-0785",
-    "alias": "vajan ATA märkmikku",
-    "canonicalLabel": "Eksport, rahvusvahelistumine ja toll",
-    "type": "intent",
-    "targetSlug": "eksport_rahvusvahelistumine_toll",
-    "targetKind": "valdkond",
-    "weight": 4,
-    "language": "et",
-    "sourceBasis": [
-      "prompt_v0_2",
-      "services_2025",
-      "koda_news_txt_2026"
-    ],
-    "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
-    "isPublic": true,
-    "intent": "",
-    "expandedTerms": []
-  },
-  {
-    "id": "SA-0786",
-    "alias": "tahan messile minna",
-    "canonicalLabel": "Eksport, rahvusvahelistumine ja toll",
-    "type": "intent",
-    "targetSlug": "eksport_rahvusvahelistumine_toll",
-    "targetKind": "valdkond",
-    "weight": 4,
-    "language": "et",
-    "sourceBasis": [
-      "prompt_v0_2",
-      "services_2025",
-      "koda_news_txt_2026"
-    ],
-    "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
-    "isPublic": true,
-    "intent": "",
-    "expandedTerms": []
-  },
-  {
-    "id": "SA-0787",
-    "alias": "otsin B2B kontakte",
-    "canonicalLabel": "Eksport, rahvusvahelistumine ja toll",
-    "type": "intent",
-    "targetSlug": "eksport_rahvusvahelistumine_toll",
-    "targetKind": "valdkond",
-    "weight": 4,
-    "language": "et",
-    "sourceBasis": [
-      "prompt_v0_2",
-      "services_2025",
-      "koda_news_txt_2026"
-    ],
-    "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
-    "isPublic": true,
-    "intent": "",
-    "expandedTerms": []
-  },
-  {
-    "id": "SA-0788",
-    "alias": "tahan ärivisiidile",
-    "canonicalLabel": "Eksport, rahvusvahelistumine ja toll",
-    "type": "intent",
-    "targetSlug": "eksport_rahvusvahelistumine_toll",
-    "targetKind": "valdkond",
-    "weight": 4,
-    "language": "et",
-    "sourceBasis": [
-      "prompt_v0_2",
-      "services_2025",
-      "koda_news_txt_2026"
-    ],
-    "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
-    "isPublic": true,
-    "intent": "",
-    "expandedTerms": []
-  },
-  {
     "id": "SA-0789",
     "alias": "tollid ja ekspordidokumendid",
     "canonicalLabel": "Eksport, rahvusvahelistumine ja toll",
@@ -16148,23 +15600,6 @@
       "prompt_v0_2",
       "services_2025",
       "koda_news_txt_2026"
-    ],
-    "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
-    "isPublic": true,
-    "intent": "",
-    "expandedTerms": []
-  },
-  {
-    "id": "SA-0791",
-    "alias": "tahan riigihankel osaleda",
-    "canonicalLabel": "Riigihanked ja avaliku sektoriga äri",
-    "type": "intent",
-    "targetSlug": "riigihanked_avaliku_sektori_ari",
-    "targetKind": "valdkond",
-    "weight": 4,
-    "language": "et",
-    "sourceBasis": [
-      "koda_ee_2026_riigihanked"
     ],
     "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
     "isPublic": true,
@@ -16225,23 +15660,6 @@
   {
     "id": "SA-0795",
     "alias": "hanketingimused on ebamõistlikud",
-    "canonicalLabel": "Riigihanked ja avaliku sektoriga äri",
-    "type": "intent",
-    "targetSlug": "riigihanked_avaliku_sektori_ari",
-    "targetKind": "valdkond",
-    "weight": 4,
-    "language": "et",
-    "sourceBasis": [
-      "koda_ee_2026_riigihanked"
-    ],
-    "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
-    "isPublic": true,
-    "intent": "",
-    "expandedTerms": []
-  },
-  {
-    "id": "SA-0796",
-    "alias": "hanked on liiga bürokraatlikud",
     "canonicalLabel": "Riigihanked ja avaliku sektoriga äri",
     "type": "intent",
     "targetSlug": "riigihanked_avaliku_sektori_ari",
@@ -16384,24 +15802,6 @@
   {
     "id": "SA-0804",
     "alias": "töötaja on reservis",
-    "canonicalLabel": "Riigikaitse, julgeolek ja kriisikindlus",
-    "type": "intent",
-    "targetSlug": "riigikaitse_julgeolek_kriisikindlus",
-    "targetKind": "valdkond",
-    "weight": 4,
-    "language": "et",
-    "sourceBasis": [
-      "koda_ee_2026_varjendid",
-      "koda_ee_2026_kriis"
-    ],
-    "notes": "Natural-language user problem phrase mapped to the most relevant Koda topic.",
-    "isPublic": true,
-    "intent": "",
-    "expandedTerms": []
-  },
-  {
-    "id": "SA-0805",
-    "alias": "tahan toetada Ukrainat",
     "canonicalLabel": "Riigikaitse, julgeolek ja kriisikindlus",
     "type": "intent",
     "targetSlug": "riigikaitse_julgeolek_kriisikindlus",

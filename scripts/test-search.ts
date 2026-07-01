@@ -168,15 +168,19 @@ check("alias expansion covers exact policy, law and topic searches", () => {
   }
 });
 
-check("alias expansion covers vague business-problem searches", () => {
+check("alias expansion covers atomic business concepts (not sentence prompts)", () => {
+  // After the artificial sentence prompts were removed, the useful ATOMIC
+  // concepts still expand \u2014 coverage is unchanged for real search terms.
   const rows = [
-    ["t\u00f6\u00f6j\u00f5udu ei leia", "any"],
-    ["liiga palju b\u00fcrokraatiat", "any"],
-    ["elektriarve suur", "topic"],
-    ["mul on e-pood", "topic"],
-    ["tahan eksportida", "topic"],
-    ["ei saa luba k\u00e4tte", "review"],
+    ["eksport", "topic"],
+    ["e-pood", "topic"],
+    ["t\u00f6\u00f6j\u00f5upuudus", "topic"],
+    ["b\u00fcrokraatia", "topic"],
+    ["elektrihind", "topic"],
     ["pakendiaruandlus", "topic"],
+    ["p\u00e4ritolusertifikaat", "any"],
+    ["jurist", "any"],
+    ["ei saa luba k\u00e4tte", "review"],
   ] as const;
   for (const [query, expected] of rows) {
     const e = aliasExpansion(query);
@@ -1249,6 +1253,55 @@ check("gate: no-op on empty query and on a confirmed law match", () => {
   );
   // confirmed law match is a direct signal even without a literal text hit
   assert.equal(gatePass(anyWin, "varjumiskoht", { lawMatch: true }), true);
+});
+
+// ---- Removed artificial problem/desire prompt phrases ----
+
+const REMOVED_PROMPT_ALIASES = [
+  "tööjõudu ei leia", "ei leia töötajaid", "oskustöölisi ei leia", "mul on tööjõupuudus",
+  "tahan välistöötajat palgata", "kuidas palgata välismaalast", "vajan välisspetsialisti",
+  "liiga palju bürokraatiat", "liiga palju aruandlust", "nõudeid on liiga palju",
+  "tahan vähem aruandlust", "ametnikud nõuavad liiga palju", "maksan liiga palju makse",
+  "maksan liiga palju taastuvenergia tasu", "elektri lõpphind on liiga kõrge",
+  "vajan soodsamat elektrit", "tahan kiiremini ehitada", "mul on e-pood",
+  "tahan müüa internetis", "mul on pakendiprobleem", "audiitorit ei leia", "tahan eksportida",
+  "otsin välisturgu", "vajan ekspordipartnerit", "vajan päritolusertifikaati",
+  "vajan ATA märkmikku", "tahan messile minna", "otsin B2B kontakte", "tahan ärivisiidile",
+  "tahan riigihankel osaleda", "hanked on liiga bürokraatlikud", "tahan toetada Ukrainat",
+  "elektriarve suur",
+];
+
+check("artificial problem/desire prompts are gone from the alias seed", () => {
+  const seedAliases = new Set(SEARCH_ALIASES.map((a) => normalizeAliasText(a.alias)));
+  for (const phrase of REMOVED_PROMPT_ALIASES) {
+    assert.equal(seedAliases.has(normalizeAliasText(phrase)), false, `still an alias: ${phrase}`);
+  }
+});
+
+check("removed prompts are never offered as public 'Proovi ka' suggestions", () => {
+  const removedNorm = new Set(REMOVED_PROMPT_ALIASES.map(normalizeAliasText));
+  for (const probe of ["eksport", "e-pood", "tööjõud", "bürokraatia", "elektrihind", "riigihange", "mess", "B2B", "päritolusertifikaat"]) {
+    for (const s of suggestRelatedSearches(probe, SEARCH_ALIASES)) {
+      assert.equal(removedNorm.has(normalizeAliasText(s.q)), false, `suggested "${s.q}" for probe "${probe}"`);
+    }
+  }
+});
+
+check("self-only sentence prompts no longer drive query expansion", () => {
+  // Phrases whose only alias was the sentence itself now expand to nothing.
+  // (Phrases containing an atomic token like "mul on e-pood" still expand via
+  // the atomic "e-pood" alias — that is correct and intended.)
+  for (const phrase of [
+    "tahan eksportida", "tööjõudu ei leia", "liiga palju bürokraatiat", "vajan päritolusertifikaati",
+  ]) {
+    assert.equal(expandSearchAliases(phrase, SEARCH_ALIASES).matchedAliases.length, 0, phrase);
+  }
+});
+
+check("membership/value questions are kept and still expand", () => {
+  for (const phrase of ["mida koda on teinud", "koda minu ettevõtte heaks"]) {
+    assert.ok(aliasExpansion(phrase).matchedAliases.length > 0, phrase);
+  }
 });
 
 console.log(`\n[test] ${passed} passed, ${failed} failed`);
