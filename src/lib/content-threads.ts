@@ -83,6 +83,17 @@ export type ThreadItemMeta = {
   isAnchor: boolean;
 };
 
+/** Project a stored ContentThreadItem row down to its ordering/display metadata. */
+export function toThreadItemMeta(row: ThreadItemMeta): ThreadItemMeta {
+  return {
+    contentExternalId: row.contentExternalId,
+    role: row.role,
+    note: row.note,
+    sortOrder: row.sortOrder,
+    isAnchor: row.isAnchor,
+  };
+}
+
 /** A thread member whose content row has been resolved by externalId. */
 export type ResolvedThreadMember<T> = {
   meta: ThreadItemMeta;

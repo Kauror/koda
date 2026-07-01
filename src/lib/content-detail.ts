@@ -33,10 +33,9 @@ import { qualifiesAsLawTopicRelation } from "./related";
 import { compareTimelineDesc, isNestedDisplay, timelineStageLabel, type WorkWinNestingInput } from "./work-win-nesting";
 import {
   filterPublicThreadMembers,
-  isThreadPublic,
   resolveThreadMembers,
   roleLabel,
-  type ThreadItemMeta,
+  toThreadItemMeta,
 } from "./content-threads";
 
 const TOPIC_HISTORY_CAP = 4;
@@ -294,19 +293,16 @@ async function getPublicThreadTimeline(
 ): Promise<ThreadTimelineDetail | null> {
   if (!item.externalId) return null;
 
-  const memberships = await prisma.contentThreadItem.findMany({
-    where: { contentExternalId: item.externalId },
-    include: { thread: true },
+  // The highest-priority PUBLIC thread this item belongs to, with all its
+  // members — one query (the DB does the status filter + priority ordering).
+  const thread = await prisma.contentThread.findFirst({
+    where: { status: "public", items: { some: { contentExternalId: item.externalId } } },
+    orderBy: [{ sortPriority: "desc" }, { createdAt: "asc" }],
+    include: { items: true },
   });
-  const publicThreads = memberships
-    .map((m) => m.thread)
-    .filter((t) => isThreadPublic(t.status))
-    .sort((a, b) => b.sortPriority - a.sortPriority || a.createdAt.getTime() - b.createdAt.getTime());
-  const thread = publicThreads[0];
   if (!thread) return null;
 
-  const threadItems = await prisma.contentThreadItem.findMany({ where: { threadId: thread.id } });
-  const externalIds = threadItems.map((i) => i.contentExternalId);
+  const externalIds = thread.items.map((i) => i.contentExternalId);
   const rows = externalIds.length
     ? await prisma.contentItem.findMany({
         where: { externalId: { in: externalIds } },
@@ -314,14 +310,7 @@ async function getPublicThreadTimeline(
       })
     : [];
 
-  const metas: ThreadItemMeta[] = threadItems.map((i) => ({
-    contentExternalId: i.contentExternalId,
-    role: i.role,
-    note: i.note,
-    sortOrder: i.sortOrder,
-    isAnchor: i.isAnchor,
-  }));
-  const { members } = resolveThreadMembers(metas, rows);
+  const { members } = resolveThreadMembers(thread.items.map(toThreadItemMeta), rows);
   const publicMembers = filterPublicThreadMembers(thread.status, members);
   if (publicMembers.length < 2) return null;
 

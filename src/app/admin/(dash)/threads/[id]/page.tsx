@@ -7,7 +7,7 @@ import {
   resolveThreadMembers,
   roleLabel,
   statusLabel,
-  type ThreadItemMeta,
+  toThreadItemMeta,
 } from "@/lib/content-threads";
 
 export const dynamic = "force-dynamic";
@@ -42,14 +42,7 @@ export default async function AdminThreadEdit({ params }: { params: Promise<{ id
     }),
   ]);
 
-  const metas: ThreadItemMeta[] = thread.items.map((i) => ({
-    contentExternalId: i.contentExternalId,
-    role: i.role,
-    note: i.note,
-    sortOrder: i.sortOrder,
-    isAnchor: i.isAnchor,
-  }));
-  const { members, unresolved } = resolveThreadMembers(metas, content);
+  const { members, unresolved } = resolveThreadMembers(thread.items.map(toThreadItemMeta), content);
 
   // Map externalId -> ContentThreadItem.id so member rows can post itemId actions.
   const itemIdByExternalId = new Map(thread.items.map((i) => [i.contentExternalId, i.id]));
