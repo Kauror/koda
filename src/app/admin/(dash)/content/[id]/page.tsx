@@ -7,6 +7,7 @@ import { PUBLIC_TOPIC_FILTERS } from "@/lib/topics";
 import { CROSS_SECTOR_ACTIVITY, PUBLIC_ACTIVITY_FILTERS } from "@/lib/activities";
 import { THREAD_ROLES, roleLabel, statusLabel } from "@/lib/content-threads";
 import { pickPrimaryDoc } from "@/lib/source-documents";
+import RelatedContentPicker from "./RelatedContentPicker";
 
 export const dynamic = "force-dynamic";
 
@@ -58,7 +59,7 @@ export default async function AdminContentEdit({
   const { id } = await params;
   const status = await searchParams;
 
-  const [item, allGroups, similarItems, relatedLinks] = await Promise.all([
+  const [item, allGroups, similarItems, relatedLinks, linkCandidates] = await Promise.all([
     prisma.contentItem.findUnique({
       where: { id },
       include: {
@@ -82,6 +83,20 @@ export default async function AdminContentEdit({
       },
       orderBy: [{ sortPriority: "desc" }, { createdAt: "desc" }],
     }),
+    prisma.contentItem.findMany({
+      where: { id: { not: id }, isHidden: false },
+      orderBy: [{ date: { sort: "desc", nulls: "last" } }, { title: "asc" }],
+      select: {
+        id: true,
+        externalId: true,
+        title: true,
+        displayTitle: true,
+        date: true,
+        sourceDataset: true,
+        sourceTypeDetail: true,
+      },
+      take: 2500,
+    }),
   ]);
 
   if (!item) notFound();
@@ -103,6 +118,15 @@ export default async function AdminContentEdit({
   const memberThreadIds = new Set(threadMemberships.map((m) => m.threadId));
   const isOpinion = item.sourceDataset === "opinions";
   const primaryDoc = pickPrimaryDoc(sourceDocs);
+  const relatedContentIds = new Set(
+    relatedLinks.map((link) => (link.fromContentId === item.id ? link.toContentId : link.fromContentId))
+  );
+  const availableLinkCandidates = linkCandidates
+    .filter((candidate) => !relatedContentIds.has(candidate.id))
+    .map((candidate) => ({
+      ...candidate,
+      date: candidate.date?.toISOString() ?? null,
+    }));
 
   const externalId = item.externalId ?? item.id;
   const draft = item.adminDrafts[0] ?? null;
@@ -152,7 +176,11 @@ export default async function AdminContentEdit({
 
       {(status.linked || status.unlinked || status.linkError) && (
         <div className="card notice">
-          {status.linked && <p style={{ margin: 0 }}>Seotud allikas lisatud.</p>}
+          {status.linked && (
+            <p style={{ margin: 0 }}>
+              {Number(status.linked) > 1 ? `${status.linked} seotud allikat lisatud.` : "Seotud allikas lisatud."}
+            </p>
+          )}
           {status.unlinked && <p style={{ margin: 0 }}>Seotud allikas eemaldatud.</p>}
           {status.linkError && <p style={{ margin: 0 }}>Seost ei saanud lisada: {status.linkError}</p>}
         </div>
@@ -553,10 +581,17 @@ export default async function AdminContentEdit({
             </tbody>
           </table>
         )}
+        <RelatedContentPicker
+          action={`/api/admin/content/${item.id}`}
+          candidates={availableLinkCandidates}
+          linkTypes={[...RELATED_LINK_TYPE_OPTIONS]}
+          defaultLinkType={EvidenceLinkType.related_news}
+        />
         <form
           method="post"
           action={`/api/admin/content/${item.id}`}
-          style={{ display: "grid", gap: 10, gridTemplateColumns: "minmax(220px, 1fr) 190px 90px auto", alignItems: "end" }}
+          style={{ display: "none" }}
+          aria-hidden="true"
         >
           <input type="hidden" name="_action" value="add-related-link" />
           <div>
@@ -569,7 +604,7 @@ export default async function AdminContentEdit({
             <label className="field-label" htmlFor="linkType">
               Seose tüüp
             </label>
-            <select id="linkType" name="linkType" defaultValue={EvidenceLinkType.related_news}>
+            <select id="legacyLinkType" name="linkType" defaultValue={EvidenceLinkType.related_news}>
               {RELATED_LINK_TYPE_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
@@ -581,7 +616,7 @@ export default async function AdminContentEdit({
             <label className="field-label" htmlFor="sortPriority">
               Järjekord
             </label>
-            <input id="sortPriority" name="sortPriority" type="number" defaultValue="50" />
+            <input id="legacySortPriority" name="sortPriority" type="number" defaultValue="50" />
           </div>
           <button type="submit" className="btn btn-secondary btn-small">
             Lisa seos

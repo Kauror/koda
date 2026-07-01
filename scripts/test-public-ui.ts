@@ -535,6 +535,20 @@ check("admin content editor uses draft and publish override controls", () => {
   assert.ok(!source.includes('name="companySize"'));
 });
 
+check("admin related-content linking uses searchable multi-select checkboxes", () => {
+  const page = readFileSync("src/app/admin/(dash)/content/[id]/page.tsx", "utf8");
+  const picker = readFileSync("src/app/admin/(dash)/content/[id]/RelatedContentPicker.tsx", "utf8");
+  const route = readFileSync("src/app/api/admin/content/[id]/route.ts", "utf8");
+  assert.ok(page.includes("RelatedContentPicker"));
+  assert.ok(picker.includes('type="search"'));
+  assert.ok(picker.includes('type="checkbox"'));
+  assert.ok(picker.includes('name="targetContent"'));
+  assert.ok(picker.includes("selectedIds.has(candidate.id)"));
+  assert.ok(route.includes('.getAll("targetContent")'));
+  assert.ok(route.includes("targetContentText"));
+  assert.ok(route.includes("for (const target of targets.values())"));
+});
+
 check("data bundle page exposes explicit live publish action", () => {
   const source = readFileSync("src/app/admin/(dash)/data-bundle/page.tsx", "utf8");
   assert.ok(source.includes("/api/admin/data-bundle/publish"));

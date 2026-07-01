@@ -187,59 +187,79 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       });
     }
   } else if (action === "add-related-link") {
-    const targetContent = str(form, "targetContent");
+    const selectedTargets = form
+      .getAll("targetContent")
+      .map((value) => (typeof value === "string" ? value.trim() : ""))
+      .filter(Boolean);
+    const manualTarget = str(form, "targetContentText");
+    const targetContentRefs = [...selectedTargets, ...(manualTarget ? [manualTarget] : [])];
     const rawLinkType = str(form, "linkType") as EvidenceLinkType | null;
     const linkType = rawLinkType && MANUAL_RELATED_LINK_TYPES.has(rawLinkType) ? rawLinkType : EvidenceLinkType.related_news;
-    if (!targetContent) {
+    if (targetContentRefs.length === 0) {
       return redirectTo(req, `/admin/content/${id}?linkError=${encodeURIComponent("target missing")}`);
     }
-    const target = await resolveContentReference(targetContent);
-    if (!target) {
-      return redirectTo(req, `/admin/content/${id}?linkError=${encodeURIComponent("content not found")}`);
-    }
-    if (target.id === id) {
-      return redirectTo(req, `/admin/content/${id}?linkError=${encodeURIComponent("cannot link item to itself")}`);
-    }
     const sortPriority = parseSortPriority(str(form, "sortPriority"));
-    const linkData = {
-      relationRole: "manual_admin",
-      relationLabelEt: linkLabelEt(linkType),
-      linkConfidence: "high",
-      linkBasis: `Manual admin relation: ${item.externalId ?? item.id} -> ${target.externalId ?? target.id}`,
-      canonicalPolicyThreadId: item.topicGroupCandidate || target.topicGroupCandidate || item.policyThreadKey || target.policyThreadKey || null,
-      sortPriority,
-    };
-    const existingLink = await prisma.contentEvidenceLink.findFirst({
-      where: {
-        linkType,
-        OR: [
-          { fromContentId: id, toContentId: target.id },
-          { fromContentId: target.id, toContentId: id },
-        ],
-      },
-    });
-    await prisma.$transaction([
-      existingLink
-        ? prisma.contentEvidenceLink.update({ where: { id: existingLink.id }, data: linkData })
-        : prisma.contentEvidenceLink.create({
-            data: {
-              fromContentId: id,
-              toContentId: target.id,
-              linkType,
-              ...linkData,
-            },
-          }),
-      prisma.adminAuditLog.create({
-        data: {
-          action: "content_related_link_add",
-          contentExternalId: item.externalId ?? item.id,
-          contentItemId: id,
-          actor: adminActor(),
-          newValues: { targetContentId: target.id, targetExternalId: target.externalId, linkType, sortPriority },
+    const targets = new Map<string, NonNullable<Awaited<ReturnType<typeof resolveContentReference>>>>();
+    for (const targetContent of targetContentRefs) {
+      const target = await resolveContentReference(targetContent);
+      if (!target || target.id === id) continue;
+      targets.set(target.id, target);
+    }
+
+    if (targets.size === 0) {
+      const selfOnly = targetContentRefs.length === 1 && (await resolveContentReference(targetContentRefs[0]))?.id === id;
+      return redirectTo(
+        req,
+        `/admin/content/${id}?linkError=${encodeURIComponent(selfOnly ? "cannot link item to itself" : "content not found")}`
+      );
+    }
+
+    const operations = [];
+    for (const target of targets.values()) {
+      const linkData = {
+        relationRole: "manual_admin",
+        relationLabelEt: linkLabelEt(linkType),
+        linkConfidence: "high",
+        linkBasis: `Manual admin relation: ${item.externalId ?? item.id} -> ${target.externalId ?? target.id}`,
+        canonicalPolicyThreadId: item.topicGroupCandidate || target.topicGroupCandidate || item.policyThreadKey || target.policyThreadKey || null,
+        sortPriority,
+      };
+      const existingLink = await prisma.contentEvidenceLink.findFirst({
+        where: {
+          linkType,
+          OR: [
+            { fromContentId: id, toContentId: target.id },
+            { fromContentId: target.id, toContentId: id },
+          ],
         },
-      }),
-    ]);
-    return redirectTo(req, `/admin/content/${id}?linked=1`);
+      });
+      operations.push(
+        existingLink
+          ? prisma.contentEvidenceLink.update({ where: { id: existingLink.id }, data: linkData })
+          : prisma.contentEvidenceLink.create({
+              data: {
+                fromContentId: id,
+                toContentId: target.id,
+                linkType,
+                ...linkData,
+              },
+            })
+      );
+      operations.push(
+        prisma.adminAuditLog.create({
+          data: {
+            action: "content_related_link_add",
+            contentExternalId: item.externalId ?? item.id,
+            contentItemId: id,
+            actor: adminActor(),
+            newValues: { targetContentId: target.id, targetExternalId: target.externalId, linkType, sortPriority },
+          },
+        })
+      );
+    }
+
+    await prisma.$transaction(operations);
+    return redirectTo(req, `/admin/content/${id}?linked=${targets.size}`);
   } else if (action === "remove-related-link") {
     const relatedLinkId = str(form, "relatedLinkId");
     if (relatedLinkId) {
