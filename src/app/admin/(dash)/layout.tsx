@@ -13,6 +13,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <Link href="/admin">Töölaud</Link>
         <Link href="/admin/content">Sisu</Link>
         <Link href="/admin/topics">Teemagrupid</Link>
+        <Link href="/admin/threads">Teemaliinid</Link>
         <Link href="/admin/tags">Sildid</Link>
         <Link href="/admin/data-bundle">Andmepakett</Link>
         <Link href="/admin/data-review">Andmeülevaatus</Link>

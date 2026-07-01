@@ -182,6 +182,9 @@ async function writeBackup(): Promise<{ path: string; counts: Record<string, num
 }
 
 async function clearImportedContent() {
+  // NOTE: ContentThread/ContentThreadItem are intentionally NOT cleared here.
+  // They are admin-managed configuration and reference content by the stable
+  // externalId (not a cuid FK), so admin-created threads survive re-imports.
   await prisma.contentEvidenceLink.deleteMany();
   await prisma.achievementEnrichment.deleteMany();
   await prisma.contentTopicGroup.deleteMany();

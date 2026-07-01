@@ -320,6 +320,52 @@ model ContentTopicGroup {
   @@id([contentItemId, topicGroupId])
 }
 
+/// Admin-managed topic thread / timeline group. Unlike TopicGroup (which the
+/// merge-ready import wipes and recreates on every run), this is admin-owned
+/// configuration: the import NEVER touches ContentThread/ContentThreadItem, so
+/// threads survive re-imports. Members are referenced by the stable
+/// ContentItem.externalId (NOT the churning cuid) — see ContentThreadItem.
+model ContentThread {
+  id            String   @id @default(cuid())
+  slug          String   @unique
+  title         String
+  description   String?
+  primaryTopic  String? // valdkond (topic) — free label/slug, admin-owned
+  primarySector String? // tegevusala (sector) — optional
+  status        String   @default("draft") // draft | internal | public
+  featured      Boolean  @default(false)
+  sortPriority  Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  items ContentThreadItem[]
+
+  @@index([status])
+}
+
+/// One content item attached to a ContentThread. Deliberately has NO relation to
+/// ContentItem: the destructive import deletes+recreates ContentItem rows, so a
+/// cascade FK would delete these on import and a restrict FK would block it.
+/// `contentExternalId` is the stable ContentItem.externalId, resolved at read
+/// time (same soft-reference pattern as DataReviewDecision.contentExternalId).
+model ContentThreadItem {
+  id                String   @id @default(cuid())
+  threadId          String
+  contentExternalId String // stable ContentItem.externalId (no FK on purpose)
+  role              String? // background | opinion | work_win | news_update | evidence | milestone
+  note              String?
+  sortOrder         Int      @default(0)
+  isAnchor          Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  thread ContentThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@unique([threadId, contentExternalId])
+  @@index([contentExternalId])
+  @@index([threadId])
+}
+
 model SearchSession {
   id                 String   @id @default(cuid())
   createdAt          DateTime @default(now())

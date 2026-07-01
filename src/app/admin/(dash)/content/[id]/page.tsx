@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { getPublicDetailSummary, publicTitle } from "@/lib/content-display";
 import { PUBLIC_TOPIC_FILTERS } from "@/lib/topics";
 import { CROSS_SECTOR_ACTIVITY, PUBLIC_ACTIVITY_FILTERS } from "@/lib/activities";
+import { THREAD_ROLES, roleLabel, statusLabel } from "@/lib/content-threads";
 
 export const dynamic = "force-dynamic";
 
@@ -62,6 +63,19 @@ export default async function AdminContentEdit({
   ]);
 
   if (!item) notFound();
+
+  // Admin topic threads: membership is keyed by the stable externalId, so it
+  // survives re-imports. Legacy rows without an externalId cannot be linked.
+  const [allThreads, threadMemberships] = await Promise.all([
+    prisma.contentThread.findMany({ orderBy: { title: "asc" } }),
+    item.externalId
+      ? prisma.contentThreadItem.findMany({
+          where: { contentExternalId: item.externalId },
+          include: { thread: true },
+        })
+      : Promise.resolve([]),
+  ]);
+  const memberThreadIds = new Set(threadMemberships.map((m) => m.threadId));
 
   const externalId = item.externalId ?? item.id;
   const draft = item.adminDrafts[0] ?? null;
@@ -355,6 +369,64 @@ export default async function AdminContentEdit({
             Lisa gruppi
           </button>
         </form>
+      </div>
+
+      <div className="card">
+        <h2 style={{ marginTop: 0, fontSize: "1.1rem" }}>Teemaliinid / ajajoon</h2>
+        {!item.externalId && (
+          <p className="muted small">
+            Sellel sisuelemendil puudub stabiilne externalId, mistõttu seda ei saa teemaliini lisada.
+          </p>
+        )}
+        {item.externalId && threadMemberships.length === 0 && (
+          <p className="muted small">Ei kuulu ühtegi teemaliini.</p>
+        )}
+        {threadMemberships.map((m) => (
+          <p key={m.id} style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <Link href={`/admin/threads/${m.threadId}`}>{m.thread.title}</Link>
+            <span className="tag">{statusLabel(m.thread.status)}</span>
+            {m.role && <span className="tag">{roleLabel(m.role)}</span>}
+            <form method="post" action={`/api/admin/content/${item.id}`} className="inline-form">
+              <input type="hidden" name="_action" value="detach-thread" />
+              <input type="hidden" name="threadId" value={m.threadId} />
+              <input type="hidden" name="_redirect" value={`/admin/content/${item.id}`} />
+              <button type="submit" className="btn btn-secondary btn-small">
+                Eemalda
+              </button>
+            </form>
+          </p>
+        ))}
+        {item.externalId && (
+          <form
+            method="post"
+            action={`/api/admin/content/${item.id}`}
+            style={{ display: "flex", gap: 10, flexWrap: "wrap" }}
+          >
+            <input type="hidden" name="_action" value="attach-to-thread" />
+            <input type="hidden" name="_redirect" value={`/admin/content/${item.id}`} />
+            <select name="threadId" required style={{ maxWidth: 320 }}>
+              <option value="">— Vali teemaliin —</option>
+              {allThreads
+                .filter((t) => !memberThreadIds.has(t.id))
+                .map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.title}
+                  </option>
+                ))}
+            </select>
+            <select name="role" defaultValue="" style={{ maxWidth: 180 }}>
+              <option value="">Roll (valikuline)</option>
+              {THREAD_ROLES.map((r) => (
+                <option key={r} value={r}>
+                  {roleLabel(r)}
+                </option>
+              ))}
+            </select>
+            <button type="submit" className="btn btn-secondary btn-small">
+              Lisa teemaliini
+            </button>
+          </form>
+        )}
       </div>
 
       <div className="card">

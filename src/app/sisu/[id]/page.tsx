@@ -5,6 +5,7 @@ import {
   getContentDetail,
   type ContentDetail,
   type EvidenceRow,
+  type ThreadTimelineDetail,
   type WorkWinNestingDetail,
 } from "@/lib/content-detail";
 import { compactText, isGenericWorkWinUrl, isUnsafePublicDetailText } from "@/lib/content-display";
@@ -59,6 +60,42 @@ function WorkWinNestingSection({ nesting, from }: { nesting: WorkWinNestingDetai
           </ol>
         </>
       )}
+    </section>
+  );
+}
+
+/**
+ * Public timeline for an admin-managed topic thread (status=public). Members are
+ * already re-filtered through the public eligibility gate server-side. Each step
+ * links to its own detail page; the current page is highlighted.
+ */
+function ThreadTimeline({ thread, from }: { thread: ThreadTimelineDetail; from?: string }) {
+  const href = (detailId: string) =>
+    `/sisu/${encodeURIComponent(detailId)}${from ? `?from=${encodeURIComponent(from)}` : ""}`;
+  return (
+    <section className="card nested-detail">
+      <h2>Teemaliin: {thread.title}</h2>
+      {thread.description && <p className="item-excerpt small">{thread.description}</p>}
+      <ol className="nested-timeline">
+        {thread.items.map((it) => (
+          <li key={it.id} className={`nested-item${it.isCurrent ? " nested-current" : ""}`}>
+            <p className="nested-meta">
+              {(it.year || it.displayDate) && (
+                <span className="badge-date">{it.displayDate ?? it.year}</span>
+              )}
+              {it.roleLabel && <span className="badge nested-stage">{it.roleLabel}</span>}
+              {it.isCurrent && <span className="badge">Praegu vaatad</span>}
+            </p>
+            <h3>{it.isCurrent ? it.title : <Link href={href(it.detailId)}>{it.title}</Link>}</h3>
+            {it.summary && <p className="item-excerpt small">{compactText(it.summary, 220)}</p>}
+            {it.sourceUrl && !isGenericWorkWinUrl(it.sourceUrl) && (
+              <a href={it.sourceUrl} target="_blank" rel="noopener noreferrer" className="item-source-link">
+                {it.sourceCtaLabel} →
+              </a>
+            )}
+          </li>
+        ))}
+      </ol>
     </section>
   );
 }
@@ -263,6 +300,8 @@ export default async function ContentDetailPage({
         {item.isAchievement ? <AchievementDetail item={item} from={from} /> : <StandardDetail item={item} from={from} />}
 
         {item.workWinNesting && <WorkWinNestingSection nesting={item.workWinNesting} from={from} />}
+
+        {item.thread && <ThreadTimeline thread={item.thread} from={from} />}
 
         <p style={{ marginTop: 24 }}>
           <Link href={backHref} className="btn btn-secondary btn-small">

@@ -22,6 +22,7 @@
     "import:merge-ready": "tsx scripts/import-merge-ready.ts",
     "import:test": "tsx scripts/test-merge-ready.ts",
     "nesting:test": "tsx scripts/test-work-win-nesting.ts",
+    "threads:test": "tsx scripts/test-content-threads.ts",
     "search:test": "tsx scripts/test-search.ts",
     "topics:test": "tsx scripts/test-topics.ts",
     "activities:test": "tsx scripts/test-activities.ts",

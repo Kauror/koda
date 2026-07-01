@@ -7,6 +7,7 @@ import {
   publishAdminContentDraft,
   validateAdminOverrideInput,
 } from "@/lib/admin-content-overrides";
+import { isValidRole } from "@/lib/content-threads";
 
 export const dynamic = "force-dynamic";
 
@@ -95,6 +96,31 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
           relationType: relationType as "main" | "history" | "related",
         },
         update: { relationType: relationType as "main" | "history" | "related" },
+      });
+    }
+  } else if (action === "attach-to-thread") {
+    // Link this item to an admin thread by its stable externalId (survives
+    // re-imports). Rows without an externalId cannot be linked.
+    const threadId = str(form, "threadId");
+    const role = str(form, "role");
+    if (threadId && item.externalId) {
+      await prisma.contentThreadItem.upsert({
+        where: {
+          threadId_contentExternalId: { threadId, contentExternalId: item.externalId },
+        },
+        create: {
+          threadId,
+          contentExternalId: item.externalId,
+          role: isValidRole(role) ? role : null,
+        },
+        update: isValidRole(role) ? { role } : {},
+      });
+    }
+  } else if (action === "detach-thread") {
+    const threadId = str(form, "threadId");
+    if (threadId && item.externalId) {
+      await prisma.contentThreadItem.deleteMany({
+        where: { threadId, contentExternalId: item.externalId },
       });
     }
   } else if (action === "merge") {

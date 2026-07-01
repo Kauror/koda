@@ -31,6 +31,13 @@ import { slugify } from "./slug";
 import { computePublicDate } from "./public-date";
 import { qualifiesAsLawTopicRelation } from "./related";
 import { compareTimelineDesc, isNestedDisplay, timelineStageLabel, type WorkWinNestingInput } from "./work-win-nesting";
+import {
+  filterPublicThreadMembers,
+  isThreadPublic,
+  resolveThreadMembers,
+  roleLabel,
+  type ThreadItemMeta,
+} from "./content-threads";
 
 const TOPIC_HISTORY_CAP = 4;
 const DUPLICATE_CAP = 4;
@@ -76,6 +83,31 @@ export type WorkWinNestingDetail = {
   children: NestedDetailRow[];
   /** Policy thread this row belongs to, with its full timeline (incl. this row). */
   thread: { key: string; title: string | null; items: NestedDetailRow[] } | null;
+};
+
+/** One item in a public admin-managed topic thread timeline. */
+export type ThreadTimelineItem = {
+  id: string;
+  detailId: string;
+  title: string;
+  summary: string | null;
+  displayDate: string | null;
+  year: number | null;
+  role: string | null;
+  roleLabel: string | null;
+  sourceLabel: string;
+  sourceUrl: string | null;
+  sourceCtaLabel: string;
+  isCurrent: boolean;
+  isAnchor: boolean;
+};
+
+/** A public (status=public) admin thread the viewed item belongs to. */
+export type ThreadTimelineDetail = {
+  slug: string;
+  title: string;
+  description: string | null;
+  items: ThreadTimelineItem[];
 };
 
 export type AchievementEnrichmentView = {
@@ -128,6 +160,8 @@ export type ContentDetail = {
   enrichment: AchievementEnrichmentView | null;
   /** v1.2 nesting/timeline context (töövõidud only; null otherwise). */
   workWinNesting: WorkWinNestingDetail | null;
+  /** Public admin-managed topic thread timeline this item belongs to, or null. */
+  thread: ThreadTimelineDetail | null;
   evidence: {
     annualContext: EvidenceRow[];
     duplicates: EvidenceRow[];
@@ -179,6 +213,7 @@ export async function getContentDetail(id: string): Promise<ContentDetail | null
   const enr = item.achievementEnrichment;
   const evidence = await getEvidenceForContent(c);
   const workWinNesting = await getWorkWinNesting(c);
+  const thread = await getPublicThreadTimeline(item);
 
   return {
     id: c.id,
@@ -239,8 +274,85 @@ export async function getContentDetail(id: string): Promise<ContentDetail | null
         }
       : null,
     workWinNesting,
+    thread,
     evidence,
   };
+}
+
+/**
+ * Public timeline for an admin-managed topic thread the viewed item belongs to.
+ *
+ * Safety: only threads with status=public are considered, and every member is
+ * re-resolved (by stable externalId) and re-filtered through the same
+ * `isPublicSearchEligible` gate (`filterPublicThreadMembers`) — draft/internal
+ * threads and non-eligible members never leak. Returns null unless there are at
+ * least two eligible members (a single item is not a timeline). This does not
+ * affect search or ranking.
+ */
+async function getPublicThreadTimeline(
+  item: { id: string; externalId: string | null }
+): Promise<ThreadTimelineDetail | null> {
+  if (!item.externalId) return null;
+
+  const memberships = await prisma.contentThreadItem.findMany({
+    where: { contentExternalId: item.externalId },
+    include: { thread: true },
+  });
+  const publicThreads = memberships
+    .map((m) => m.thread)
+    .filter((t) => isThreadPublic(t.status))
+    .sort((a, b) => b.sortPriority - a.sortPriority || a.createdAt.getTime() - b.createdAt.getTime());
+  const thread = publicThreads[0];
+  if (!thread) return null;
+
+  const threadItems = await prisma.contentThreadItem.findMany({ where: { threadId: thread.id } });
+  const externalIds = threadItems.map((i) => i.contentExternalId);
+  const rows = externalIds.length
+    ? await prisma.contentItem.findMany({
+        where: { externalId: { in: externalIds } },
+        include: candidateInclude,
+      })
+    : [];
+
+  const metas: ThreadItemMeta[] = threadItems.map((i) => ({
+    contentExternalId: i.contentExternalId,
+    role: i.role,
+    note: i.note,
+    sortOrder: i.sortOrder,
+    isAnchor: i.isAnchor,
+  }));
+  const { members } = resolveThreadMembers(metas, rows);
+  const publicMembers = filterPublicThreadMembers(thread.status, members);
+  if (publicMembers.length < 2) return null;
+
+  const items: ThreadTimelineItem[] = publicMembers.map((m) => {
+    const cand = toCandidate(m.content);
+    const pd = computePublicDate({
+      date: cand.date,
+      year: cand.year ?? null,
+      reportYear: cand.reportYear ?? null,
+      classificationConfidence: cand.classificationConfidence ?? null,
+      displayDatePrecision: cand.displayDatePrecision ?? null,
+      dateConfidence: cand.dateConfidence ?? null,
+    });
+    return {
+      id: cand.id,
+      detailId: detailIdOf(cand),
+      title: publicTitle(cand),
+      summary: getCleanPublicExcerpt(cand),
+      displayDate: pd.text,
+      year: pd.year,
+      role: m.meta.role,
+      roleLabel: m.meta.role ? roleLabel(m.meta.role) : null,
+      sourceLabel: sourceLabel(cand.sourceLayer, cand.sourceTypeDetail),
+      sourceUrl: publicSourceUrl(cand),
+      sourceCtaLabel: sourceCtaLabel(cand),
+      isCurrent: cand.id === item.id,
+      isAnchor: m.meta.isAnchor,
+    };
+  });
+
+  return { slug: thread.slug, title: thread.title, description: thread.description, items };
 }
 
 /**
