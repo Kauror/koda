@@ -29,3 +29,15 @@ data/archive/
 
 # Local PGlite verification database (machines without Docker/Postgres).
 .pglite/
+.pglite-*/
+
+# Loose local data-pipeline artifacts / handoff packages dropped in the repo
+# root (Excel workbooks, audit reports, delivery ZIPs, old package versions).
+# These are data, not source, and must never be committed. The real import
+# files live in data/import/ (ignored above). Files stay on disk; git ignores them.
+/*.xlsx
+/*.csv
+/*.zip
+/vanemad/
+/KODA_NEXT_CHAT_HISTORY_OVERVIEW.md
+/koda_taxonomy_rules_*.txt
