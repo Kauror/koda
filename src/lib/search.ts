@@ -24,6 +24,7 @@ import {
   type SearchAliasRecord,
 } from "./search-aliases";
 import { compactText, getCleanPublicExcerpt, publicSourceUrl, publicTitle, sourceCtaLabel } from "./content-display";
+import { pickPrimaryDoc } from "./source-documents";
 import {
   resolveWorkWinNesting,
   timelineStageLabel,
@@ -384,6 +385,8 @@ export type ResultCard = {
   nestedHeading?: string | null;
   /** Compact linked opinion/news rows folded under the public main card (v1.3). */
   relatedItems?: NestedRelatedCard[];
+  /** Primary source PDF ("Vaata pöördumist") for opinion cards, or null. */
+  sourcePdfUrl?: string | null;
   /**
    * Internal ranking total. Used by internal audit tooling (audit-freshness) and
    * server-side ordering only — it must NOT be exposed to public users. The
@@ -1136,6 +1139,10 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
     return card;
   });
 
+  // Attach the primary source PDF ("Vaata pöördumist") to displayed opinion cards.
+  const positions = groups.arvamus.map(toCard);
+  await attachOpinionSourcePdfs([opinionNews, positions]);
+
   const groupCounts: typeof grouped.groupCounts = {
     ...grouped.groupCounts,
     toovoit: {
@@ -1155,7 +1162,7 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
     achievements,
     achievementsInitialVisible,
     opinionNews,
-    positions: groups.arvamus.map(toCard),
+    positions,
     news: groups.uudis.map(toCard),
     context: groups.kontekst.map(toCard),
     total: totalDisplayed,
@@ -1176,6 +1183,31 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
         }
       : null,
   };
+}
+
+/**
+ * Set `sourcePdfUrl` ("Vaata pöördumist") on displayed opinion cards from their
+ * primary VERIFIED SourceDocument (one batched query). Non-opinion cards and
+ * opinions without a verified PDF are left untouched — never a broken link.
+ */
+async function attachOpinionSourcePdfs(cardGroups: ResultCard[][]): Promise<void> {
+  const opinionCards = cardGroups.flat().filter((c) => c.type === "arvamus");
+  const externalIds = [...new Set(opinionCards.map((c) => c.detailId))];
+  if (externalIds.length === 0) return;
+  const docs = await prisma.sourceDocument.findMany({
+    where: { contentExternalId: { in: externalIds }, kind: "opinion_pdf", fileVerified: true },
+  });
+  const byExternalId = new Map<string, typeof docs>();
+  for (const d of docs) {
+    if (!d.contentExternalId) continue;
+    const list = byExternalId.get(d.contentExternalId) ?? [];
+    list.push(d);
+    byExternalId.set(d.contentExternalId, list);
+  }
+  for (const card of opinionCards) {
+    const primary = pickPrimaryDoc(byExternalId.get(card.detailId) ?? []);
+    if (primary) card.sourcePdfUrl = primary.pdfUrl;
+  }
 }
 
 /**

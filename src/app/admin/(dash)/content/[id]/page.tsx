@@ -5,6 +5,7 @@ import { getPublicDetailSummary, publicTitle } from "@/lib/content-display";
 import { PUBLIC_TOPIC_FILTERS } from "@/lib/topics";
 import { CROSS_SECTOR_ACTIVITY, PUBLIC_ACTIVITY_FILTERS } from "@/lib/activities";
 import { THREAD_ROLES, roleLabel, statusLabel } from "@/lib/content-threads";
+import { pickPrimaryDoc } from "@/lib/source-documents";
 
 export const dynamic = "force-dynamic";
 
@@ -66,7 +67,7 @@ export default async function AdminContentEdit({
 
   // Admin topic threads: membership is keyed by the stable externalId, so it
   // survives re-imports. Legacy rows without an externalId cannot be linked.
-  const [allThreads, threadMemberships] = await Promise.all([
+  const [allThreads, threadMemberships, sourceDocs] = await Promise.all([
     prisma.contentThread.findMany({ orderBy: { title: "asc" } }),
     item.externalId
       ? prisma.contentThreadItem.findMany({
@@ -74,8 +75,13 @@ export default async function AdminContentEdit({
           include: { thread: true },
         })
       : Promise.resolve([]),
+    item.externalId
+      ? prisma.sourceDocument.findMany({ where: { contentExternalId: item.externalId, kind: "opinion_pdf" } })
+      : Promise.resolve([]),
   ]);
   const memberThreadIds = new Set(threadMemberships.map((m) => m.threadId));
+  const isOpinion = item.sourceDataset === "opinions";
+  const primaryDoc = pickPrimaryDoc(sourceDocs);
 
   const externalId = item.externalId ?? item.id;
   const draft = item.adminDrafts[0] ?? null;
@@ -324,6 +330,48 @@ export default async function AdminContentEdit({
               <tr><td>timeline_stage</td><td>{item.timelineStage || "—"}</td></tr>
             </tbody>
           </table>
+        </div>
+      )}
+
+      {isOpinion && (
+        <div className="card">
+          <h2 style={{ marginTop: 0, fontSize: "1.1rem" }}>Pöördumise PDF</h2>
+          {primaryDoc ? (
+            <table className="admin-table">
+              <tbody>
+                <tr>
+                  <td>Pöördumise PDF</td>
+                  <td>
+                    {primaryDoc.fileVerified ? (
+                      <span className="flag evergreen">olemas</span>
+                    ) : (
+                      <span className="flag hidden">fail puudub kettalt</span>
+                    )}
+                  </td>
+                </tr>
+                <tr><td>Fail</td><td>{primaryDoc.pdfFilename}</td></tr>
+                <tr><td>Algne failinimi</td><td>{primaryDoc.originalFilename}</td></tr>
+                <tr>
+                  <td>Ava PDF</td>
+                  <td>
+                    <a href={primaryDoc.pdfUrl} target="_blank" rel="noopener noreferrer">
+                      {primaryDoc.pdfUrl}
+                    </a>
+                  </td>
+                </tr>
+                <tr><td>Tekst</td><td>{primaryDoc.txtFilename ? "olemas" : "puudub"}</td></tr>
+                <tr><td>Extraction status</td><td>{primaryDoc.extractionStatus ?? "—"}</td></tr>
+                <tr><td>Vaste</td><td>{primaryDoc.matchMethod ?? "—"} · {primaryDoc.matchConfidence ?? "—"}</td></tr>
+                {sourceDocs.length > 1 && (
+                  <tr><td>Lisadokumendid</td><td>{sourceDocs.length - 1}</td></tr>
+                )}
+              </tbody>
+            </table>
+          ) : (
+            <p className="muted small">
+              ⚠ Pöördumise PDF puudub — sellele arvamusele pole veel seotud allikadokumenti.
+            </p>
+          )}
         </div>
       )}
 

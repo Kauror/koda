@@ -100,6 +100,23 @@ function ThreadTimeline({ thread, from }: { thread: ThreadTimelineDetail; from?:
   );
 }
 
+/**
+ * Primary source PDF for an opinion ("Vaata pöördumist"). Rendered above related
+ * content, never inside it. Only present when a verified PDF exists (resolved
+ * server-side), so it is never a broken link.
+ */
+function SourcePdf({ item }: { item: Pick<ContentDetail, "sourcePdf"> }) {
+  if (!item.sourcePdf) return null;
+  return (
+    <section className="card source-pdf">
+      <h2>Algallikas</h2>
+      <a href={item.sourcePdf.url} target="_blank" rel="noopener noreferrer" className="btn btn-small">
+        Vaata pöördumist
+      </a>
+    </section>
+  );
+}
+
 function SourceButton({ item }: { item: Pick<ContentDetail, "sourceUrl" | "sourceCtaLabel"> }) {
   // Only show an external source button when there is a specific article/source.
   // The generic koda.ee work-wins listing page is never a useful source link.
@@ -208,6 +225,8 @@ function StandardDetail({ item, from }: { item: ContentDetail; from?: string }) 
           <SourceButton item={item} />
         </section>
       )}
+
+      <SourcePdf item={item} />
 
       <TopicHistory rows={item.evidence.topicHistory} from={from} />
     </>

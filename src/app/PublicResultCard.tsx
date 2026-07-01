@@ -169,6 +169,16 @@ export default function PublicResultCard({
         <Link href={detailHref} className="btn btn-secondary btn-small">
           Loe lähemalt
         </Link>
+        {card.sourcePdfUrl && (
+          <a
+            href={card.sourcePdfUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="item-source-link"
+          >
+            Vaata pöördumist →
+          </a>
+        )}
         {card.url && !card.isAchievement && card.kind !== "uudis" && !isGenericWorkWinUrl(card.url) && (
           <TrackedLink
             href={card.url}

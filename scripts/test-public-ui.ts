@@ -147,13 +147,30 @@ check("first paragraph extractor skips navigation fragments", () => {
 
 check("public detail page does not render backend metadata/supporting headings", () => {
   const source = readFileSync("src/app/sisu/[id]/page.tsx", "utf8");
-  assert.ok(!source.includes("Algallikas"));
+  // NB: "Algallikas" is now a legitimate public heading for the opinion source
+  // PDF ("Vaata pöördumist"), so it is intentionally allowed here.
   assert.ok(!source.includes("Seotud allikad ja taust"));
   assert.ok(!source.includes("Toetavad arvamused"));
   assert.ok(!source.includes("sourceFileName"));
   assert.ok(!source.includes("canonicalUrl"));
   assert.ok(!source.includes(".xlsx"));
   assert.ok(!source.includes(".csv"));
+});
+
+check("opinion source PDF is rendered as 'Vaata pöördumist', separate from related content", () => {
+  const detail = readFileSync("src/app/sisu/[id]/page.tsx", "utf8");
+  // Detail page: a dedicated "Algallikas" source-PDF block guarded by sourcePdf,
+  // rendered before TopicHistory (related content), never inside it.
+  assert.ok(detail.includes("Vaata pöördumist"));
+  assert.ok(detail.includes("item.sourcePdf"));
+  // In StandardDetail the source PDF renders before the related-content history.
+  assert.ok(detail.includes("<SourcePdf item={item}"));
+  assert.ok(detail.indexOf("<SourcePdf item={item}") < detail.lastIndexOf("<TopicHistory"));
+  // The PDF link uses the public /source-documents pdf url via ContentDetail.sourcePdf,
+  // and TopicHistory (related news/work-win) is a separate section.
+  const card = readFileSync("src/app/PublicResultCard.tsx", "utf8");
+  assert.ok(card.includes("card.sourcePdfUrl"));
+  assert.ok(card.includes("Vaata pöördumist"));
 });
 
 check("teema ajalugu uses contextual CTA labels, not generic allikas wording", () => {
