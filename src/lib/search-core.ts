@@ -503,6 +503,129 @@ export function passesActiveFilters(
   return true;
 }
 
+// ---------------------------------------------------------------------------
+// Work-win direct-match gate (free-text precision)
+// ---------------------------------------------------------------------------
+
+/**
+ * "High-signal" text for a work win: the fields where a query hit is strong
+ * evidence the win is actually about the query. Deliberately EXCLUDES body text
+ * (noisy) and topic/sector tags (too broad — sharing a topic/sector is exactly
+ * what over-pulled unrelated töövõidud). Used only by the direct-match gate.
+ */
+function workWinHighSignalFields(c: Candidate): string[] {
+  return [
+    publicTitle(c),
+    c.title, // imported source title (in case an override diverges)
+    publicSummary(c),
+    c.kodaPosition,
+    c.companyRelevance,
+    c.sourceEvidence,
+    c.excerpt,
+    c.lawSearchAllowed ? c.oigusaktid.map((t) => t.name).join(" ") : "",
+  ].filter((v): v is string => !!v);
+}
+
+function workWinHighSignalText(c: Candidate): string {
+  return normalizeTitle(workWinHighSignalFields(c).join(" "));
+}
+
+function workWinHighSignalAliasText(c: Candidate): string {
+  return normalizeAliasText(workWinHighSignalFields(c).join(" "));
+}
+
+const MEMBERSHIP_INTENT_MARKERS = [
+  "mida koda",
+  "koda teinud",
+  "koda on teinud",
+  "mida on koda",
+  "koja kasu",
+  "liikme kasu",
+  "liikmele",
+  "liikmetele",
+  "minu ettevotte heaks",
+  "ettevotte heaks",
+];
+
+/**
+ * Broad membership / value-discovery intent, e.g. "mida koda on teinud",
+ * "liikme kasu", "koda minu ettevõtte heaks". For these, work wins may surface
+ * more broadly (still topic/sector gated when a filter is active). `qn` must be
+ * a normalizeTitle-normalized query.
+ */
+export function isMembershipValueIntent(qn: string): boolean {
+  if (!qn) return false;
+  return MEMBERSHIP_INTENT_MARKERS.some((m) => qn.includes(m));
+}
+
+export type WorkWinGateContext = {
+  /** normalizeTitle(query.q) — the gate is a NO-OP when this is empty. */
+  qn: string;
+  /** qn split into tokens. */
+  tokens: string[];
+  /** Alias expansion for the query (optional; gate is safe when absent/empty). */
+  aliases?: AliasExpansion;
+  /** True for membership/value-discovery intent queries (isMembershipValueIntent). */
+  membershipIntent: boolean;
+  /** True when any valdkond/tegevusala/tapsustus filter is active. */
+  categoryActive: boolean;
+  /** A confirmed legal-act mention (detectLaw) — treated as a direct match. */
+  lawMatch?: boolean;
+  /** The candidate's score breakdown (for the membership-intent relevance check). */
+  score: ScoreBreakdown;
+};
+
+function directQueryMatch(hay: string, qn: string, tokens: string[]): boolean {
+  if (!hay || !qn) return false;
+  if (hay.includes(qn)) return true; // exact phrase / substring
+  // Multi-word queries must match every meaningful token; single short tokens
+  // (acronyms, "2%") must all be present. Topic/sector overlap alone never counts.
+  const significant = tokens.filter((t) => t.length >= 3);
+  if (significant.length === 0) return tokens.length > 0 && tokens.every((t) => hay.includes(t));
+  return significant.every((t) => hay.includes(t));
+}
+
+function aliasTermInHighSignal(hay: string, aliases?: AliasExpansion): boolean {
+  if (!hay || !aliases) return false;
+  // Only law/text expanded terms literally present in a high-signal field count.
+  // topic/sector boosts (tag-based) are intentionally NOT sufficient — that is the
+  // "hard topic expansion" that pulled in unrelated wins for exact queries.
+  for (const signal of [...aliases.lawBoostTerms, ...aliases.textBoostTerms]) {
+    const term = normalizeAliasText(signal.value);
+    if (term && hay.includes(term)) return true;
+  }
+  return false;
+}
+
+function topicOrSectorRelevant(s: ScoreBreakdown): boolean {
+  return s.valdkondMatches > 0 || s.tegevusalaMatches > 0 || s.sectorFallbackMatches > 0 || s.crossSectorMatch;
+}
+
+/**
+ * Stricter inclusion gate for töövõidud on FREE-TEXT queries. A work win reaches
+ * the töövõit result group only on a strong, direct signal — never merely because
+ * it shares a broad topic/sector, is recent, is generally important, or receives
+ * the work-win type boost.
+ *
+ * A work win passes iff any of:
+ *   1. the query hits a high-signal field (title/summary/position/evidence/law);
+ *   2. an alias-expanded law/text term literally appears in a high-signal field;
+ *   3. it is a membership/value-discovery query (topic/sector gated when a filter
+ *      is active); or a confirmed legal-act match.
+ *
+ * Callers MUST invoke this only when `ctx.qn` is non-empty and the candidate is a
+ * work win. For filter-only browsing (empty q) it is never called, so existing
+ * filter behavior is unchanged. Pure + deterministic.
+ */
+export function passesWorkWinDirectMatchGate(c: Candidate, ctx: WorkWinGateContext): boolean {
+  if (!ctx.qn) return true; // no free-text query → not this gate's concern
+  if (ctx.lawMatch) return true; // confirmed legal-act mention is a direct match
+  if (directQueryMatch(workWinHighSignalText(c), ctx.qn, ctx.tokens)) return true; // (1)
+  if (aliasTermInHighSignal(workWinHighSignalAliasText(c), ctx.aliases)) return true; // (2)
+  if (ctx.membershipIntent) return ctx.categoryActive ? topicOrSectorRelevant(ctx.score) : true; // (3)
+  return false;
+}
+
 export type RankedCandidate = { c: Candidate; total: number };
 export type GroupCapMap = Record<ResultKind, number>;
 export type RankedGroups = Record<ResultKind, RankedCandidate[]>;

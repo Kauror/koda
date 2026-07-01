@@ -47,8 +47,10 @@ import {
   isEmptyQuery,
   isFormalOpinion,
   isKodaNews,
+  isMembershipValueIntent,
   parseSearchParams,
   passesActiveFilters,
+  passesWorkWinDirectMatchGate,
   primaryType,
   resultCategoryRelevanceTier,
   scoreCandidate,
@@ -943,6 +945,14 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
   const empty = isEmptyQuery(query);
   const recognized = detectLaw(query.q);
 
+  // Free-text work-win precision gate context. The stricter töövõit gate applies
+  // ONLY when the user typed something (normalized q non-empty); pure filter
+  // browsing (empty q) keeps the existing filter-match behavior for work wins.
+  const qn = normalizeTitle(query.q || "");
+  const gateTokens = qn ? qn.split(" ").filter(Boolean) : [];
+  const membershipIntent = isMembershipValueIntent(qn);
+  const categoryActive = query.valdkond.length > 0 || query.tegevusala.length > 0 || query.tapsustus.length > 0;
+
   // Score + filter. A confirmed law match satisfies the free-text requirement
   // (catching inflected mentions the literal scorer misses) and gets a small
   // bump; other active filters still apply.
@@ -952,6 +962,22 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
       const s = scoreCandidate(c, query, aliasExpansion);
       const lawMatch = recognized ? lawMentionForSlug(c, recognized.law.slug, "medium") !== null : false;
       if (!empty && !passesActiveFilters(query, s, c, { lawMatch, relaxLawGate })) continue;
+      // Work wins must clear the stricter direct-match gate on free-text queries,
+      // so the +90 type boost can no longer rescue a weak/broad-topic match. The
+      // boost still applies AFTER this gate (score is unchanged) for wins that pass.
+      if (qn.length > 0 && isAchievement(c) &&
+        !passesWorkWinDirectMatchGate(c, {
+          qn,
+          tokens: gateTokens,
+          aliases: aliasExpansion,
+          membershipIntent,
+          categoryActive,
+          lawMatch,
+          score: s,
+        })
+      ) {
+        continue;
+      }
       out.push({ c, total: s.total + (lawMatch ? LAW_MATCH_BOOST : 0) });
     }
     return out;
@@ -1010,7 +1036,7 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
     query
   );
   const displayedToovoitUnits = toovoitUnits.slice(0, GROUP_CAPS.toovoit);
-  const categoryActive = query.valdkond.length > 0 || query.tegevusala.length > 0 || query.tapsustus.length > 0;
+  // categoryActive is declared once near the top of search() (used by the gate).
   const directToovoitUnits = categoryActive ? toovoitUnits.filter((u) => u.relevanceTier >= 4).length : 0;
   const achievementsInitialVisible =
     categoryActive && directToovoitUnits > 0

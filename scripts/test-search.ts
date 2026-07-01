@@ -26,12 +26,16 @@ import {
   hasOnlyGenericOrNoSector,
   hasSpecificNonMatchingSector,
   isKodaNews,
+  isMembershipValueIntent,
   parseSearchParams,
   passesActiveFilters,
+  passesWorkWinDirectMatchGate,
   primaryType,
   rankRelatedOpinions,
   scoreCandidate,
 } from "../src/lib/search-core";
+import { normalizeTitle } from "../src/lib/hash";
+import { EMPTY_ALIAS_EXPANSION } from "../src/lib/search-aliases";
 import { outcomeLabel, sourceLabel } from "../src/lib/labels";
 import { sourceCtaLabel } from "../src/lib/content-display";
 import {
@@ -1118,6 +1122,133 @@ check("law-query gate is strict by default but relaxes to normal search as a fal
   const s = scoreCandidate(row, q);
   assert.equal(passesActiveFilters(q, s, row, {}), false); // strict: needs a confirmed law match
   assert.equal(passesActiveFilters(q, s, row, { relaxLawGate: true }), true); // fallback: normal text match
+});
+
+// ---- Work-win direct-match gate (free-text precision) ----
+
+function win(over: Partial<Candidate> = {}): Candidate {
+  return cand({ sourceTypeDetail: "toovoit", sourceLayer: "koda_achievement", publicDisplayStatus: null, ...over });
+}
+
+/** Run the gate for a work win + free-text query using the real alias seed. */
+function gatePass(c: Candidate, q: string, over: Partial<Parameters<typeof passesWorkWinDirectMatchGate>[1]> = {}): boolean {
+  const qn = normalizeTitle(q);
+  const aliases = aliasExpansion(q);
+  const score = scoreCandidate(c, { ...EMPTY, q }, aliases);
+  return passesWorkWinDirectMatchGate(c, {
+    qn,
+    tokens: qn ? qn.split(" ").filter(Boolean) : [],
+    aliases,
+    membershipIntent: isMembershipValueIntent(qn),
+    categoryActive: false,
+    lawMatch: false,
+    score,
+    ...over,
+  });
+}
+
+check("gate: varjumiskoht excludes unrelated töövõidud (alaealised / võõrtööjõud / suurtarbijad)", () => {
+  const alaealised = win({ id: "w-ala", title: "Alaealiste töötamise reeglid leevenesid", summary: "Koda saavutas paindlikumad reeglid alaealiste töötamisele." });
+  const voortoojoud = win({ id: "w-voo", title: "Võõrtööjõu piirarv tõusis", summary: "Sisserände kvoot ja lühiajaline töötamine." });
+  const suurtarbijad = win({ id: "w-suur", title: "Suurtarbijate võrgutasu langes", summary: "Energiamahukate ettevõtete kulud vähenesid." });
+  for (const w of [alaealised, voortoojoud, suurtarbijad]) {
+    assert.equal(gatePass(w, "varjumiskoht"), false, w.id);
+    assert.equal(gatePass(w, "varjend"), false, w.id);
+    assert.equal(gatePass(w, "varjumisplaan"), false, w.id);
+  }
+});
+
+check("gate: a topic/sector tag alone never rescues a work win on an exact query", () => {
+  const topicOnly = win({
+    id: "w-topiconly",
+    title: "Üldine julgeoleku töövõit",
+    summary: "Ei ole seotud varjumisega.",
+    valdkonnad: [{ slug: "riigikaitse_julgeolek_kriisikindlus", name: "Riigikaitse ja kriisikindlus" }],
+  });
+  assert.equal(gatePass(topicOnly, "varjumiskoht"), false);
+});
+
+check("gate: direct high-signal hit includes the matching work win", () => {
+  const varjum = win({ id: "w-var", title: "Ettevõtete varjumiskoha nõuded", summary: "Varjumiskoht ja kriisikindlus leevenesid." });
+  const varjend = win({ id: "w-vjd", title: "Varjendi rajamise kohustus leevenes", summary: "Ettevõtte varjend." });
+  assert.equal(gatePass(varjum, "varjumiskoht"), true);
+  assert.equal(gatePass(varjend, "varjend"), true);
+});
+
+check("gate: alias-expanded term in a high-signal field includes; without it, excludes", () => {
+  const kriis = win({ id: "w-kriis", title: "Kriisivarustuse toetus", summary: "Ettevõtete kriisikindlus paranes." });
+  const q = { qn: "varjumiskoht", tokens: ["varjumiskoht"], membershipIntent: false, categoryActive: false, lawMatch: false };
+  const score = scoreCandidate(kriis, { ...EMPTY, q: "varjumiskoht" });
+  // expanded term "kriisikindlus" literally present in the summary → include
+  assert.equal(
+    passesWorkWinDirectMatchGate(kriis, {
+      ...q,
+      aliases: { ...EMPTY_ALIAS_EXPANSION, textBoostTerms: [{ value: "kriisikindlus", weight: 5, sourceAliasIds: ["a"] }] },
+      score,
+    }),
+    true
+  );
+  // no alias terms → topic overlap is not enough → exclude
+  assert.equal(
+    passesWorkWinDirectMatchGate(kriis, { ...q, aliases: EMPTY_ALIAS_EXPANSION, score }),
+    false
+  );
+});
+
+check("gate: positive controls still surface relevant work wins", () => {
+  assert.equal(gatePass(win({ title: "2% kasumimaksu leevendus", summary: "Koda vähendas kasumimaksu mõju." }), "kasumimaks"), true);
+  assert.equal(gatePass(win({ title: "2% kasumimaksu leevendus", summary: "Koda vähendas kasumimaksu mõju." }), "2% kasumimaks"), true);
+  assert.equal(gatePass(win({ title: "Paindlik tööaeg jõustus", summary: "Paindliku tööaja kokkulepped." }), "paindlik tööaeg"), true);
+  assert.equal(gatePass(win({ title: "Taastuvenergia tasu alandati", summary: "Taastuvenergia tasu langes." }), "taastuvenergia tasu"), true);
+  assert.equal(gatePass(win({ title: "Tööjõupuuduse leevendusmeede", summary: "Meetmed tööjõupuuduse vastu." }), "tööjõupuudus"), true);
+});
+
+check("gate: broad/ambiguous terms do not hard-force unrelated work wins", () => {
+  const generic = win({ id: "w-gen", title: "Üldine äritingimuste võit", summary: "Parandasime ettevõtjate olukorda." });
+  for (const q of ["keskkond", "digi", "luba", "tasu"]) {
+    assert.equal(gatePass(generic, q), false, q);
+  }
+});
+
+check("gate: membership intent is broad without a filter, topic/sector-gated with one", () => {
+  const anyWin = win({ id: "w-any", title: "Mingi töövõit", summary: "Midagi head." });
+  assert.equal(isMembershipValueIntent(normalizeTitle("mida koda on teinud")), true);
+  assert.equal(isMembershipValueIntent(normalizeTitle("liikme kasu")), true);
+  assert.equal(isMembershipValueIntent(normalizeTitle("kasumimaks")), false);
+  // membership query, no filter → broad include
+  assert.equal(gatePass(anyWin, "mida koda on teinud"), true);
+  // membership query WITH a filter the win does not match → exclude
+  const score = scoreCandidate(anyWin, { ...EMPTY, q: "mida koda on teinud", valdkond: ["maksud_tasud"] });
+  assert.equal(
+    passesWorkWinDirectMatchGate(anyWin, {
+      qn: normalizeTitle("mida koda on teinud"),
+      tokens: normalizeTitle("mida koda on teinud").split(" "),
+      aliases: EMPTY_ALIAS_EXPANSION,
+      membershipIntent: true,
+      categoryActive: true,
+      lawMatch: false,
+      score,
+    }),
+    false
+  );
+});
+
+check("gate: no-op on empty query and on a confirmed law match", () => {
+  const anyWin = win({ id: "w-noop", title: "Mingi töövõit", summary: "Midagi." });
+  // empty normalized query → gate is a no-op (filter browsing path)
+  assert.equal(
+    passesWorkWinDirectMatchGate(anyWin, {
+      qn: "",
+      tokens: [],
+      aliases: EMPTY_ALIAS_EXPANSION,
+      membershipIntent: false,
+      categoryActive: false,
+      score: scoreCandidate(anyWin, EMPTY),
+    }),
+    true
+  );
+  // confirmed law match is a direct signal even without a literal text hit
+  assert.equal(gatePass(anyWin, "varjumiskoht", { lawMatch: true }), true);
 });
 
 console.log(`\n[test] ${passed} passed, ${failed} failed`);
