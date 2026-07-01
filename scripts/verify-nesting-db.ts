@@ -85,6 +85,9 @@ async function main() {
     const tc = threadCards[0];
     assert.ok((tc.nested?.length ?? 0) > 0, "thread card must list its timeline members");
     assert.equal(tc.nestedHeading, "Sama teema ajajoon");
+    assert.deepEqual(tc.badges, [], "timeline thread cards should not expose an internal thread badge");
+    assert.equal(tc.displayDate, null, "top-level timeline thread cards should not show a browse-date badge");
+    assert.equal(tc.detailId, tc.nested![0].detailId, "timeline thread card should link to its latest member detail");
     // Every member of a thread card is a nested row, not a standalone duplicate.
     for (const m of tc.nested ?? []) assert.ok(nestedIds.has(m.detailId), `${m.detailId} should be a nested row`);
   });

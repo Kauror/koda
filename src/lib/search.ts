@@ -798,12 +798,12 @@ function buildThreadResultCard(
     url: null,
     sourceCtaLabel: sourceCtaLabel(latest),
     date: null,
-    displayDate: thread.latestYear ? String(thread.latestYear) : null,
+    displayDate: null,
     kind: "toovoit",
     type: "toovoit",
     isAchievement: true,
     outcomeStatus: null,
-    badges: ["Töövõidu ajajoon"],
+    badges: [],
     valdkonnad: latest.valdkonnad,
     tegevusalad: latest.tegevusalad,
     laws: buildLawChips(latest),
@@ -827,7 +827,7 @@ function toResultCard(s: { c: Candidate; total: number }, evidence: Map<string, 
     url: publicSourceUrl(s.c),
     sourceCtaLabel: sourceCtaLabel(s.c),
     date: s.c.date ? s.c.date.toISOString() : null,
-    displayDate: computePublicDate({
+    displayDate: isAchievement(s.c) ? null : computePublicDate({
       date: s.c.date,
       year: s.c.year ?? null,
       reportYear: s.c.reportYear ?? null,
@@ -1016,7 +1016,7 @@ export async function search(query: SearchQuery): Promise<SearchResults> {
     date: s.c.date ? s.c.date.toISOString() : null,
     // Public date safety gate: never render placeholder/import/future dates as
     // exact public dates (see public-date.ts).
-    displayDate: computePublicDate({
+    displayDate: isAchievement(s.c) ? null : computePublicDate({
       date: s.c.date,
       year: s.c.year ?? null,
       reportYear: s.c.reportYear ?? null,

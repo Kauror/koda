@@ -773,7 +773,8 @@ check("source labels are Estonian + correct", () => {
   assert.equal(sourceLabel("koda_achievement", "toovoit"), "Töövõit");
   assert.equal(sourceLabel("koda_news", "meie_uudis"), "Koja uudis");
   assert.equal(sourceLabel("annual_report", "annual_report_policy_context"), "Aastaaruande kontekst");
-  assert.equal(sourceLabel("opinion_file", "opinion_file"), "Koja arvamus / toetav allikas");
+  assert.equal(sourceLabel("opinion_file", "opinion_file"), "Koja arvamus");
+  assert.equal(sourceLabel("other", "unknown"), "Koja materjal");
 });
 check("Koda news uses news label and CTA", () => {
   assert.equal(sourceLabel("koda_news", "meie_uudis"), "Koja uudis");

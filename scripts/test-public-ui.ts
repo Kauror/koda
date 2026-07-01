@@ -42,7 +42,7 @@ check("source CTA labels are contextual", () => {
     sourceCtaLabel({ sourceLayer: "annual_report", sourceTypeDetail: "annual_report_policy_context" }),
     "Loe konteksti"
   );
-  assert.equal(sourceCtaLabel({ sourceLayer: "other", sourceTypeDetail: "unknown" }), "Ava koda.ee allikas");
+  assert.equal(sourceCtaLabel({ sourceLayer: "other", sourceTypeDetail: "unknown" }), "Loe lähemalt");
 });
 
 check("noisy navigation/body snippets are not public excerpts", () => {
@@ -203,6 +203,18 @@ check("nested töövõidud sections are collapsed by default (no open attribute)
   // Estonian expand controls + counts.
   assert.ok(source.includes("Näita seotud etappe"));
   assert.ok(source.includes("Näita ajajoont"));
+});
+
+check("töövõidu timeline cards use normal detail links and no public source wording", () => {
+  const cardSource = readFileSync("src/app/PublicResultCard.tsx", "utf8");
+  const detailSource = readFileSync("src/app/sisu/[id]/page.tsx", "utf8");
+  const searchSource = readFileSync("src/lib/search.ts", "utf8");
+  assert.ok(!cardSource.includes("!isThread &&"));
+  assert.ok(!cardSource.includes("Allikas →"));
+  assert.ok(!detailSource.includes("Allikas →"));
+  assert.ok(!detailSource.includes("algallikas"));
+  assert.ok(searchSource.includes("badges: []"));
+  assert.ok(!searchSource.includes('badges: ["Töövõidu ajajoon"]'));
 });
 
 check("opinion/news cards can show nested related source items with badges", () => {

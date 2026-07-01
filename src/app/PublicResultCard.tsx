@@ -44,7 +44,7 @@ function NestedWorkWins({
               {item.summary && <p className="item-excerpt small">{item.summary}</p>}
               {item.url && !isGenericWorkWinUrl(item.url) && (
                 <a href={item.url} target="_blank" rel="noopener noreferrer" className="item-source-link">
-                  Allikas →
+                  Loe lähemalt →
                 </a>
               )}
             </li>
@@ -140,7 +140,9 @@ export default function PublicResultCard({
           Muuda
         </Link>
       )}
-      <h3>{isThread ? card.title : <Link href={detailHref}>{card.title}</Link>}</h3>
+      <h3>
+        <Link href={detailHref}>{card.title}</Link>
+      </h3>
       {card.summary && <p className="item-excerpt small">{card.summary}</p>}
       {!compact && (card.laws.length > 0 || card.recipient) && (
         <div className="card-tags">
@@ -163,23 +165,21 @@ export default function PublicResultCard({
           )}
         </div>
       )}
-      {!isThread && (
-        <p className="card-links">
-          <Link href={detailHref} className="btn btn-secondary btn-small">
-            Loe lähemalt
-          </Link>
-          {card.url && !card.isAchievement && card.kind !== "uudis" && !isGenericWorkWinUrl(card.url) && (
-            <TrackedLink
-              href={card.url}
-              sessionId={sessionId}
-              contentItemId={card.id}
-              className="item-source-link"
-            >
-              {card.sourceCtaLabel} →
-            </TrackedLink>
-          )}
-        </p>
-      )}
+      <p className="card-links">
+        <Link href={detailHref} className="btn btn-secondary btn-small">
+          Loe lähemalt
+        </Link>
+        {card.url && !card.isAchievement && card.kind !== "uudis" && !isGenericWorkWinUrl(card.url) && (
+          <TrackedLink
+            href={card.url}
+            sessionId={sessionId}
+            contentItemId={card.id}
+            className="item-source-link"
+          >
+            {card.sourceCtaLabel} →
+          </TrackedLink>
+        )}
+      </p>
       {card.nested && card.nested.length > 0 && (
         <NestedWorkWins items={card.nested} isThread={isThread} fromQuery={fromQuery} />
       )}

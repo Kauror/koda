@@ -10,12 +10,12 @@ export function sourceLabel(layer: string | null, type: string | null): string {
   if (type === "meie_uudis" || layer === "koda_news") return "Koja uudis";
   if (type === "meie_arvamus_article" || layer === "koda_public_opinion") return "Koja seisukoht";
   if (type === "tooruhmad" || layer === "koda_workgroup_context") return "Töörühma taust";
-  if (layer === "opinion_file") return "Koja arvamus / toetav allikas";
+  if (layer === "opinion_file") return "Koja arvamus";
   if (layer === "annual_report" || (type && type.startsWith("annual_report")))
     return "Aastaaruande kontekst";
   if (type === "listing_page" || type === "rss_feed" || layer === "koda_listing_or_archive")
     return "Koja veebileht";
-  return "Koja allikas";
+  return "Koja materjal";
 }
 
 /** Dataset label. */
@@ -30,7 +30,7 @@ export function datasetLabel(dataset: string | null): string {
     case "toovoidud":
       return "Koja töövõit";
     default:
-      return "Koja allikas";
+      return "Koja materjal";
   }
 }
 

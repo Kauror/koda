@@ -51,7 +51,7 @@ function WorkWinNestingSection({ nesting, from }: { nesting: WorkWinNestingDetai
                 {it.summary && <p className="item-excerpt small">{compactText(it.summary, 220)}</p>}
                 {it.sourceUrl && !isGenericWorkWinUrl(it.sourceUrl) && (
                   <a href={it.sourceUrl} target="_blank" rel="noopener noreferrer" className="item-source-link">
-                    Allikas →
+                    Loe lähemalt →
                   </a>
                 )}
               </li>
@@ -167,7 +167,7 @@ function StandardDetail({ item, from }: { item: ContentDetail; from?: string }) 
       {!summary && item.sourceUrl && (
         <section className="card">
           <h2>Koda.ee materjal</h2>
-          <p>Täistekst on kättesaadav algallikas.</p>
+          <p>Täistekst on kättesaadav koda.ee lehel.</p>
           <SourceButton item={item} />
         </section>
       )}

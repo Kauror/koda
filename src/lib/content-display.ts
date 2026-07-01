@@ -103,7 +103,7 @@ export function sourceCtaLabel(i: SourceLabelFields): string {
   ) {
     return "Loe konteksti";
   }
-  return "Ava koda.ee allikas";
+  return "Loe lähemalt";
 }
 
 function cleanText(value: string): string {
